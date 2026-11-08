@@ -238,6 +238,26 @@ const puedeEditarCatalogo = () => !!(perfil && perfil.aprobado && (perfil.es_adm
 const editable = e => !!e && (!e.compartido || puedeEditarCatalogo());
 // Quitar algo del catálogo común (borrarlo o dejar de compartirlo) solo puede hacerlo el administrador
 const puedeQuitarDelCatalogo = e => !!e && (!e.compartido || !!(perfil && perfil.es_admin));
+// Crear ejercicios (privados o compartidos) es una capacidad del CATÁLOGO: solo el administrador y quien tenga edita_catalogo.
+// Todos los usuarios aprobados pueden usar los ejercicios existentes y editar los valores de sus series (metros, tiempos, pesos…).
+const puedeCrearEjercicios = () => puedeEditarCatalogo();
+class FaltaEjercicio extends Error {
+  constructor(nombre) {
+    super("«" + nombre + "» no está en el catálogo y tu cuenta no puede crear ejercicios. Elige uno existente o pide al administrador que lo añada.");
+    this.name = "FaltaEjercicio"; this.ejercicio = nombre;
+  }
+}
+// Comprueba, ANTES de escribir nada, que existen todos los ejercicios necesarios (los autorizados pueden crearlos).
+function exigirEjercicios(lista) {
+  if (puedeCrearEjercicios()) return;
+  const falta = lista.find(([n, t]) => !vivos("ejercicios").some(e => compacto(e.nombre) === compacto(n)));
+  if (falta) { setEstado("«" + falta[0] + "» no está en el catálogo y tu cuenta no puede crear ejercicios. No se ha guardado nada.", true); throw new FaltaEjercicio(falta[0]); }
+}
+// Variantes por formato de origen: se llaman antes de escribir cualquier plantilla o serie, para no dejar importaciones a medias.
+const ejerciciosDeItemsCompartidos = plantillas => plantillas.flatMap(p => p.items.flatMap(it => it.bloque ? it.tramos.map(t => [t.ejercicio, t.tipo]) : [[it.ejercicio, it.tipo]]));
+const exigirCompartidos = plantillas => exigirEjercicios(ejerciciosDeItemsCompartidos(plantillas));
+const exigirImportados = items => exigirEjercicios(items.flatMap(it => it.bloque ? it.tramos : [it]).filter(e => !catalogoElegidoIA.get(e)).map(e => [e.ejercicio, e.tipo]));
+function aplicarPermisosCatalogo() { const b = $("nuevoEj"); if (b) b.hidden = !puedeCrearEjercicios(); }
 const ejercicioVivo = id => { const e = db.ejercicios[id]; return e && !e.borrado ? e : null; };
 const tipoDe = id => { const e = db.ejercicios[id]; return e && TIPOS[e.tipo] ? e.tipo : "fuerza"; };
 const esDistancia = tipo => tipo === "carrera" || tipo === "natacion";
@@ -692,6 +712,7 @@ async function cargarPerfil() {
   }
   escribir("usuarios-v1", usuarios);
   escribir("perfil-v1", perfil);
+  aplicarPermisosCatalogo();
   if (perfil.es_admin && !$("vistaPlan").hidden) pintarPlan();
   avisoUsuarios();
   pintarAvisoNovedades();
@@ -835,7 +856,9 @@ function volcarExtra() {
     sinHistorial = sinH;
     if (hay) persistir();
 }
-const hayPendientes = () => Object.keys(TABLAS).some(t => Object.values(db[t]).some(v => v.sucio));
+// Sin permiso de catálogo, los ejercicios locales pendientes (p. ej. creados antes de esta restricción) se conservan en el dispositivo pero no se suben: el servidor los rechazaría y bloquearía el resto de la sincronización.
+const subeEjercicios = () => puedeEditarCatalogo();
+const hayPendientes = () => Object.keys(TABLAS).some(t => Object.values(db[t]).some(v => v.sucio && !(t === "ejercicios" && !subeEjercicios())));
 
 // Fechas pendientes: no adivinar el día ni sustituir un entrenamiento por el día actual.
 function fechaSerieValida(v) {
@@ -982,6 +1005,34 @@ function abrirFechasPendientes() {
 }
 
 // El error de guardado debe explicar la causa sin mostrar filas, tokens ni datos personales.
+// Ejercicios: operaciones diferenciadas, sin upsert (la RLS evalúa también la política INSERT en ON CONFLICT y rechazaría a un
+// editor que modifique un compartido ajeno). 1) UPDATE por id SIN user_id (el propietario original no se toca);
+// 2) solo si no existía, INSERT de un ejercicio de la propia cuenta. Un fallo en un ejercicio no bloquea los demás ni el resto de tablas:
+// esa fila sigue pendiente (sucio) y se reintenta en la siguiente sincronización.
+async function subirEjercicios(filas) {
+  const fallos = [];
+  for (const f of filas) {
+    try {
+      const { id, user_id, ...cambios } = f;
+      const u = await api("/rest/v1/ejercicios?id=eq." + encodeURIComponent(id), { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify(cambios) });
+      if (!u.ok) throw await errorGuardado("ejercicios", u);
+      const actualizadas = await u.json().catch(() => null);
+      if (!Array.isArray(actualizadas)) throw new Error("Respuesta no válida al actualizar un ejercicio.");
+      if (!actualizadas.length) {
+        if (user_id !== sesion.user_id) throw new Error("Tu cuenta no puede modificar este ejercicio.");
+        const i = await api("/rest/v1/ejercicios", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify(f) });
+        if (!i.ok) throw await errorGuardado("ejercicios", i);
+      }
+      const v = db.ejercicios[id];
+      if (v && v.actualizado === f.actualizado) v.sucio = false;
+    } catch (e) {
+      if (e instanceof SesionCaducada || e instanceof SesionCambiada) throw e;
+      fallos.push({ id: f.id, nombre: f.nombre, mensaje: e.message || "Error al guardar" });
+    }
+  }
+  return fallos;
+}
+let fallosEjercicios = [];
 async function errorGuardado(tabla, respuesta) {
   const e = await respuesta.clone().json().catch(() => ({}));
   const codigo = /^[A-Z0-9]{5,12}$/.test(e.code || "") ? e.code : "";
@@ -1114,6 +1165,15 @@ function validarEdicionIA() {
   if (sesionesImportadas().some(({s}) => s.items.some(it => (it.bloque ? it.tramos : [it]).some(e => {
     const id=catalogoElegidoIA.get(e); return id && !vivos("ejercicios").some(x=>x.id===id && x.tipo===e.tipo);
   })))) { avisoImportacionIA("Un ejercicio elegido ya no está disponible. Vuelve a elegirlo en el catálogo."); return false; }
+  if (!puedeCrearEjercicios()) {
+    // Sin permiso de catálogo: cada ejercicio importado debe vincularse a uno que ya exista. No se crea ni se sustituye en silencio.
+    let faltante = null;
+    sesionesImportadas().forEach(({s}) => s.items.forEach(it => (it.bloque ? it.tramos : [it]).forEach(e => {
+      if (faltante || catalogoElegidoIA.get(e)) return;
+      if (!vivos("ejercicios").some(x => x.tipo === e.tipo && compacto(x.nombre) === compacto(e.ejercicio))) faltante = e.ejercicio;
+    })));
+    if (faltante) { avisoImportacionIA("«" + faltante + "» no está en el catálogo y tu cuenta no puede crear ejercicios. Elige uno de la lista en «Ejercicio guardado» o quita el ejercicio. No se ha guardado nada."); return false; }
+  }
   sesionesImportadas().forEach(({s})=>partesImportacionIA(s));
   return true;
 }
@@ -1161,14 +1221,16 @@ async function sincronizar() {
       guardarLocal();
       if (cambio) pintarTodo();
       // Subir lo pendiente
+      fallosEjercicios = [];
       for (const t of Object.keys(TABLAS)) {
-        const pend = Object.values(db[t]).filter(v => v.sucio);
+        const pend = Object.values(db[t]).filter(v => v.sucio && !(t === "ejercicios" && !subeEjercicios()));
         if (!pend.length) continue;
         if (pend.some(v => v.conflicto)) { mostrarConflictos(); throw new Error("Revisa los cambios pendientes antes de sincronizar."); }
         if (t === "series" && mostrarFechasPendientes()) {
           throw new Error("Hay series con una fecha o marca de edición incorrecta. Pulsa Revisar fechas pendientes para corregirlas; los datos se conservan.");
         }
         const filas = pend.map(v => { const f = {}; TABLAS[t].campos.forEach(c => { f[c] = v[c] ?? (c in DEFECTOS ? DEFECTOS[c] : 0); }); f.user_id = t === "ejercicios" ? (v.user_id || sesion.user_id) : sesion.user_id; return f; });   // los ejercicios del catálogo conservan a su dueño
+        if (t === "ejercicios") { fallosEjercicios = await subirEjercicios(filas); guardarLocal(); continue; }
         const w = await api("/rest/v1/" + t + "?on_conflict=" + TABLAS[t].conflicto, {
           method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify(filas)
         });
@@ -1178,7 +1240,8 @@ async function sincronizar() {
       }
     } while (repetir);
     const sugerenciasEnviadas = await enviarSugerencias();
-    setEstado(hayPendientes() || !sugerenciasEnviadas ? "Hay cambios pendientes de sincronizar" : "Sincronizado", hayPendientes() || !sugerenciasEnviadas);
+    if (fallosEjercicios.length) setEstado("No se pudo sincronizar el ejercicio «" + fallosEjercicios[0].nombre + "»" + (fallosEjercicios.length > 1 ? " y " + (fallosEjercicios.length - 1) + " más" : "") + ": " + fallosEjercicios[0].mensaje + " El resto de cambios sí se ha sincronizado y este seguirá pendiente.", true);
+    else setEstado(hayPendientes() || !sugerenciasEnviadas ? "Hay cambios pendientes de sincronizar" : "Sincronizado", hayPendientes() || !sugerenciasEnviadas);
     mostrarConflictos();
   } catch (e) {
     if (e instanceof SesionCaducada) cerrarSesion("Tu sesión ha caducado. Vuelve a entrar; lo que escribiste sigue guardado en este dispositivo.");
@@ -2128,7 +2191,7 @@ async function abrirCompartido(texto) {
       [{ texto: "+ Añadir a mi rutina…", accion: () => abrirMenu("¿Cómo lo añado?", "«" + c.nombre + "»", [
         { texto: "Guardar en mis plantillas", accion: () => guardarPaqueteCompartido(c) },
         { texto: "Ponerlas en un día…", accion: () => elegirDiaDestino(lunesP, "¿En qué día pongo «" + c.nombre + "»?", f => {
-          x.plantillas.forEach(p => pegarItems(f, desdeCompartido(p.items), p.nombre)); persistir(); irADia(f, "«" + c.nombre + "» añadido");
+          exigirCompartidos(x.plantillas); x.plantillas.forEach(p => pegarItems(f, desdeCompartido(p.items), p.nombre)); persistir(); irADia(f, "«" + c.nombre + "» añadido");
         }) }
       ]) }, { texto: "Solo mirar (cerrar)", accion: () => {} }], vista);
     return;
@@ -3750,6 +3813,8 @@ function crearEjercicio(nombre, tipo) {
   const nombreLimpio = nombre.trim(), tipoLimpio = TIPOS[tipo] ? tipo : "fuerza";
   const existente = vivos("ejercicios").find(e => e.tipo === tipoLimpio && compacto(e.nombre) === compacto(nombreLimpio));
   if (existente) return existente.id;
+  // Guarda de lógica (además de la RLS del servidor): una cuenta sin permiso de catálogo no crea ejercicios por ninguna vía.
+  if (!puedeCrearEjercicios()) { setEstado("Tu cuenta no puede crear ejercicios. Elige uno del catálogo o pide al administrador que lo añada.", true); throw new FaltaEjercicio(nombreLimpio); }
   const id = nuevoId();
   cambiar("ejercicios", { id, user_id: sesion.user_id, nombre: nombreLimpio, tipo: tipoLimpio, video_url: "", notas: "", compartido: puedeEditarCatalogo(), borrado: false });
   return id;
@@ -3797,7 +3862,7 @@ function pintarSelector() {
   // «300», «300m» o «series 300 m» propone directamente «Series 300 m» de carrera
   const md = q.match(/^(?:series\s*(?:de\s*)?)?(\d+(?:[.,]\d+)?)\s*(m|km|metros)?$/i);
   const sugerencia = md ? "Series " + md[1] + " " + (md[2] && md[2].toLowerCase() === "km" ? "km" : "m") : "";
-  if (sugerencia && (!tipoSel || tipoSel === "carrera") && !vivos("ejercicios").some(e => compacto(e.nombre) === compacto(sugerencia))) {
+  if (puedeCrearEjercicios() && sugerencia && (!tipoSel || tipoSel === "carrera") && !vivos("ejercicios").some(e => compacto(e.nombre) === compacto(sugerencia))) {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "opcion crear-dist";
@@ -3805,7 +3870,7 @@ function pintarSelector() {
     b.addEventListener("click", () => elegir(crearEjercicio(sugerencia, "carrera")));
     lista.appendChild(b);
   }
-  if (q && !ejs.some(e => compacto(e.nombre) === compacto(q)) && !SUGERIDOS.some(([n]) => compacto(n) === compacto(q))) {
+  if (puedeCrearEjercicios() && q && !ejs.some(e => compacto(e.nombre) === compacto(q)) && !SUGERIDOS.some(([n]) => compacto(n) === compacto(q))) {
     // Crear: el tipo que parece por el nombre va primero y resaltado
     const fila = document.createElement("div");
     fila.className = "crear-fila";
@@ -3839,7 +3904,7 @@ function pintarSelector() {
   });
   const tengo = new Set(vivos("ejercicios").map(e => compacto(e.nombre)));
   const sug = SUGERIDOS.filter(([n, tipo]) => !tengo.has(compacto(n)) && compacto(n).includes(compacto(q)) && (!tipoSel || tipo === tipoSel));
-  if (sug.length) {
+  if (puedeCrearEjercicios() && sug.length) {
     const h = document.createElement("p");
     h.className = "sug-tit";
     h.textContent = "Sugerencias";
@@ -3857,7 +3922,7 @@ function pintarSelector() {
   if (!lista.children.length) {
     const p = document.createElement("p");
     p.className = "vacio-lista";
-    p.textContent = "Escribe el nombre del ejercicio (por ejemplo, Press banca, Series 1000 m o Crol) para crearlo.";
+    p.textContent = puedeCrearEjercicios() ? "Escribe el nombre del ejercicio (por ejemplo, Press banca, Series 1000 m o Crol) para crearlo." : (q ? "No hay ningún ejercicio con ese nombre en el catálogo. Si falta alguno, pídeselo al administrador." : "Todavía no hay ejercicios en el catálogo.");
     lista.appendChild(p);
   }
 }
@@ -3868,13 +3933,15 @@ $("buscarEj").addEventListener("keydown", e => {
 
 // ---------- Catálogo de ejercicios ----------
 function pintarCatalogo() {
+  aplicarPermisosCatalogo();
   const cont = $("catalogo"), q = $("filtroEj").value.trim();
   cont.textContent = "";
   const ejs = ejerciciosOrdenados().filter(e => compacto(e.nombre).includes(compacto(q)));
   if (!ejs.length) {
     const p = document.createElement("p");
     p.className = "vacio-lista";
-    p.textContent = q ? "No hay ningún ejercicio con ese nombre. Pulsa «+ Nuevo» para crearlo."
+    p.textContent = !puedeCrearEjercicios() ? (q ? "No hay ningún ejercicio con ese nombre en el catálogo." : "Todavía no hay ejercicios en el catálogo.")
+                      : q ? "No hay ningún ejercicio con ese nombre. Pulsa «+ Nuevo» para crearlo."
                       : "Aún no tienes ejercicios. Añádelos desde un día con «+ Ejercicio» o pulsa «+ Nuevo».";
     cont.appendChild(p);
     return;
@@ -4244,6 +4311,7 @@ function tarjetaEjercicio(e) {
 }
 $("filtroEj").addEventListener("input", pintarCatalogo);
 $("nuevoEj").addEventListener("click", () => {
+  if (!puedeCrearEjercicios()) { setEstado("Tu cuenta no puede crear ejercicios.", true); return; }
   const nombre = $("filtroEj").value.trim() || "Nuevo ejercicio";
   const id = crearEjercicio(nombre, adivinarTipo(nombre));
   pintarCatalogo();
@@ -6582,6 +6650,7 @@ const lunesSiguiente = () => { const hoy = new Date(); return iso(hoy.getDay() =
 const semanasRutina = r => r.semanas || (r.multi ? r.bloques.length : 4);
 // Guarda la rutina como plantillas (y, si se pide, un mesociclo que las reparte por los días); los ejercicios que falten se crean
 function guardarRutina(r, comoMeso, inicio, semanas, enLista) {
+  exigirImportados(r.bloques.flatMap(b => b.sesiones).flatMap(x => x.items));
   const usados = new Set(vivos("plantillas").map(p => norm(p.nombre)));
   const libre = n => { let x = n, k = 2; while (usados.has(norm(x))) x = n + " (" + k++ + ")"; usados.add(norm(x)); return x; };
   const prefijo = r.nombre.split(/[(:·]/)[0].trim();
@@ -6780,8 +6849,8 @@ function vistaRutina(r, cont) {
             lab.appendChild(document.createTextNode("Ejercicio guardado · " + e.ejercicio));
             const sel = document.createElement("select"); sel.setAttribute("aria-label","Vincular " + e.ejercicio);
             const lista = catalogoImportacionIA(e), exacto = lista.find(x=>compacto(x.nombre)===compacto(e.ejercicio));
-            sel.appendChild(new Option("Crear si no existe: " + e.ejercicio,""));
-            lista.forEach(x=>sel.appendChild(new Option(x.nombre+(afinidadEjercicioIA(e.ejercicio,x.nombre)===90 ? " (posible coincidencia)" : ""),x.id)));
+            sel.appendChild(new Option(puedeCrearEjercicios() ? "Crear si no existe: " + e.ejercicio : "Elegir del catálogo (no se crean ejercicios nuevos)…",""));
+            lista.forEach(x=>sel.appendChild(new Option(x.nombre+(afinidadEjercicioIA(e.ejercicio,x.nombre)>=90 ? " (posible coincidencia)" : ""),x.id)));
             sel.value=catalogoElegidoIA.get(e)||exacto?.id||"";
             sel.addEventListener("change",()=>{
               if(!validarCamposBorradorIA())return;
@@ -7307,6 +7376,8 @@ function guardarPlantillasImportadas(m) {
   if (!mesoImportacion) return true;
   try { comprobarSesion(mesoImportacion.contexto); }
   catch { $("mesoAviso").textContent = "La sesión ha cambiado. Vuelve a importar el documento desde tu cuenta."; return false; }
+  try { Object.values(mesoImportacion.plantillas).forEach(p => exigirImportados(p.items)); }
+  catch (e) { if (e instanceof FaltaEjercicio) { $("mesoAviso").textContent = e.message + " No se ha guardado nada."; return false; } throw e; }
   const usados = new Set(vivos("plantillas").map(p => norm(p.nombre)));
   Object.values(mesoImportacion.plantillas).forEach(p => {
     let nombre = p.nombre, n = 2;
@@ -7644,6 +7715,7 @@ function compartirMeso(m) {
 }
 function guardarMesoCompartido(c) {
   const x = c.items[0], mm = x.mesociclo;
+  exigirCompartidos(x.plantillas);
   const ids = x.plantillas.map(p => { const id = nuevoId(); cambiar("plantillas", { id, nombre: nombreLibre(p.nombre), items: desdeCompartido(p.items), borrado: false }, true); return id; });
   const mapa = d => { const r = {}; Object.keys(d || {}).filter(k => /^\d$/.test(k)).forEach(k => { r[k] = (d[k] || []).map(i => ids[i]).filter(Boolean); }); return r; };
   const dias = mapa(mm.dias);
@@ -8458,7 +8530,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v240" + (BETA ? " beta" : "");
+const VERSION_APP = "v242" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";
@@ -8993,9 +9065,9 @@ function guardarActividad(a) {
     const eq = vs.reduce((x, v) => x + v.distancia * (v.factor || 1), 0), dv = vs.reduce((x, v) => x + v.distancia, 0);
     return { desnivel_pos: Math.round(vs.reduce((x, v) => x + n0(v.subida), 0)), desnivel_neg: Math.round(vs.reduce((x, v) => x + n0(v.bajada), 0)), ritmo_ajustado: eq > 0 ? Math.round(t / (d * eq / dv / 1000)) : 0 };
   };
-  if (a.modo === "rodaje") fila(idPorNombre("Rodaje", "carrera"), { distancia: Math.round(a.total.d), tiempo: Math.round(a.total.t), ...desnivel(a.vueltas, a.total.d, a.total.t), ...pulso(a.vueltas) });
+  if (a.modo === "rodaje") { exigirEjercicios([["Rodaje", "carrera"]]); fila(idPorNombre("Rodaje", "carrera"), { distancia: Math.round(a.total.d), tiempo: Math.round(a.total.t), ...desnivel(a.vueltas, a.total.d, a.total.t), ...pulso(a.vueltas) }); }
   else {
-    const p = patronSeries(a.vueltas), idSerie = idPorNombre(p.nombre, "carrera"), bloque = a.bloque && p.regular ? nuevoId() : "";
+    const p = patronSeries(a.vueltas), idSerie = (exigirEjercicios([[p.nombre, "carrera"], ...(a.vueltas.some(v => v.clase === "calent") ? [["Calentamiento carrera", "carrera"]] : []), ...(a.vueltas.some(v => v.clase === "calma") ? [["Vuelta a la calma", "carrera"]] : [])]), idPorNombre(p.nombre, "carrera")), bloque = a.bloque && p.regular ? nuevoId() : "";
     // Bloques hechos a mano en la vista previa: su ×N sale del patrón de distancias que se repite
     const manual = {};
     [...new Set(a.vueltas.filter(v => v.grupoManual != null && v.clase === "serie").map(v => v.grupoManual))].forEach(g => {
@@ -9182,6 +9254,7 @@ $("selPlantBorrar").addEventListener("click", () => {
 });
 function guardarPaqueteCompartido(c) {
   const x = c.items[0];
+  exigirCompartidos(x.plantillas);
   x.plantillas.forEach(p => cambiar("plantillas", { id: nuevoId(), nombre: nombreLibre(p.nombre), items: desdeCompartido(p.items), borrado: false }, true));
   persistir();
   verPestana("plan");

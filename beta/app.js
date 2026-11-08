@@ -857,8 +857,10 @@ function volcarExtra() {
     if (hay) persistir();
 }
 // Sin permiso de catálogo, los ejercicios locales pendientes (p. ej. creados antes de esta restricción) se conservan en el dispositivo pero no se suben: el servidor los rechazaría y bloquearía el resto de la sincronización.
-const subeEjercicios = () => puedeEditarCatalogo();
-const hayPendientes = () => Object.keys(TABLAS).some(t => Object.values(db[t]).some(v => v.sucio && !(t === "ejercicios" && !subeEjercicios())));
+// Un ejercicio privado heredado que no existe en la nube queda «retenido»: se conserva en el dispositivo, no se sube (el servidor ya no admite ejercicios privados nuevos) y no cuenta como pendiente.
+const retenidoEj = v => !!v.retenido && !v.compartido;
+const subibleEj = v => !retenidoEj(v) && (puedeEditarCatalogo() || (!v.compartido && (!v.user_id || v.user_id === sesion.user_id)));
+const hayPendientes = () => Object.keys(TABLAS).some(t => Object.values(db[t]).some(v => v.sucio && !(t === "ejercicios" && !subibleEj(v))));
 
 // Fechas pendientes: no adivinar el día ni sustituir un entrenamiento por el día actual.
 function fechaSerieValida(v) {
@@ -1019,7 +1021,12 @@ async function subirEjercicios(filas) {
       const actualizadas = await u.json().catch(() => null);
       if (!Array.isArray(actualizadas)) throw new Error("Respuesta no válida al actualizar un ejercicio.");
       if (!actualizadas.length) {
-        if (user_id !== sesion.user_id) throw new Error("Tu cuenta no puede modificar este ejercicio.");
+        if (!f.compartido) {
+          // Privado heredado que no existe en la nube: no se crea (catálogo único), se conserva en local y deja de contar como pendiente.
+          const v = db.ejercicios[id]; if (v) v.retenido = true;
+          continue;
+        }
+        if (user_id !== sesion.user_id || !puedeCrearEjercicios()) throw new Error("Tu cuenta no puede modificar este ejercicio.");
         const i = await api("/rest/v1/ejercicios", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify(f) });
         if (!i.ok) throw await errorGuardado("ejercicios", i);
       }
@@ -1223,7 +1230,7 @@ async function sincronizar() {
       // Subir lo pendiente
       fallosEjercicios = [];
       for (const t of Object.keys(TABLAS)) {
-        const pend = Object.values(db[t]).filter(v => v.sucio && !(t === "ejercicios" && !subeEjercicios()));
+        const pend = Object.values(db[t]).filter(v => v.sucio && !(t === "ejercicios" && !subibleEj(v)));
         if (!pend.length) continue;
         if (pend.some(v => v.conflicto)) { mostrarConflictos(); throw new Error("Revisa los cambios pendientes antes de sincronizar."); }
         if (t === "series" && mostrarFechasPendientes()) {
@@ -3816,7 +3823,9 @@ function crearEjercicio(nombre, tipo) {
   // Guarda de lógica (además de la RLS del servidor): una cuenta sin permiso de catálogo no crea ejercicios por ninguna vía.
   if (!puedeCrearEjercicios()) { setEstado("Tu cuenta no puede crear ejercicios. Elige uno del catálogo o pide al administrador que lo añada.", true); throw new FaltaEjercicio(nombreLimpio); }
   const id = nuevoId();
-  cambiar("ejercicios", { id, user_id: sesion.user_id, nombre: nombreLimpio, tipo: tipoLimpio, video_url: "", notas: "", compartido: puedeEditarCatalogo(), borrado: false });
+  cambiar("ejercicios", { id, user_id: sesion.user_id, nombre: nombreLimpio, tipo: tipoLimpio, video_url: "", notas: "", compartido: true, borrado: false });
+  // Catálogo único: todo ejercicio nuevo es COMÚN (lo verán todos los usuarios aprobados). Sus datos personales (series, marcas, 1RM…) siguen siendo privados.
+  setEstado("«" + nombreLimpio + "» se ha añadido al catálogo común: lo verán todos los usuarios aprobados. Tus series y marcas siguen siendo solo tuyas.");
   return id;
 }
 let grupoSel = "";
@@ -3866,7 +3875,7 @@ function pintarSelector() {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "opcion crear-dist";
-    b.textContent = "+ Crear «" + sugerencia + "» (carrera)";
+    b.textContent = "+ Crear «" + sugerencia + "» (carrera) en el catálogo común";
     b.addEventListener("click", () => elegir(crearEjercicio(sugerencia, "carrera")));
     lista.appendChild(b);
   }
@@ -3878,7 +3887,7 @@ function pintarSelector() {
     const t = document.createElement("button");
     t.type = "button";
     t.className = "cf-t";
-    t.textContent = "+ Crear «" + q + "» (" + TIPOS[sugerido].nombre.toLowerCase() + ")" + (tipoSel ? "" : " · o elige el tipo:");
+    t.textContent = "+ Crear «" + q + "» en el catálogo común (" + TIPOS[sugerido].nombre.toLowerCase() + ")" + (tipoSel ? "" : " · o elige el tipo:");
     t.addEventListener("click", () => elegir(crearEjercicio(q, sugerido)));
     fila.appendChild(t);
     (tipoSel ? [] : [sugerido].concat(Object.keys(TIPOS).filter(k => k !== sugerido))).forEach(k => {
@@ -4682,7 +4691,7 @@ function abrirDetalle(id) {
   $("detTipo").querySelectorAll("button").forEach(b => { b.disabled = !puede; });
   $("detBorrar").hidden = !puede || !puedeQuitarDelCatalogo(e);
   $("detAvisoComun").hidden = puede;
-  $("detCompSec").hidden = !(puedeEditarCatalogo() && propio);
+  $("detCompSec").hidden = true;   // catálogo único: ya no se comparte/descompartir ejercicio a ejercicio
   $("detComp").checked = !!e.compartido;
   $("detComp").disabled = !puedeQuitarDelCatalogo(e);
   pintarVideo(e);
@@ -4691,7 +4700,7 @@ function abrirDetalle(id) {
   if (!$("detalle").open) $("detalle").showModal();
   $("detalle").scrollTop = 0;
 }
-const editarEjercicio = cambios => { const e = ejercicioVivo(detalleId); if (editable(e)) cambiar("ejercicios", { ...e, ...cambios }); };
+const editarEjercicio = cambios => { const e = ejercicioVivo(detalleId); if (!editable(e)) return; const { compartido, ...resto } = cambios; cambiar("ejercicios", { ...e, ...resto }); };   // «compartido» no se modifica desde el cliente
 $("detComp").addEventListener("change", () => {
   if (!$("detComp").checked && !puedeQuitarDelCatalogo(ejercicioVivo(detalleId))) { $("detComp").checked = true; return; }
   editarEjercicio({ compartido: $("detComp").checked }); pintarTodo();
@@ -6492,6 +6501,8 @@ function restaurar(archivo) {
           const fila = {};
           TABLAS[t].campos.forEach(c => { if (f[c] !== undefined) fila[c] = f[c]; });
           if (t === "ejercicios" && !(f.compartido && f.user_id === sesion.user_id)) fila.user_id = sesion.user_id;
+          // Catálogo único: una copia antigua no crea ejercicios privados en la nube; se conservan en el dispositivo (retenidos) para no perder sus series.
+          if (t === "ejercicios" && !fila.compartido && !db.ejercicios[fila.id]) fila.retenido = true;
           cambiar(t, fila, true);
         });
         persistir(); pintarTodo(); setEstado("Copia restaurada: " + cambios.length + " elementos");
@@ -8530,7 +8541,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v242" + (BETA ? " beta" : "");
+const VERSION_APP = "v243" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

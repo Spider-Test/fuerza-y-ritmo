@@ -8896,7 +8896,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v245" + (BETA ? " beta" : "");
+const VERSION_APP = "v246" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";
@@ -9711,14 +9711,13 @@ $("buscarPlantilla").addEventListener("input", () => {
 // El pellizco sigue permitido (sin user-scalable, sin interceptar gestos). Solo actúa donde la barra es fixed (regla CSS @media móvil).
 if (window.visualViewport) {
   const vv = visualViewport, raiz = document.documentElement;
-  let sonda = null, cuadro = 0, ultimo = "";
+  let sonda = null, ultimo = "";
   const VARS = ["--vv-tx", "--vv-ty", "--vv-s"];
   const escribiendo = () => {   // con el teclado abierto no se mueve la barra: iOS ya recoloca el visual viewport
     const a = document.activeElement;
     return !!a && a.matches("textarea, select, [contenteditable]:not([contenteditable='false']), input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=range]):not([type=file])");
   };
   const aplicar = () => {
-    cuadro = 0;
     const zoom = vv.scale > 1.02;
     raiz.classList.toggle("ampliado", zoom);
     if (!zoom || escribiendo()) { if (ultimo) { VARS.forEach(p => raiz.style.removeProperty(p)); ultimo = ""; } return; }
@@ -9736,7 +9735,8 @@ if (window.visualViewport) {
     ultimo = clave;
     raiz.style.setProperty("--vv-tx", tx + "px"); raiz.style.setProperty("--vv-ty", ty + "px"); raiz.style.setProperty("--vv-s", String(s));
   };
-  const programar = () => { if (!cuadro) cuadro = requestAnimationFrame(aplicar); };
+  // v246: se aplica dentro del propio evento (sin esperar a requestAnimationFrame) para no añadir un fotograma de retraso al gesto
+  const programar = aplicar;
   const activar = () => {
     vv.addEventListener("resize", programar, { passive: true });
     vv.addEventListener("scroll", programar, { passive: true });
@@ -9747,7 +9747,6 @@ if (window.visualViewport) {
   const desactivar = () => {
     vv.removeEventListener("resize", programar); vv.removeEventListener("scroll", programar);
     document.removeEventListener("focusin", programar); document.removeEventListener("focusout", programar);
-    if (cuadro) { cancelAnimationFrame(cuadro); cuadro = 0; }
   };
   window.addEventListener("pagehide", desactivar);
   window.addEventListener("pageshow", e => { if (e.persisted) activar(); });

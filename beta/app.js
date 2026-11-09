@@ -99,6 +99,23 @@ const DEFECTOS = { medida: "", lado: false, extra: {}, seccion: "", por_lado: fa
 let sesion = leer("sesion-v1");                 // {access_token, refresh_token, expires_at, user_id, email}
 let perfil = leer("perfil-v1");                 // {aprobado, es_admin, email}
 let usuarios = perfil?.es_admin && perfil?.aprobado ? (leer("usuarios-v1") || []) : [];        // solo para el administrador (se guarda para no verla vacía al abrir)
+// Única regla de cliente para todo lo de «Usuarios» (ajustes, contadores, avisos): administrador APROBADO.
+// No depende de edita_catalogo. Es solo presentación: la autorización real la siguen dando las políticas RLS del servidor.
+function esAdminAprobado() { return !!perfil && perfil.aprobado === true && perfil.es_admin === true; }
+// Muestra u oculta la sección «Usuarios» (hidden + inert) y, si no procede, borra su contenido y su contador del DOM.
+// Solo toca el DOM: se puede llamar desde cualquier render, navegación, cambio de perfil o cierre de sesión.
+function actualizarVisibilidadUsuarios() {
+  const sec = document.getElementById("bloqueUsuarios");
+  if (!sec) return;
+  const permitido = esAdminAprobado();
+  sec.inert = !permitido;
+  if (!permitido) {
+    sec.hidden = true;
+    const lista = document.getElementById("listaUsuarios"), n = sec.querySelector(".sec-n");
+    if (lista) lista.textContent = "";
+    if (n) n.textContent = "";
+  }
+}
 let db = leer("datos-v2") || { entrenos: leer("entrenos-v1") || {} };
 Object.keys(TABLAS).forEach(t => { db[t] = Object.assign(Object.create(null), db[t] || {}); });
 let cursores = leer("cursores-v4") || {};       // v4: primera lectura completa con paginación, sin borrar la copia local
@@ -696,7 +713,8 @@ async function cargarPerfil() {
   const lista = await r.json(), mio = Array.isArray(lista) && lista.find(p => p.user_id === sesion.user_id);
   perfil = mio ? { aprobado: mio.aprobado, es_admin: mio.es_admin, edita_catalogo: mio.edita_catalogo, email: mio.email, novedades_vistas: mio.novedades_vistas || "" } : { aprobado: false, es_admin: false, edita_catalogo: false, email: sesion.email };
   usuarios = [];
-  if (perfil.aprobado && perfil.es_admin) {
+  actualizarVisibilidadUsuarios();   // oculta y vacía «Usuarios» en cuanto cambia el perfil; se muestra solo si es admin aprobado
+  if (esAdminAprobado()) {
     let ultimo = "";
     for (;;) {
       const rr = await api("/rest/v1/perfiles?select=" + campos + "&order=user_id.asc&limit=500" + (ultimo ? "&user_id=gt." + encodeURIComponent(ultimo) : ""));
@@ -712,7 +730,7 @@ async function cargarPerfil() {
   escribir("usuarios-v1", usuarios);
   escribir("perfil-v1", perfil);
   aplicarPermisosCatalogo();
-  if (perfil.es_admin && !$("vistaPlan").hidden) pintarPlan();
+  if (esAdminAprobado() && !$("vistaPlan").hidden) pintarPlan(); else actualizarVisibilidadUsuarios();
   avisoUsuarios();
   pintarAvisoNovedades();
   return perfil;
@@ -5820,7 +5838,7 @@ function pintarPlan() {
   const ms = vivos("mesociclos").sort((a, b) => (b.inicio || "").localeCompare(a.inicio || ""));
   contadorSec("mesociclos", ms.length);
   contadorSec("rutinas", RUTINAS_TIPO.length);
-  contadorSec("usuarios", usuarios.filter(u => !u.aprobado).length ? usuarios.filter(u => !u.aprobado).length + " pendientes" : usuarios.length);
+  { const pend = esAdminAprobado() ? usuarios.filter(u => !u.aprobado).length : 0; contadorSec("usuarios", !esAdminAprobado() ? "" : pend ? pend + " pendientes" : usuarios.length); }
   if (!ms.length) lm.innerHTML = '<p class="vacio-lista">Un mesociclo reparte tus plantillas por los días de la semana durante varias semanas, con progresión de peso si quieres.</p>';
   ms.forEach(m => {
     const actual = m.inicio && hoy >= m.inicio && hoy < iso(sumarDias(deIso(m.inicio), n0(m.semanas) * 7));
@@ -5831,8 +5849,8 @@ function pintarPlan() {
 
   pintarSugerencias();
   pintarMolestias();
-  $("bloqueUsuarios").hidden = !(perfil && perfil.es_admin);
-  if (perfil && perfil.es_admin) {
+  actualizarVisibilidadUsuarios();   // la visibilidad de «Usuarios» se decide solo ahí (y la repite aplicarGrupoPlan al final)
+  if (esAdminAprobado()) {
     const lu = $("listaUsuarios");
     lu.textContent = "";
     if (!usuarios.length) lu.innerHTML = '<p class="vacio-lista">Cargando usuarios… (necesitas conexión)</p>';
@@ -5890,6 +5908,7 @@ function menuPlantilla(p) {
   ]);
 }
 async function cambiarPerfil(uid, cambios, aviso) {
+  if (!esAdminAprobado()) return;   // refuerzo en cliente; la autorización real sigue siendo la RLS del servidor
   try {
     const r = await api("/rest/v1/perfiles?user_id=eq." + encodeURIComponent(uid), { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify(cambios) });
     if (!r.ok) throw new Error();
@@ -5899,7 +5918,7 @@ async function cambiarPerfil(uid, cambios, aviso) {
   pintarPlan();
 }
 function avisoUsuarios() {
-  const n = usuarios.filter(u => !u.aprobado).length;
+  const n = esAdminAprobado() ? usuarios.filter(u => !u.aprobado).length : 0;
   $("tabPlan").querySelector("span").textContent = n ? "Ajustes · " + n : "Ajustes";
   $("tabPlan").classList.toggle("con-aviso", n > 0);
 }
@@ -6226,7 +6245,7 @@ function verPestana(cual) {
   else if (cual === "listas") mostrarSubVistaOrganizar(subVistaOrganizar);
   escribir("pestana-v1", cual);
   if (cual === "ejercicios") pintarCatalogo();
-  else if (cual === "plan") { pintarPlan(); if (perfil && perfil.es_admin && sesion) { cargarPerfil().catch(() => {}); cargarInicios(); } }
+  else if (cual === "plan") { pintarPlan(); if (esAdminAprobado() && sesion) { cargarPerfil().catch(() => {}); cargarInicios(); } }
   else if (cual === "marcas") pintarMarcas();
   else if (cual === "listas") { if (subVistaOrganizar === "listas") pintarListas(); else pintarPlan(); }
   else pintarSemana();
@@ -6414,6 +6433,7 @@ function detenerSesionLocal(msg) {
   clearTimeout(timerSync); clearTimeout(timerExtra);
   invalidarPeticiones();
   sesion = null; perfil = null; usuarios = []; historial = []; rehechos = [];
+  actualizarVisibilidadUsuarios();   // sin sesión no queda en el DOM nada de la lista de usuarios
   if (typeof ent !== "undefined") ent = null;
   if (typeof bloqueoPantalla !== "undefined" && bloqueoPantalla) { bloqueoPantalla.release().catch(() => {}); bloqueoPantalla = null; }
   document.querySelectorAll("dialog[open]").forEach(d => d.close());
@@ -6485,6 +6505,7 @@ function fechaHora(ts) {
 }
 let iniciosSesion = {};   // último inicio de sesión de cada usuario (solo para el administrador)
 async function cargarInicios() {
+  if (!esAdminAprobado()) { iniciosSesion = {}; return; }
   try {
     const r = await api("/rest/v1/rpc/accesos_admin", { method: "POST", body: "{}" });
     if (!r.ok) return;
@@ -6517,7 +6538,7 @@ function mostrarApp(reapertura = false) {
   setEstado("Sincronizando…");
   sincronizar();
   registrarAcceso();
-  if (perfil && perfil.es_admin) cargarInicios();
+  if (esAdminAprobado()) cargarInicios();
   // Enlace compartido por un amigo: #c=CODIGO
   if (/^#c=/i.test(location.hash)) {
     const h = location.hash;
@@ -8875,7 +8896,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v244" + (BETA ? " beta" : "");
+const VERSION_APP = "v245" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";
@@ -9650,6 +9671,8 @@ const GRUPOS_PLAN = {
 function aplicarGrupoPlan() {
   const grupo = leer("plan-grupo-v1") || "crear", secciones = GRUPOS_PLAN[grupo] || GRUPOS_PLAN.crear;
   document.querySelectorAll("#vistaPlan > .plan-sec[data-sec]").forEach(sec => { sec.hidden = !secciones.includes(sec.dataset.sec); });
+  // «Usuarios» solo existe para el administrador aprobado, estén donde estén las preferencias de grupo
+  actualizarVisibilidadUsuarios();
 }
 function mostrarGrupoPlan(grupo) {
   const elegido = GRUPOS_PLAN[grupo] ? grupo : "crear";
@@ -9682,10 +9705,53 @@ $("buscarPlantilla").addEventListener("input", () => {
 
 // ---------- Zoom: sin doble toque a tamaño normal; si se amplía con los dedos, el doble toque nativo de iOS vuelve atrás ----------
 // (con zoom se quita «touch-action: manipulation», así el doble toque reduce el zoom en vez de pulsar lo de debajo)
+// INC-UI-007 (v245): con zoom de pellizco la barra inferior (position:fixed) sigue anclada al layout viewport y queda fuera de la zona
+// visible. Mientras hay zoom se la recoloca en la esquina inferior izquierda del visual viewport con una transformación (solo la barra),
+// contrarrestando la escala para que conserve su tamaño normal. A escala 1 se quitan las variables y todo queda como antes.
+// El pellizco sigue permitido (sin user-scalable, sin interceptar gestos). Solo actúa donde la barra es fixed (regla CSS @media móvil).
 if (window.visualViewport) {
-  const marcarZoom = () => document.documentElement.classList.toggle("ampliado", visualViewport.scale > 1.02);
-  visualViewport.addEventListener("resize", marcarZoom);
-  marcarZoom();
+  const vv = visualViewport, raiz = document.documentElement;
+  let sonda = null, cuadro = 0, ultimo = "";
+  const VARS = ["--vv-tx", "--vv-ty", "--vv-s"];
+  const escribiendo = () => {   // con el teclado abierto no se mueve la barra: iOS ya recoloca el visual viewport
+    const a = document.activeElement;
+    return !!a && a.matches("textarea, select, [contenteditable]:not([contenteditable='false']), input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=range]):not([type=file])");
+  };
+  const aplicar = () => {
+    cuadro = 0;
+    const zoom = vv.scale > 1.02;
+    raiz.classList.toggle("ampliado", zoom);
+    if (!zoom || escribiendo()) { if (ultimo) { VARS.forEach(p => raiz.style.removeProperty(p)); ultimo = ""; } return; }
+    // Alto del layout viewport = bloque contenedor de los elementos fixed (una sonda fixed a pantalla completa lo mide sin suposiciones)
+    if (!sonda) {
+      sonda = document.createElement("div");
+      sonda.setAttribute("aria-hidden", "true"); sonda.inert = true;
+      sonda.style.cssText = "position:fixed;left:0;top:0;width:1px;height:100%;visibility:hidden;pointer-events:none";
+      document.body.appendChild(sonda);
+    }
+    const alto = sonda.getBoundingClientRect().height;
+    const tx = Math.round(vv.offsetLeft * 100) / 100, ty = Math.round((vv.offsetTop + vv.height - alto) * 100) / 100, s = Math.round(100000 / vv.scale) / 100000;
+    const clave = tx + "|" + ty + "|" + s;
+    if (clave === ultimo) return;
+    ultimo = clave;
+    raiz.style.setProperty("--vv-tx", tx + "px"); raiz.style.setProperty("--vv-ty", ty + "px"); raiz.style.setProperty("--vv-s", String(s));
+  };
+  const programar = () => { if (!cuadro) cuadro = requestAnimationFrame(aplicar); };
+  const activar = () => {
+    vv.addEventListener("resize", programar, { passive: true });
+    vv.addEventListener("scroll", programar, { passive: true });
+    document.addEventListener("focusin", programar, { passive: true });
+    document.addEventListener("focusout", programar, { passive: true });
+    aplicar();
+  };
+  const desactivar = () => {
+    vv.removeEventListener("resize", programar); vv.removeEventListener("scroll", programar);
+    document.removeEventListener("focusin", programar); document.removeEventListener("focusout", programar);
+    if (cuadro) { cancelAnimationFrame(cuadro); cuadro = 0; }
+  };
+  window.addEventListener("pagehide", desactivar);
+  window.addEventListener("pageshow", e => { if (e.persisted) activar(); });
+  activar();
 }
 
 // ---------- Instrucciones de uso ----------

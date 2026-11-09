@@ -2362,3 +2362,13 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); box-sha
 .comp-fila .comp-et { margin: 0; font-size: 14px; font-weight: 600; }
 .comp-resumen { margin-bottom: 8px; }
 .comp-aviso { margin: 6px 0; padding: 8px 10px; border-left: 4px solid var(--accent, #d97706); background: var(--accent-soft); border-radius: 6px; font-size: 14px; line-height: 1.4; }
+
+/* INC-UI-007 (v245): con zoom de pellizco la barra inferior se ancla a la zona realmente visible (variables --vv-* que pone app.js solo
+   mientras html.ampliado). Solo en el diseño móvil, donde la barra es fixed; en escritorio (sticky) y a escala 1 no hay efecto. */
+@media (max-width: 760px) {
+  html.ampliado .tabbar {
+    transform-origin: left bottom;
+    transform: translate(var(--vv-tx, 0px), var(--vv-ty, 0px)) scale(var(--vv-s, 1));
+    will-change: transform;
+  }
+}

@@ -255,7 +255,6 @@ function exigirEjercicios(lista) {
 }
 // Variantes por formato de origen: se llaman antes de escribir cualquier plantilla o serie, para no dejar importaciones a medias.
 const ejerciciosDeItemsCompartidos = plantillas => plantillas.flatMap(p => p.items.flatMap(it => it.bloque ? it.tramos.map(t => [t.ejercicio, t.tipo]) : [[it.ejercicio, it.tipo]]));
-const exigirCompartidos = plantillas => exigirEjercicios(ejerciciosDeItemsCompartidos(plantillas));
 const exigirImportados = items => exigirEjercicios(items.flatMap(it => it.bloque ? it.tramos : [it]).filter(e => !catalogoElegidoIA.get(e)).map(e => [e.ejercicio, e.tipo]));
 function aplicarPermisosCatalogo() { const b = $("nuevoEj"); if (b) b.hidden = !puedeCrearEjercicios(); }
 const ejercicioVivo = id => { const e = db.ejercicios[id]; return e && !e.borrado ? e : null; };
@@ -1607,8 +1606,8 @@ document.addEventListener("selectionchange", () => {
 const seriesDelDia = fecha => (indiceSeries().porFecha[fecha] || []).slice();
 // Convierte series en una lista de ejercicios con sus series (para copiar o guardar como plantilla)
 // Los bloques se guardan como tramos con una serie por ronda: { bloque: true, tramos: [{ ejercicio_id, series: [ronda 1, ronda 2…] }] }
-const valores = s => ({ peso: n0(s.peso), reps: s.ciclo_id ? 0 : n0(s.reps), distancia: n0(s.distancia), tiempo: n0(s.tiempo), descanso: n0(s.descanso), rec_dist: n0(s.rec_dist), pct: n0(s.pct), bilbo: !!s.ciclo_id, calentamiento: !!s.calentamiento, por_lado: !!s.por_lado, nota: s.nota || "", letra_nueva: !!s.letra_nueva, max_tiempo: !!s.max_tiempo, max_reps: !!s.max_reps, rango_min: n0(s.rango_min), rango_max: n0(s.rango_max) });
-function itemsDe(series) {
+const valores = (s, conOrigen) => ({ ...(conOrigen ? { _h: hecha(s) } : {}), peso: n0(s.peso), reps: s.ciclo_id ? 0 : n0(s.reps), distancia: n0(s.distancia), tiempo: n0(s.tiempo), descanso: n0(s.descanso), rec_dist: n0(s.rec_dist), pct: n0(s.pct), bilbo: !!s.ciclo_id, calentamiento: !!s.calentamiento, por_lado: !!s.por_lado, nota: s.nota || "", letra_nueva: !!s.letra_nueva, max_tiempo: !!s.max_tiempo, max_reps: !!s.max_reps, rango_min: n0(s.rango_min), rango_max: n0(s.rango_max) });
+function itemsDe(series, conOrigen) {   // conOrigen: añade _h (hecha o planificada) a cada serie; solo para compartir, donde se elimina antes de enviar
   const items = [], bloques = {};
   series.forEach(s => {
     if (s.bloque_id) {
@@ -1619,12 +1618,12 @@ function itemsDe(series) {
     const cp = n0(s.copia) > 1 ? n0(s.copia) : 0;
     let it = items.find(x => !x.bloque && x.ejercicio_id === s.ejercicio_id && x.grupo === (s.grupo || "") && x.seccion === (s.seccion || "") && n0(x.copia) === cp);
     if (!it) { it = { ejercicio_id: s.ejercicio_id, grupo: s.grupo || "", seccion: s.seccion || "", series: [] }; if (cp) it.copia = cp; items.push(it); }
-    it.series.push(valores(s));
+    it.series.push(valores(s, conOrigen));
   });
   items.filter(it => it.bloque).forEach(it => {
     const rondas = [...new Set(it.lista.map(s => n0(s.ronda)))].sort((a, b) => a - b);
     const porRonda = rondas.map(r => it.lista.filter(s => n0(s.ronda) === r).sort((a, b) => a.orden - b.orden));
-    it.tramos = porRonda[0].map((s0, k) => ({ ejercicio_id: s0.ejercicio_id, series: porRonda.map(rs => valores(rs[k] || rs[rs.length - 1])) }));
+    it.tramos = porRonda[0].map((s0, k) => ({ ejercicio_id: s0.ejercicio_id, series: porRonda.map(rs => valores(rs[k] || rs[rs.length - 1], conOrigen)) }));
     delete it.lista;
   });
   return items;
@@ -1731,7 +1730,7 @@ function menuDia(dia) {
     series.filter(s => !s.bloque_id).length > 1 && { texto: "Seleccionar series para agrupar en bloque", accion: () => empezarSelSeries(dia) },
     series.length && { texto: "Guardar en una lista de entrenamientos…", accion: () => guardarEnLista(series[0].grupo || "Entrenamiento", series) },
     series.length && { texto: "Guardar ejercicios como plantilla…", accion: () => guardarPlantilla(series[0].grupo || "Entrenamiento", series) },
-    series.length && { texto: "Compartir con un amigo…", accion: () => compartir(series[0].grupo || titulo, itemsDe(series)) },
+    series.length && { texto: "Compartir con un amigo…", accion: () => compartir(series[0].grupo || titulo, itemsDe(series, true)) },
     series.length && { texto: "Vaciar ejercicios del día", peligro: true, confirmar: "Pulsa otra vez: se borran " + series.length + " series", accion: () => {
       series.forEach(s => cambiar("series", { ...s, borrado: true }, true)); delete enEspera[dia.id]; guardarEspera(); persistir(); pintarDia(dia);
     } }
@@ -2107,7 +2106,7 @@ function menuGrupo(dia, grupo) {
     series.length && { texto: "Copiar entreno", accion: () => copiar(grupo || "Entreno 1", "", series, "entreno") },
     series.length && { texto: "Guardar en una lista de entrenamientos…", accion: () => guardarEnLista(grupo || "Entrenamiento", series) },
     { texto: "Guardar como plantilla…", accion: () => guardarPlantilla(grupo, series) },
-    { texto: "Compartir con un amigo…", accion: () => compartir(grupo, itemsDe(series)) },
+    { texto: "Compartir con un amigo…", accion: () => compartir(grupo, itemsDe(series, true)) },
     { texto: "Quitar este entreno del día", peligro: true, confirmar: series.length ? "Pulsa otra vez: se borran " + series.length + " series" : "Pulsa otra vez para quitarlo", accion: () => {
       series.forEach(s => cambiar("series", { ...s, borrado: true }, true));
       sesionesVacias[dia.id] = (sesionesVacias[dia.id] || []).filter(x => x !== grupo);
@@ -2123,37 +2122,352 @@ function menuGrupo(dia, grupo) {
 // ---------- Compartir con amigos: un código (o enlace) que otro usuario añade a su calendario ----------
 const URL_APP = "https://spider-test.github.io/fuerza-y-ritmo/" + (BETA ? "beta/" : "");
 const nuevoCodigo = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), b => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[b % 32]).join("");
-// Los ejercicios viajan por nombre y tipo, porque cada usuario tiene los suyos
+// Los ejercicios viajan por nombre y tipo, porque cada usuario tiene los suyos.
+// Las series conservan, solo al compartir desde un día, la marca _h (true = ya hecha, false = planificada): permite distinguir lo
+// programado de lo realizado. La marca NUNCA se envía (filtrarCompartido la elimina) y no existe en plantillas ni mesociclos.
 const paraCompartir = items => items.map(it => it.bloque
   ? { bloque: true, seccion: it.seccion || "", tramos: (it.tramos || []).map(t => ({ ejercicio: nombreEj(t.ejercicio_id), tipo: tipoDe(t.ejercicio_id), series: t.series })) }
   : { ejercicio: nombreEj(it.ejercicio_id), tipo: tipoDe(it.ejercicio_id), seccion: it.seccion || "", series: it.series });
+
+// <<COMPARTIR-PURO (sin DOM ni red: se prueba aparte; no cambiar de sitio estas marcas)
+// H3 · Qué viaja. Criterio (ver el informe de la corrección H1+H3+H4):
+//  · Estructura (ejercicios, tipos, partes, nº de series, repeticiones, rangos, tiempos, distancias, descansos, indicadores): siempre.
+//  · Carga en kg: solo si la serie estaba PLANIFICADA al compartir desde un día (_h === false). Las series ya hechas (_h === true) y las
+//    de plantillas/mesociclos (sin _h: el modelo no distingue «kg programados» de «kg realizados») se excluyen salvo que se elija incluirlas.
+//  · %RM y Bilbo son prescripciones relativas y viajan; los kg que llevan guardados salen del 1RM o del ciclo de quien comparte, así que se
+//    quitan siempre (con % y kg juntos se podría deducir el 1RM).
+//  · nota («Descripción»): texto libre; el modelo no permite saber si es una instrucción técnica o algo privado. Se excluye salvo que se elija.
+//  · En series hechas, los resultados (repeticiones de «máx.», tiempo de «máx.», repeticiones dentro de un rango, tiempo de una distancia) se vacían.
+//  · No viajan jamás: fecha, id, series hechas como historial, récords, 1RM, pulso, desnivel, ritmo, diario del día ni datos de la cuenta.
+const OPCIONES_COMPARTIR = { notas: false, cargas: false };
+const tipoCompartido = t => TIPOS[t] ? t : "fuerza";
+const claveEjercicio = (nombre, tipo) => compacto(nombre) + "|" + tipoCompartido(tipo);
+function nuevoEstCompartir() {
+  return { series: 0, realizadas: 0, kgProgramados: 0, relativas: 0, kgPersonales: 0, kgRealizados: 0, kgSinVerificar: 0, resultadosOcultos: 0, notas: [], _notas: new Set(), _ejercicios: new Set() };
+}
+function filtrarSerieCompartida(v, tipo, op, est, donde) {
+  const s = { ...v };
+  delete s._h;
+  const real = v._h === true, programada = v._h === false, kg = n0(v.peso);
+  est.series++;
+  if (real) est.realizadas++;
+  if (v.bilbo || n0(v.pct) > 0) { est.relativas++; s.peso = 0; }
+  else if (kg > 0) {
+    if (programada) est.kgProgramados++;
+    else if (op.cargas) est.kgPersonales++;
+    else { s.peso = 0; if (real) est.kgRealizados++; else est.kgSinVerificar++; }
+  }
+  if (real && !op.cargas) {
+    let oculto = false;
+    if (v.max_reps && n0(s.reps)) { s.reps = 0; oculto = true; }
+    if (v.max_tiempo && n0(s.tiempo)) { s.tiempo = 0; oculto = true; }
+    if ((n0(v.rango_min) > 0 || n0(v.rango_max) > 0) && n0(s.reps)) { s.reps = 0; oculto = true; }
+    if (esDistancia(tipo) && n0(s.distancia) > 0 && n0(s.tiempo)) { s.tiempo = 0; oculto = true; }
+    if (oculto) est.resultadosOcultos++;
+  }
+  const nota = String(v.nota || "").trim();
+  if (nota && !est._notas.has(donde + "\n" + nota)) { est._notas.add(donde + "\n" + nota); est.notas.push({ donde, texto: nota }); }
+  s.nota = op.notas ? (v.nota || "") : "";
+  return s;
+}
+function filtrarItemsCompartidos(items, op, est) {
+  return (items || []).map(it => {
+    if (it.bloque) {
+      return { ...it, tramos: (it.tramos || []).map(t => { est._ejercicios.add(claveEjercicio(t.ejercicio, t.tipo)); return { ...t, series: (t.series || []).map(v => filtrarSerieCompartida(v, t.tipo, op, est, t.ejercicio)) }; }) };
+    }
+    est._ejercicios.add(claveEjercicio(it.ejercicio, it.tipo));
+    return { ...it, series: (it.series || []).map(v => filtrarSerieCompartida(v, it.tipo, op, est, it.ejercicio)) };
+  });
+}
+// items = lo que se compartiría tal cual ya en formato compartido (con _h si viene de un día). No modifica la entrada.
+function filtrarCompartido(items, op) {
+  const o = { ...OPCIONES_COMPARTIR, ...op }, est = nuevoEstCompartir(), x = items[0];
+  let salida;
+  if (x && x.paquete) salida = [{ ...x, plantillas: x.plantillas.map(p => ({ ...p, items: filtrarItemsCompartidos(p.items, o, est) })) }];
+  else if (x && x.mesociclo) {
+    const mm = { ...x.mesociclo }, nm = String(mm.notas || "").trim();
+    if (nm) { est._notas.add("Notas del mesociclo\n" + nm); est.notas.push({ donde: "Notas del mesociclo", texto: nm }); }
+    if (!o.notas) mm.notas = "";
+    salida = [{ ...x, mesociclo: mm, plantillas: x.plantillas.map(p => ({ ...p, items: filtrarItemsCompartidos(p.items, o, est) })) }];
+  } else salida = filtrarItemsCompartidos(items, o, est);
+  est.ejercicios = est._ejercicios.size;
+  delete est._notas; delete est._ejercicios;
+  return { items: salida, est };
+}
+// H4 · Qué ejercicios existen ya en el catálogo (catalogo = [{id, nombre, tipo}]). Cada ejercicio distinto se analiza una sola vez.
+//  existe = mismo nombre y mismo tipo · otro_tipo = mismo nombre pero otro tipo (hay que decidir) · falta = no hay ninguno con ese nombre
+function analizarEjerciciosCompartidos(lista, catalogo) {
+  const vistos = new Map();
+  lista.forEach(([nombre, tipo]) => {
+    const t = tipoCompartido(tipo), k = claveEjercicio(nombre, t);
+    if (vistos.has(k)) return;
+    const mismos = catalogo.filter(e => compacto(e.nombre) === compacto(nombre)), exacto = mismos.find(e => e.tipo === t);
+    vistos.set(k, { clave: k, nombre: String(nombre || "").trim(), tipo: t, estado: exacto ? "existe" : mismos.length ? "otro_tipo" : "falta", id: exacto ? exacto.id : "", candidatos: mismos.filter(e => e.tipo !== t) });
+  });
+  return [...vistos.values()];
+}
+// Decisión de la importación a partir de las elecciones del usuario: {clave: {accion:"vincular", id} | {accion:"crear"} | null}.
+// Nunca se crea nada sin elección explícita ni sin permiso de catálogo (la RLS de Supabase sigue siendo la autoridad real).
+function planificarImportacion(analisis, elecciones, puedeCrear, idsCatalogo) {
+  const mapa = new Map(), crear = [];
+  for (const a of analisis) {
+    if (a.estado === "existe") { mapa.set(a.clave, a.id); continue; }
+    const e = elecciones[a.clave];
+    if (!e) return { ok: false, mensaje: "Elige qué hacer con «" + a.nombre + "»." };
+    if (e.accion === "crear") {
+      if (!puedeCrear) return { ok: false, mensaje: "Tu cuenta no puede crear ejercicios: vincula «" + a.nombre + "» a uno existente." };
+      crear.push(a);
+    } else if (e.accion === "vincular" && idsCatalogo.has(e.id)) mapa.set(a.clave, e.id);
+    else return { ok: false, mensaje: "Elige un ejercicio existente para «" + a.nombre + "»." };
+  }
+  return { ok: true, mapa, crear };
+}
+const idCompartido = (mapa, nombre, tipo) => {
+  const id = mapa && mapa.get(claveEjercicio(nombre, tipo));
+  if (!id) throw new Error("Ejercicio sin resolver: " + nombre);   // jamás se crea un ejercicio por su cuenta al importar
+  return id;
+};
+const desdeCompartido = (items, mapa) => items.map(it => it.bloque
+  ? { bloque: true, seccion: it.seccion || "", tramos: it.tramos.map(t => ({ ejercicio_id: idCompartido(mapa, t.ejercicio, t.tipo), series: t.series })) }
+  : { ejercicio_id: idCompartido(mapa, it.ejercicio, it.tipo), seccion: it.seccion || "", series: it.series });
+// COMPARTIR-PURO>>
+
+// Solo lo usa la importación de carreras (Rodaje, Calentamiento…), ajena a compartir entre amigos: comportamiento sin cambios.
 function idPorNombre(nombre, tipo) {
   const e = vivos("ejercicios").find(x => compacto(x.nombre) === compacto(nombre));
   return e ? e.id : crearEjercicio(nombre, tipo);
 }
-const desdeCompartido = items => items.map(it => it.bloque
-  ? { bloque: true, seccion: it.seccion || "", tramos: it.tramos.map(t => ({ ejercicio_id: idPorNombre(t.ejercicio, t.tipo), series: t.series })) }
-  : { ejercicio_id: idPorNombre(it.ejercicio, it.tipo), seccion: it.seccion || "", series: it.series });
+const catalogoActual = () => vivos("ejercicios").map(e => ({ id: e.id, nombre: e.nombre, tipo: tipoCompartido(e.tipo) }));
+const itemsDeLista = c => c.items[0] && (c.items[0].paquete || c.items[0].mesociclo) ? c.items[0].plantillas : [{ items: c.items }];
+// Ventana de importación: muestra qué ejercicios existen y cuáles no, y NO escribe nada hasta que el usuario confirma.
+// Devuelve (Promise) un Map clave→id de ejercicio o null si se cancela. Solo crea ejercicios si el usuario puede y lo confirma.
+function resolverEjerciciosCompartidos(lista) {
+  return new Promise(resolver => {
+    if (lista.some(([n]) => !String(n || "").trim())) { setEstado("El contenido compartido tiene ejercicios sin nombre. No se ha guardado nada.", true); resolver(null); return; }
+    const cat = catalogoActual(), idsCatalogo = new Set(cat.map(e => e.id)), puedeCrear = puedeCrearEjercicios();
+    const analisis = analizarEjerciciosCompartidos(lista, cat), pend = analisis.filter(a => a.estado !== "existe");
+    if (!pend.length) { resolver(planificarImportacion(analisis, {}, puedeCrear, idsCatalogo).mapa); return; }   // todos existen: solo se vinculan
+    const elec = {}, selects = {};
+    pend.forEach(a => { elec[a.clave] = a.estado === "otro_tipo" ? { accion: "vincular", id: a.candidatos[0].id } : puedeCrear ? { accion: "crear" } : null; });
+    const caja = document.createElement("div");
+    const aviso = document.createElement("p"); aviso.className = "menu-det nota"; aviso.setAttribute("role", "alert");
+    const refrescar = () => {
+      const n = pend.filter(a => elec[a.clave] && elec[a.clave].accion === "crear").length;
+      const b = $("menuOpciones").firstElementChild;
+      if (b) b.textContent = n ? "Crear " + n + (n === 1 ? " ejercicio" : " ejercicios") + " en el catálogo común y continuar" : "Continuar";
+    };
+    pend.forEach(a => {
+      const fila = document.createElement("div"); fila.className = "comp-fila";
+      const t = document.createElement("p"); t.className = "comp-et";
+      t.textContent = "«" + a.nombre + "» · " + TIPOS[a.tipo].nombre + " · " + (a.estado === "otro_tipo" ? "existe con otro tipo" : "no está en el catálogo");
+      const sel = document.createElement("select"); sel.setAttribute("aria-label", "¿Qué hago con " + a.nombre + "?");
+      const opcion = (v, txt, padre) => { const o = document.createElement("option"); o.value = v; o.textContent = txt; (padre || sel).appendChild(o); return o; };
+      if (puedeCrear) opcion("crear", "Crear «" + a.nombre + "» en el catálogo común");
+      else { const o = opcion("", "Elige un ejercicio existente…"); o.disabled = true; }
+      const grupo = (titulo, lista2) => { if (!lista2.length) return; const g = document.createElement("optgroup"); g.label = titulo; lista2.forEach(e => opcion("id:" + e.id, e.nombre + (e.tipo !== a.tipo ? " (" + TIPOS[e.tipo].nombre + ")" : ""), g)); sel.appendChild(g); };
+      const cand = new Set(a.candidatos.map(e => e.id)), orden = (x, y) => x.nombre.localeCompare(y.nombre, "es");
+      grupo("Mismo nombre, otro tipo", a.candidatos);
+      grupo("Vincular a un ejercicio de tipo " + TIPOS[a.tipo].nombre, cat.filter(e => e.tipo === a.tipo && !cand.has(e.id)).sort(orden));
+      grupo("Vincular a un ejercicio de otro tipo", cat.filter(e => e.tipo !== a.tipo && !cand.has(e.id)).sort(orden));
+      sel.value = elec[a.clave] ? (elec[a.clave].accion === "crear" ? "crear" : "id:" + elec[a.clave].id) : "";
+      sel.addEventListener("change", () => { elec[a.clave] = sel.value === "crear" ? { accion: "crear" } : sel.value ? { accion: "vincular", id: sel.value.slice(3) } : null; aviso.textContent = ""; refrescar(); });
+      selects[a.clave] = sel; fila.append(t, sel); caja.appendChild(fila);
+    });
+    caja.appendChild(aviso);
+    let hecho = false;
+    // El «close» del menú anterior (el que acaba de lanzar esta acción) llega después de abrir este: se ignora mientras el menú siga abierto
+    const alCerrar = () => { if ($("menu").open) return; $("menu").removeEventListener("close", alCerrar); if (!hecho) { hecho = true; resolver(null); } };
+    $("menu").addEventListener("close", alCerrar);
+    abrirMenu("Ejercicios de este entrenamiento",
+      (pend.length === 1 ? "1 ejercicio no coincide" : pend.length + " ejercicios no coinciden") + " con tu catálogo. " +
+      (puedeCrear ? "Puedes crearlos en el catálogo común (lo verán todos los usuarios aprobados) o vincularlos a otros que ya existan. No se crea nada hasta que pulses el botón." : "Tu cuenta no puede crear ejercicios: vincula cada uno a uno existente o cancela. No se añade nada hasta entonces."),
+      [{ texto: "Continuar", mantener: true, accion: () => {
+        const plan = planificarImportacion(analisis, elec, puedeCrear, idsCatalogo);
+        if (!plan.ok) { aviso.textContent = plan.mensaje; return; }
+        hecho = true; $("menu").close();
+        try {
+          const mapa = plan.mapa;
+          plan.crear.forEach(a => mapa.set(a.clave, crearEjercicio(a.nombre, a.tipo)));   // crearEjercicio evita duplicados y comprueba el permiso
+          resolver(mapa);
+        } catch (e) { setEstado("No se ha podido completar la importación. Revisa los ejercicios e inténtalo de nuevo.", true); resolver(null); }
+      } }, { texto: "Cancelar (no se añade nada)", accion: () => { if (!hecho) { hecho = true; resolver(null); } } }], caja);   // explícito: no depende del evento «close»
+    refrescar();
+  });
+}
+// Resumen de lo que ya existe y lo que no, para la vista previa de lo que se recibe (no escribe nada)
+function resumenCatalogoCompartido(c) {
+  const an = analizarEjerciciosCompartidos(ejerciciosDeItemsCompartidos(itemsDeLista(c)), catalogoActual()), faltan = an.filter(a => a.estado !== "existe");
+  const caja = document.createElement("div"); caja.className = "comp-resumen";
+  const p = document.createElement("p"); p.className = "menu-det"; p.style.padding = "0 0 4px";
+  p.textContent = "Ejercicios: " + (an.length - faltan.length) + " ya están en tu catálogo" + (faltan.length ? " · " + faltan.length + " no encontrados" : "") + ".";
+  caja.appendChild(p);
+  if (faltan.length) {
+    const ul = document.createElement("ul"); ul.className = "vp-lista";
+    faltan.forEach(a => { const li = document.createElement("li"); li.textContent = a.nombre + " (" + TIPOS[a.tipo].nombre + (a.estado === "otro_tipo" ? ", existe con otro tipo" : "") + ")"; ul.appendChild(li); });
+    const q = document.createElement("p"); q.className = "menu-det nota"; q.style.padding = "0 0 4px";
+    q.textContent = puedeCrearEjercicios() ? "Al añadirlo podrás crearlos en el catálogo común o vincularlos a otros existentes; antes te lo pregunto." : "Tu cuenta no puede crear ejercicios: al añadirlo tendrás que vincularlos a otros existentes.";
+    caja.append(ul, q);
+  }
+  return caja;
+}
 function copiarTexto(t, que) {
   (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => avisoDeshacer("📋 " + (que || "Copiado") + ": " + t, null), () => avisoDeshacer((que || "Copia esto") + ": " + t, null));
 }
-async function compartir(nombre, items, crudo) {
-  const codigo = nuevoCodigo();
-  try {
-    const r = await api("/rest/v1/compartidos", { method: "POST", headers: { Prefer: "return=minimal" },
-      body: JSON.stringify({ codigo, user_id: sesion.user_id, autor: "", nombre, items: crudo ? items : paraCompartir(items) }) });
-    if (!r.ok) throw new Error();
-  } catch { setEstado("No se ha podido compartir. Necesitas conexión.", true); return; }
+const DIAS_CADUCIDAD = [[7, "7 días"], [30, "30 días (recomendado)"], [90, "90 días"], [180, "180 días"]];
+const fechaLarga = d => new Date(d).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" });
+function mensajeErrorCompartir(texto, codigo) {
+  if (/compartido_limite_diario/.test(texto)) return "Has creado demasiados códigos en 24 horas (máximo 30). Revoca los que ya no uses en «Mis enlaces compartidos» o inténtalo más tarde.";
+  if (/compartido_limite_activos/.test(texto)) return "Tienes demasiados enlaces activos (máximo 100). Revoca alguno en «Mis enlaces compartidos».";
+  if (/compartido_contenido_invalido/.test(texto)) return "El contenido es demasiado grande o no es válido (máximo 1 MB y 5000 elementos). Comparte menos cosas a la vez.";
+  if (/compartido_nombre_largo/.test(texto)) return "El nombre es demasiado largo (máximo 200 caracteres).";
+  if (/compartido_caducidad_invalida/.test(texto)) return "La caducidad elegida no es válida. Revisa la fecha y la hora de tu dispositivo.";
+  if (codigo === "PGRST204" || /caduca/.test(texto)) return "El servidor aún no admite caducidad de enlaces (falta aplicar la migración de seguridad de la beta). No se ha creado ningún código.";
+  if (/42501|row-level security|permission/.test(texto + " " + codigo)) return "Tu cuenta no tiene permiso para compartir.";
+  return "No se ha podido compartir. Inténtalo de nuevo.";
+}
+// El código se guarda con caducidad (la comprueba el servidor al abrirlo). Fallo = no se crea nada y se explica por qué.
+async function crearCodigoCompartido(nombre, items, dias) {
+  const cuerpo = JSON.stringify(items);
+  if (cuerpo.length > 850000) return { ok: false, mensaje: mensajeErrorCompartir("compartido_contenido_invalido", "") };
+  const caduca = new Date(Date.now() + dias * 86400000).toISOString();
+  for (let intento = 0; intento < 3; intento++) {
+    const codigo = nuevoCodigo();
+    let r;
+    try {
+      r = await api("/rest/v1/compartidos", { method: "POST", headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ codigo, user_id: sesion.user_id, autor: "", nombre, caduca, items }) });
+    } catch { return { ok: false, mensaje: "No se ha podido compartir. Necesitas conexión." }; }
+    if (r.ok) return { ok: true, codigo, caduca };
+    const e = await r.json().catch(() => ({})), texto = [e.message, e.details, e.hint].filter(Boolean).join(" ");
+    if (e.code === "23505") continue;   // código repetido (casi imposible): se genera otro
+    return { ok: false, mensaje: mensajeErrorCompartir(texto, e.code || "") };
+  }
+  return { ok: false, mensaje: "No se ha podido generar un código libre. Inténtalo de nuevo." };
+}
+function mostrarCodigoCompartido(nombre, codigo, caduca) {
   const enlace = URL_APP + "#c=" + codigo;
   const caja = document.createElement("div");
   caja.className = "codigo-comp";
   caja.innerHTML = '<span class="cc-et">Código</span><span class="cc-cod"></span><button type="button" class="anadir">Copiar código</button>';
   caja.querySelector(".cc-cod").textContent = codigo;
   caja.querySelector("button").addEventListener("click", () => copiarTexto(codigo, "Código copiado"));
-  abrirMenu("Compartir «" + nombre + "»", "Tu amigo puede abrir el enlace o pegar el código en Plan → Añadir algo compartido (también en otra cuenta tuya).", [
+  abrirMenu("Compartir «" + nombre + "»", "Tu amigo puede abrir el enlace o pegar el código en Entrenos → Crear o importar → Añadir algo compartido (también en otra cuenta tuya). Caduca el " + fechaLarga(caduca) + "; puedes revocarlo antes en Entrenos → Crear o importar → Añadir algo compartido → «Mis enlaces compartidos».", [
     { texto: "Copiar enlace", mantener: true, accion: () => copiarTexto(enlace, "Enlace copiado") },
-    navigator.share && { texto: "Enviar…", mantener: true, accion: () => navigator.share({ title: nombre, text: "Entrenamiento «" + nombre + "» para Fuerza y Ritmo. Código: " + codigo, url: enlace }).catch(() => {}) }
+    navigator.share && { texto: "Enviar…", mantener: true, accion: () => navigator.share({ title: nombre, text: "Entrenamiento «" + nombre + "» para Fuerza y Ritmo. Código: " + codigo, url: enlace }).catch(() => {}) },
+    { texto: "Ver mis enlaces compartidos", accion: () => abrirMisCompartidos() }
   ], caja);
+}
+// H3 · Antes de generar nada se ve exactamente qué recibirá el destinatario y se decide qué más incluir
+function compartir(nombre, items, crudo) {
+  const bruto = crudo ? items : paraCompartir(items);
+  const base = filtrarCompartido(bruto, { notas: false, cargas: false }).est;
+  const sel = { notas: false, cargas: false, dias: 30, nombre: nombre || "Entrenamiento" };
+  const caja = document.createElement("div");
+  caja.className = "comp-previa";
+  const fila = (etiqueta, control) => { const l = document.createElement("label"); l.className = "comp-campo"; const s = document.createElement("span"); s.textContent = etiqueta; l.append(s, control); return l; };
+  const inpNombre = document.createElement("input"); inpNombre.type = "text"; inpNombre.maxLength = 120; inpNombre.value = sel.nombre;
+  inpNombre.addEventListener("input", () => { sel.nombre = inpNombre.value; });
+  const selDias = document.createElement("select");
+  DIAS_CADUCIDAD.forEach(([d, t]) => { const o = document.createElement("option"); o.value = d; o.textContent = t; selDias.appendChild(o); });
+  selDias.value = "30";
+  selDias.addEventListener("change", () => { sel.dias = +selDias.value; });
+  caja.append(fila("Nombre que verá tu amigo", inpNombre), fila("El código caduca a los", selDias));
+  const casilla = (clave, texto, detalle) => {
+    const l = document.createElement("label"); l.className = "comp-check";
+    const c = document.createElement("input"); c.type = "checkbox"; c.checked = false;
+    c.addEventListener("change", () => { sel[clave] = c.checked; pintar(); });
+    const s = document.createElement("span"); s.textContent = texto;
+    const d = document.createElement("small"); d.textContent = detalle;
+    const t = document.createElement("span"); t.className = "comp-check-t"; t.append(s, d);
+    l.append(c, t); return l;
+  };
+  const kgFuera = base.kgRealizados + base.kgSinVerificar;
+  if (kgFuera + base.resultadosOcultos > 0) caja.appendChild(casilla("cargas", "Incluir mis cargas en kg y marcas reales",
+    "Solo si quieres que tu amigo vea " + (kgFuera ? kgFuera + (kgFuera === 1 ? " carga" : " cargas") + " en kg" : "") + (kgFuera && base.resultadosOcultos ? " y " : "") + (base.resultadosOcultos ? base.resultadosOcultos + (base.resultadosOcultos === 1 ? " resultado" : " resultados") + " de series hechas" : "") + ". Por defecto no se envían."));
+  if (base.notas.length) caja.appendChild(casilla("notas", "Incluir las " + base.notas.length + (base.notas.length === 1 ? " nota libre" : " notas libres"),
+    "No puedo saber si son instrucciones técnicas o algo personal, así que no se envían salvo que lo marques. Léelas abajo."));
+  const resultado = document.createElement("div");
+  caja.appendChild(resultado);
+  const linea = (ul, texto) => { const li = document.createElement("li"); li.textContent = texto; ul.appendChild(li); };
+  function pintar() {
+    const { items: salida, est } = filtrarCompartido(bruto, sel);
+    resultado.textContent = "";
+    const h = document.createElement("p"); h.className = "bc-t"; h.textContent = "Esto es lo que recibirá tu amigo"; resultado.appendChild(h);
+    if (base.kgSinVerificar) {   // plantillas y mesociclos: el modelo no dice si un kg era programado o ya realizado
+      const av = document.createElement("p"); av.className = "comp-aviso"; av.setAttribute("role", "note");
+      av.textContent = sel.cargas
+        ? "Atención: se envían " + base.kgSinVerificar + (base.kgSinVerificar === 1 ? " carga" : " cargas") + " en kg de plantillas o mesociclos sin poder confirmar si eran programadas o ya realizadas."
+        : "Atención: se omiten " + base.kgSinVerificar + (base.kgSinVerificar === 1 ? " carga" : " cargas") + " en kg de plantillas o mesociclos porque no se puede determinar si eran programadas o ya realizadas. Tu amigo recibirá los ejercicios sin esos kg. Para enviarlas, marca «Incluir mis cargas en kg y marcas reales».";
+      resultado.appendChild(av);
+    }
+    const ul = document.createElement("ul"); ul.className = "vp-lista";
+    linea(ul, "Estructura: " + est.ejercicios + (est.ejercicios === 1 ? " ejercicio" : " ejercicios") + " · " + est.series + (est.series === 1 ? " serie" : " series") + " (nombres, partes, repeticiones, tiempos, distancias y descansos).");
+    if (est.kgProgramados) linea(ul, "Cargas programadas: " + est.kgProgramados + (est.kgProgramados === 1 ? " serie con kg" : " series con kg") + " planificados.");
+    if (est.relativas) linea(ul, "Series con % del 1RM o Bilbo: " + est.relativas + ". Viaja el %; los kg los calcula cada persona con su propio 1RM o ciclo.");
+    if (est.kgPersonales) linea(ul, "Has elegido incluir " + est.kgPersonales + (est.kgPersonales === 1 ? " carga real" : " cargas reales") + " en kg.");
+    if (est.kgRealizados) linea(ul, "No se envían " + est.kgRealizados + (est.kgRealizados === 1 ? " carga" : " cargas") + " en kg de series que ya hiciste.");
+    if (est.kgSinVerificar) linea(ul, "No se envían " + est.kgSinVerificar + (est.kgSinVerificar === 1 ? " carga" : " cargas") + " en kg de plantillas o mesociclos: no consta si eran programadas o ya realizadas.");
+    if (!sel.cargas && est.resultadosOcultos) linea(ul, "Se vacían los resultados de " + est.resultadosOcultos + (est.resultadosOcultos === 1 ? " serie hecha" : " series hechas") + " (repeticiones o tiempos conseguidos).");
+    linea(ul, "Nunca se envía: historial de entrenos, récords, 1RM, pulso, desnivel, ritmo, el diario del día ni datos de tu cuenta.");
+    resultado.appendChild(ul);
+    if (est.notas.length) {
+      const hn = document.createElement("p"); hn.className = "bc-t"; hn.textContent = sel.notas ? "Notas que se enviarán" : "Notas que NO se enviarán"; resultado.appendChild(hn);
+      const un = document.createElement("ul"); un.className = "vp-lista";
+      est.notas.forEach(n => linea(un, n.donde + ": «" + n.texto + "»"));
+      resultado.appendChild(un);
+    }
+    const x = salida[0];
+    resultado.appendChild(x && x.mesociclo ? vistaMesoCompartido(x)
+      : x && x.paquete ? (() => { const d = document.createElement("div"); x.plantillas.forEach(p => d.appendChild(desplegableItems(p.nombre, p.items))); return d; })()
+      : desplegableItems("Ejercicios", salida, false));
+  }
+  pintar();
+  const aviso = document.createElement("p"); aviso.className = "menu-det nota"; aviso.setAttribute("role", "alert"); aviso.style.padding = "4px 0 0";
+  caja.appendChild(aviso);
+  let enviando = false;
+  abrirMenu("Compartir «" + (nombre || "Entrenamiento") + "»", "Revisa qué se envía antes de crear el código. Tus datos originales no se modifican.", [
+    { texto: "Crear código y enlace", mantener: true, accion: async () => {
+      if (enviando) return;
+      enviando = true; aviso.textContent = "Creando…";
+      const { items: salida } = filtrarCompartido(bruto, sel), nom = (sel.nombre || "").trim().slice(0, 120) || "Entrenamiento";
+      const res = await crearCodigoCompartido(nom, salida, sel.dias);
+      enviando = false;
+      if (!res.ok) { aviso.textContent = res.mensaje; return; }
+      mostrarCodigoCompartido(nom, res.codigo, res.caduca);
+    } },
+    { texto: "Cancelar", accion: () => {} }
+  ], caja);
+}
+// H1 · Consultar y revocar los enlaces propios (sin sección nueva: se abre desde Entrenos → Crear o importar → Añadir algo compartido)
+const etiquetaEnlace = f => (f.nombre || "Sin nombre") + " · " + (f.estado === "revocado" ? "revocado" : f.estado === "caducado" ? "caducado" : f.caduca ? "activo hasta " + fechaLarga(f.caduca) : "activo, sin caducidad (anterior)");
+async function abrirMisCompartidos() {
+  let filas;
+  try {
+    const r = await api("/rest/v1/rpc/mis_compartidos", { method: "POST", body: "{}" });
+    if (!r.ok) throw new Error();
+    filas = await r.json();
+    if (!Array.isArray(filas)) throw new Error();
+  } catch { setEstado("No se han podido cargar tus enlaces. Necesitas conexión y que la beta tenga aplicada la migración de seguridad.", true); return; }
+  const orden = { activo: 0, caducado: 1, revocado: 2 };
+  filas.sort((a, b) => (orden[a.estado] - orden[b.estado]) || (new Date(b.creado) - new Date(a.creado)));
+  abrirMenu("Mis enlaces compartidos", filas.length ? "Toca uno para copiar su código o revocarlo. Revocar impide que se abra de nuevo; lo que alguien ya haya guardado en su cuenta no se borra." : "Todavía no has compartido nada.",
+    filas.length ? filas.map(f => ({ texto: etiquetaEnlace(f), accion: () => detalleEnlace(f) })) : [{ texto: "Cerrar", accion: () => {} }]);
+}
+function detalleEnlace(f) {
+  const enlace = URL_APP + "#c=" + f.codigo, activo = f.estado === "activo";
+  abrirMenu("«" + (f.nombre || "Sin nombre") + "»", "Código " + f.codigo + " · " + (f.tipo === "mesociclo" ? "mesociclo" : f.tipo === "paquete" ? "varias plantillas" : "entrenamiento") + " · creado el " + fechaLarga(f.creado) + " · " +
+    (f.estado === "revocado" ? "revocado el " + fechaLarga(f.revocado) : f.estado === "caducado" ? "caducó el " + fechaLarga(f.caduca) : f.caduca ? "caduca el " + fechaLarga(f.caduca) : "sin caducidad (creado antes de que existiera la caducidad)"), [
+    activo && { texto: "Copiar código", mantener: true, accion: () => copiarTexto(f.codigo, "Código copiado") },
+    activo && { texto: "Copiar enlace", mantener: true, accion: () => copiarTexto(enlace, "Enlace copiado") },
+    f.estado !== "revocado" && { texto: "Revocar este enlace…", accion: async () => {
+      if (!await confirmar("¿Revocar «" + (f.nombre || "Sin nombre") + "»?", "Quien tenga este código ya no podrá abrirlo. No se puede deshacer.", "Revocar")) return;
+      let ok = false;
+      try { const r = await api("/rest/v1/rpc/revocar_compartido", { method: "POST", body: JSON.stringify({ p_codigo: f.codigo }) }); ok = r.ok && (await r.json()) === true; } catch { setEstado("Necesitas conexión para revocar.", true); return; }
+      setEstado(ok ? "Enlace revocado" : "No se ha podido revocar (ya estaba revocado o no es tuyo).", !ok);
+      abrirMisCompartidos();
+    } },
+    { texto: "Volver a la lista", accion: () => abrirMisCompartidos() }
+  ]);
 }
 function compartidoValido(c) {
   const objeto = x => x && typeof x === "object" && !Array.isArray(x);
@@ -2179,6 +2493,16 @@ function compartidoValido(c) {
   return items(c.items);
 }
 
+const MENSAJES_ESTADO_COMPARTIDO = {
+  caducado: "Este código ha caducado. Pide a tu amigo que lo comparta de nuevo.",
+  revocado: "Su autor ha revocado este enlace. Pídele que lo comparta de nuevo.",
+  no_encontrado: "No hay nada compartido con ese código.",
+  formato_invalido: "Ese código no es válido: son 8 letras y números.",
+  demasiados_intentos: "Demasiados intentos fallidos seguidos. Espera unos minutos antes de volver a probar.",
+  no_autorizado: "Tu cuenta aún no puede abrir contenido compartido."
+};
+// Importar: primero solo se VE (con el estado de sus ejercicios). Al añadir, se analizan los ejercicios, se pide confirmación si falta alguno
+// y solo entonces se escribe algo. Todo lo que se guarda es una copia tuya; el contenido original no se modifica.
 async function abrirCompartido(texto) {
   const m = (texto || "").toUpperCase().match(/([A-Z2-9]{8})\s*$/);
   if (!m) { setEstado("Ese código no es válido: son 8 letras y números.", true); return; }
@@ -2187,41 +2511,49 @@ async function abrirCompartido(texto) {
     const r = await api("/rest/v1/rpc/ver_compartido", { method: "POST", body: JSON.stringify({ p_codigo: m[1] }) });
     if (r.ok) c = await r.json();
   } catch { setEstado("Necesitas conexión para abrir algo compartido.", true); return; }
+  // Servidor con la migración H1: {estado, ...}. Servidor anterior: el contenido directo (sin «estado») o null.
+  if (c && c.estado && c.estado !== "ok") { setEstado(MENSAJES_ESTADO_COMPARTIDO[c.estado] || "No se ha podido abrir lo compartido.", true); return; }
   if (!c) { setEstado("No hay nada compartido con el código " + m[1] + ".", true); return; }
   if (!compartidoValido(c)) { setEstado("El contenido compartido no tiene un formato válido.", true); return; }
+  const de = "Compartido por " + (c.autor || "un amigo");
+  const conResumen = vista => { const d = document.createElement("div"); d.append(resumenCatalogoCompartido(c), vista); return d; };
+  const listaEj = itemsDeLista(c);
   // Varias plantillas juntas: vista previa y guardarlas (o añadirlas a un día)
   if (c.items[0] && c.items[0].paquete) {
     const x = c.items[0], lunesP = lunesVista();
     const vista = document.createElement("div");
     x.plantillas.forEach(p => vista.appendChild(desplegableItems(p.nombre, p.items)));
-    abrirMenu("«" + c.nombre + "»", "Compartido por " + (c.autor || "un amigo") + ". Solo lo estás viendo: toca cada plantilla para ver sus ejercicios. No se añade nada hasta que tú quieras.",
+    abrirMenu("«" + c.nombre + "»", de + ". Solo lo estás viendo: toca cada plantilla para ver sus ejercicios. No se añade nada hasta que tú quieras.",
       [{ texto: "+ Añadir a mi rutina…", accion: () => abrirMenu("¿Cómo lo añado?", "«" + c.nombre + "»", [
         { texto: "Guardar en mis plantillas", accion: () => guardarPaqueteCompartido(c) },
-        { texto: "Ponerlas en un día…", accion: () => elegirDiaDestino(lunesP, "¿En qué día pongo «" + c.nombre + "»?", f => {
-          exigirCompartidos(x.plantillas); x.plantillas.forEach(p => pegarItems(f, desdeCompartido(p.items), p.nombre)); persistir(); irADia(f, "«" + c.nombre + "» añadido");
+        { texto: "Ponerlas en un día…", accion: () => elegirDiaDestino(lunesP, "¿En qué día pongo «" + c.nombre + "»?", async f => {
+          const mapa = await resolverEjerciciosCompartidos(ejerciciosDeItemsCompartidos(listaEj)); if (!mapa) return;
+          x.plantillas.forEach(p => pegarItems(f, desdeCompartido(p.items, mapa), p.nombre)); persistir(); irADia(f, "«" + c.nombre + "» añadido");
         }) }
-      ]) }, { texto: "Solo mirar (cerrar)", accion: () => {} }], vista);
+      ]) }, { texto: "Solo mirar (cerrar)", accion: () => {} }], conResumen(vista));
     return;
   }
   // Un mesociclo entero: vista previa y guardarlo con sus plantillas
   if (c.items[0] && c.items[0].mesociclo) {
     const x = c.items[0], mm = x.mesociclo;
-    abrirMenu("Mesociclo «" + c.nombre + "»", "Compartido por " + (c.autor || "un amigo") + " · " + n0(mm.semanas) + " semanas" + (n0(mm.progresion) ? " · +" + num(mm.progresion) + " kg/semana" : "") +
+    abrirMenu("Mesociclo «" + c.nombre + "»", de + " · " + n0(mm.semanas) + " semanas" + (n0(mm.progresion) ? " · +" + num(mm.progresion) + " kg/semana" : "") +
       ". Solo lo estás viendo: toca cada día para ver sus ejercicios. Si lo añades, se guarda en tus plantillas y mesociclos y después eliges cuándo empieza.",
-      [{ texto: "+ Añadir a mis mesociclos", accion: () => guardarMesoCompartido(c) }, { texto: "Solo mirar (cerrar)", accion: () => {} }], vistaMesoCompartido(x));
+      [{ texto: "+ Añadir a mis mesociclos", accion: () => guardarMesoCompartido(c) }, { texto: "Solo mirar (cerrar)", accion: () => {} }], conResumen(vistaMesoCompartido(x)));
     return;
   }
   // Un entrenamiento: primero solo se ve; «Añadir a mi rutina» deja elegir día o guardarlo como plantilla
   const lunes = lunesVista();
-  abrirMenu("«" + c.nombre + "»", "Compartido por " + (c.autor || "un amigo") + " · " + contarSeries(c.items) + " series. Solo lo estás viendo: no se añade nada hasta que tú quieras.",
+  abrirMenu("«" + c.nombre + "»", de + " · " + contarSeries(c.items) + " series. Solo lo estás viendo: no se añade nada hasta que tú quieras.",
     [{ texto: "+ Añadir a mi rutina…", accion: () => abrirMenu("¿Cómo lo añado?", "«" + c.nombre + "»", [
-      { texto: "Ponerlo en un día…", accion: () => elegirDiaDestino(lunes, "¿En qué día pongo «" + c.nombre + "»?", f => {
-        pegarItems(f, desdeCompartido(c.items), c.nombre); persistir(); irADia(f, "«" + c.nombre + "» añadido");
+      { texto: "Ponerlo en un día…", accion: () => elegirDiaDestino(lunes, "¿En qué día pongo «" + c.nombre + "»?", async f => {
+        const mapa = await resolverEjerciciosCompartidos(ejerciciosDeItemsCompartidos(listaEj)); if (!mapa) return;
+        pegarItems(f, desdeCompartido(c.items, mapa), c.nombre); persistir(); irADia(f, "«" + c.nombre + "» añadido");
       }) },
-      { texto: "Guardar como plantilla", accion: () => {
-        cambiar("plantillas", { id: nuevoId(), nombre: c.nombre, items: desdeCompartido(c.items), borrado: false }); pintarPlan(); setEstado("Plantilla «" + c.nombre + "» guardada");
+      { texto: "Guardar como plantilla", accion: async () => {
+        const mapa = await resolverEjerciciosCompartidos(ejerciciosDeItemsCompartidos(listaEj)); if (!mapa) return;
+        cambiar("plantillas", { id: nuevoId(), nombre: c.nombre, items: desdeCompartido(c.items, mapa), borrado: false }); pintarPlan(); setEstado("Plantilla «" + c.nombre + "» guardada");
       } }
-    ]) }, { texto: "Solo mirar (cerrar)", accion: () => {} }], desplegableItems("Ejercicios", c.items, true));
+    ]) }, { texto: "Solo mirar (cerrar)", accion: () => {} }], conResumen(desplegableItems("Ejercicios", c.items, true)));
 }
 // Elegir un día de una semana (con ‹ y › para cambiar de semana)
 function elegirDiaDestino(lunes, titulo, alElegir) {
@@ -3409,7 +3741,7 @@ function tarjetaBloque(dia, bloqueId, series) {
         avisoDeshacer(nombreEj(s0.ejercicio_id) + " quitado del bloque", antes);
       } }))) },
       { texto: "Desagrupar (series sueltas)", accion: () => desagruparBloque(dia, series) },
-      { texto: "Compartir con un amigo…", accion: () => compartir("Bloque ×" + rondas.length + " · " + primera.map(s => nombreEj(s.ejercicio_id)).join(" + "), itemsDe(series)) },
+      { texto: "Compartir con un amigo…", accion: () => compartir("Bloque ×" + rondas.length + " · " + primera.map(s => nombreEj(s.ejercicio_id)).join(" + "), itemsDe(series, true)) },
       { texto: "Quitar bloque", peligro: true, confirmar: "Pulsa otra vez: se borran " + series.length + " series", accion: () => {
         series.forEach(s => cambiar("series", { ...s, borrado: true }, true)); persistir(); pintarDia(dia);
       } }
@@ -5806,6 +6138,7 @@ $("mesoBorrar").addEventListener("click", async () => {
 });
 $("nuevoMeso").addEventListener("click", () => abrirMeso(null));
 $("abrirComp").addEventListener("click", () => abrirCompartido($("codigoComp").value));
+$("misCompartidos").addEventListener("click", () => abrirMisCompartidos());
 
 // ---------- Navegación ----------
 function irA(n) {
@@ -7724,10 +8057,11 @@ function compartirMeso(m) {
   compartir(m.nombre, [{ mesociclo: { semanas: n0(m.semanas), progresion: n0(m.progresion), descarga: m.descarga || {}, notas: m.notas || "", dias },
     plantillas: pids.map(p => ({ nombre: db.plantillas[p].nombre, items: paraCompartir(db.plantillas[p].items || []) })) }], true);
 }
-function guardarMesoCompartido(c) {
+async function guardarMesoCompartido(c) {
   const x = c.items[0], mm = x.mesociclo;
-  exigirCompartidos(x.plantillas);
-  const ids = x.plantillas.map(p => { const id = nuevoId(); cambiar("plantillas", { id, nombre: nombreLibre(p.nombre), items: desdeCompartido(p.items), borrado: false }, true); return id; });
+  const mapa0 = await resolverEjerciciosCompartidos(ejerciciosDeItemsCompartidos(x.plantillas));   // confirma/vincula ANTES de escribir nada
+  if (!mapa0) return;
+  const ids = x.plantillas.map(p => { const id = nuevoId(); cambiar("plantillas", { id, nombre: nombreLibre(p.nombre), items: desdeCompartido(p.items, mapa0), borrado: false }, true); return id; });
   const mapa = d => { const r = {}; Object.keys(d || {}).filter(k => /^\d$/.test(k)).forEach(k => { r[k] = (d[k] || []).map(i => ids[i]).filter(Boolean); }); return r; };
   const dias = mapa(mm.dias);
   Object.keys(mm.dias || {}).filter(k => /^s\d+$/.test(k)).forEach(k => { dias[k] = mapa(mm.dias[k]); });
@@ -8541,7 +8875,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v243" + (BETA ? " beta" : "");
+const VERSION_APP = "v244" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";
@@ -9263,10 +9597,11 @@ $("selPlantBorrar").addEventListener("click", () => {
     avisoDeshacer(ps.length + (ps.length === 1 ? " plantilla eliminada" : " plantillas eliminadas"), ps.map(p => ["plantillas", p]));
   } }]);
 });
-function guardarPaqueteCompartido(c) {
+async function guardarPaqueteCompartido(c) {
   const x = c.items[0];
-  exigirCompartidos(x.plantillas);
-  x.plantillas.forEach(p => cambiar("plantillas", { id: nuevoId(), nombre: nombreLibre(p.nombre), items: desdeCompartido(p.items), borrado: false }, true));
+  const mapa = await resolverEjerciciosCompartidos(ejerciciosDeItemsCompartidos(x.plantillas));   // confirma/vincula ANTES de escribir nada
+  if (!mapa) return;
+  x.plantillas.forEach(p => cambiar("plantillas", { id: nuevoId(), nombre: nombreLibre(p.nombre), items: desdeCompartido(p.items, mapa), borrado: false }, true));
   persistir();
   verPestana("plan");
   setEstado(x.plantillas.length + " plantillas guardadas");

@@ -2349,3 +2349,16 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); box-sha
 /* Los paneles informativos recortan su fondo interior al marco redondeado.
    Sus cabeceras móviles ya no son fijas; la cabecera del día queda intacta. */
 #vistaSemana .sem-resumenes > details.resumen-sem { overflow: clip; }
+
+/* Compartir con amigos: vista previa de lo que se envía, caducidad y resolución de ejercicios (H1/H3/H4) */
+.comp-previa { display: flex; flex-direction: column; gap: 10px; }
+.comp-campo { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.comp-campo input, .comp-campo select, .comp-fila select { font: inherit; font-size: 15px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--fg); max-width: 100%; }
+.comp-check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.35; }
+.comp-check input { margin-top: 3px; flex: none; width: 18px; height: 18px; }
+.comp-check-t { display: flex; flex-direction: column; gap: 2px; }
+.comp-check-t small { color: var(--muted); font-size: 12.5px; }
+.comp-fila { display: flex; flex-direction: column; gap: 4px; margin: 0 0 10px; }
+.comp-fila .comp-et { margin: 0; font-size: 14px; font-weight: 600; }
+.comp-resumen { margin-bottom: 8px; }
+.comp-aviso { margin: 6px 0; padding: 8px 10px; border-left: 4px solid var(--accent, #d97706); background: var(--accent-soft); border-radius: 6px; font-size: 14px; line-height: 1.4; }

@@ -27,7 +27,7 @@
   window.addEventListener("pageshow", actualizar);
 })();
 </script>
-<link rel="stylesheet" href="estilos.css?v=v243">
+<link rel="stylesheet" href="estilos.css?v=v244">
 </head>
 <body>
 
@@ -157,6 +157,7 @@
     <section class="plan-sec" data-sec="compartido">
       <h3>Añadir algo compartido</h3>
       <div class="barra"><input id="codigoComp" placeholder="Pega el enlace o el código de 8 letras" autocomplete="off" autocapitalize="characters"><button type="button" class="nav-btn" id="abrirComp">Abrir</button></div>
+      <div class="botonera"><button type="button" class="nav-btn" id="misCompartidos">Mis enlaces compartidos</button></div>
     </section>
     <section class="plan-sec" data-sec="copia">
       <div class="sec-cab"><h3>Copia de seguridad</h3><label class="nav-btn">Restaurar copia…<input type="file" id="impJson" accept="application/json,.json" hidden></label></div>
@@ -702,7 +703,7 @@
       <p>Arriba de la semana, <b>Resumen de la semana</b> muestra km (con las recuperaciones en metros, igual que el total de cada día), kilos levantados (peso × repeticiones), series hechas frente a planificadas, récords y esfuerzo medio, comparados con la semana anterior.</p>
     </details>
     <details><summary>Compartir con amigos</summary>
-      <p>Desde el menú ⋯ de un día, una sesión o una plantilla, <b>Compartir con un amigo</b> crea un código de 8 letras (con su botón <b>Copiar código</b>) y un enlace. Tu amigo lo abre o lo pega en <b>Entrenamientos → Crear o importar → Añadir algo compartido</b>. Primero solo lo ve (ejercicios, series, partes y bloques); si lo quiere, pulsa <b>+ Añadir a mi rutina…</b> y elige el día o guardarlo como plantilla.</p>
+      <p>Desde el menú ⋯ de un día, una sesión o una plantilla, <b>Compartir con un amigo</b> crea un código de 8 letras (con su botón <b>Copiar código</b>) y un enlace. Antes de crearlo ves exactamente qué se envía (las notas, las cargas de series ya hechas y las de plantillas no se envían salvo que lo marques) y eliges cuándo caduca (30 días por defecto). Tu amigo lo abre o lo pega en <b>Entrenos → Crear o importar → Añadir algo compartido</b>; ahí mismo, en <b>Mis enlaces compartidos</b>, puedes ver y revocar los tuyos. Primero solo lo ve (ejercicios, series, partes y bloques); si lo quiere, pulsa <b>+ Añadir a mi rutina…</b> y elige el día o guardarlo como plantilla.</p>
       <p>Un <b>mesociclo</b> entero se comparte desde su editor: tu amigo ve una vista previa y lo guarda con todas sus plantillas.</p>
     </details>
     <details><summary>Copia de seguridad</summary>
@@ -935,6 +936,6 @@
 <div class="toast" id="toast" role="status" hidden><span id="toastTxt"></span><button type="button" id="toastBtn">Deshacer</button></div>
 <div class="fiesta" id="fiesta" aria-hidden="true"></div>
 
-<script src="app.js?v=v243"></script>
+<script src="app.js?v=v244"></script>
 </body>
 </html>

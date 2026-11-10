@@ -2,7 +2,6 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="connect-src 'self' https://qqyedigitphvitejquxo.supabase.co blob: data:">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Fuerza y Ritmo</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -27,7 +26,7 @@
   window.addEventListener("pageshow", actualizar);
 })();
 </script>
-<link rel="stylesheet" href="estilos.css?v=v260">
+<link rel="stylesheet" href="estilos.css?v=v238">
 </head>
 <body>
 
@@ -83,6 +82,7 @@
       <button type="button" class="nav-btn btn-hoy" id="hoyBtn" hidden>Hoy</button>
       <button type="button" class="nav-btn cal-btn" id="calBtn" aria-label="Calendario: ir a otra fecha" title="Calendario">📅</button>
     </nav>
+    <div class="sem-barra" id="semBarra" hidden><span></span></div>
     <nav class="dia-nav" id="diaNav" aria-label="Día" hidden>
       <button type="button" class="nav-btn volver" id="volverSemana">‹ Semana</button>
       <span class="dia-nav-t" id="diaNavTit"></span>
@@ -156,7 +156,6 @@
     <section class="plan-sec" data-sec="compartido">
       <h3>Añadir algo compartido</h3>
       <div class="barra"><input id="codigoComp" placeholder="Pega el enlace o el código de 8 letras" autocomplete="off" autocapitalize="characters"><button type="button" class="nav-btn" id="abrirComp">Abrir</button></div>
-      <div class="botonera"><button type="button" class="nav-btn" id="misCompartidos">Mis enlaces compartidos</button></div>
     </section>
     <section class="plan-sec" data-sec="copia">
       <div class="sec-cab"><h3>Copia de seguridad</h3><label class="nav-btn">Restaurar copia…<input type="file" id="impJson" accept="application/json,.json" hidden></label></div>
@@ -702,7 +701,7 @@
       <p>Arriba de la semana, <b>Resumen de la semana</b> muestra km (con las recuperaciones en metros, igual que el total de cada día), kilos levantados (peso × repeticiones), series hechas frente a planificadas, récords y esfuerzo medio, comparados con la semana anterior.</p>
     </details>
     <details><summary>Compartir con amigos</summary>
-      <p>Desde el menú ⋯ de un día, una sesión o una plantilla, <b>Compartir con un amigo</b> crea un código de 8 letras (con su botón <b>Copiar código</b>) y un enlace. Antes de crearlo ves exactamente qué se envía (las notas, las cargas de series ya hechas y las de plantillas no se envían salvo que lo marques) y eliges cuándo caduca (30 días por defecto). Tu amigo lo abre o lo pega en <b>Entrenos → Crear o importar → Añadir algo compartido</b>; ahí mismo, en <b>Mis enlaces compartidos</b>, puedes ver y revocar los tuyos. Primero solo lo ve (ejercicios, series, partes y bloques); si lo quiere, pulsa <b>+ Añadir a mi rutina…</b> y elige el día o guardarlo como plantilla.</p>
+      <p>Desde el menú ⋯ de un día, una sesión o una plantilla, <b>Compartir con un amigo</b> crea un código de 8 letras (con su botón <b>Copiar código</b>) y un enlace. Tu amigo lo abre o lo pega en <b>Entrenamientos → Crear o importar → Añadir algo compartido</b>. Primero solo lo ve (ejercicios, series, partes y bloques); si lo quiere, pulsa <b>+ Añadir a mi rutina…</b> y elige el día o guardarlo como plantilla.</p>
       <p>Un <b>mesociclo</b> entero se comparte desde su editor: tu amigo ve una vista previa y lo guarda con todas sus plantillas.</p>
     </details>
     <details><summary>Copia de seguridad</summary>
@@ -713,7 +712,7 @@
       <p>Todo se guarda primero en el dispositivo y se sincroniza con tu cuenta en cuanto hay conexión. Puedes usar la app sin internet; abajo verás si hay cambios pendientes de subir.</p>
     </details>
     <details><summary>Versión de pruebas (beta)</summary>
-      <p>Las novedades se prueban antes en <b>spider-test.github.io/fuerza-y-ritmo/beta/</b>, que lleva la etiqueta BETA junto al título. Funciona con un entorno de pruebas independiente: sus cuentas y datos son distintos de los de la aplicación oficial (lo que hagas allí no afecta a tus entrenamientos reales y no se ve aquí), así que necesitas una cuenta de prueba propia.</p>
+      <p>Las novedades se prueban antes en <b>spider-test.github.io/fuerza-y-ritmo/beta/</b>, que lleva la etiqueta BETA junto al título. Usa tu misma cuenta y tus mismos datos (lo que cambies allí se ve también aquí), pero guarda su propia copia en el dispositivo, así que la primera vez hay que entrar con el email y la contraseña.</p>
       <p>Si algo falla en la beta, avísanos con «Enviar sugerencia» desde la propia beta: la sugerencia indica que venía de ella.</p>
     </details>
     <details><summary>Instalar en el iPhone</summary>
@@ -755,13 +754,6 @@
     <h3 id="confTit" class="conf-tit"></h3>
     <p id="confTxt" class="conf-txt"></p>
     <div class="conf-botones"><button type="button" class="nav-btn" id="confNo">Cancelar</button><button type="button" class="conf-si" id="confSi">Eliminar</button></div>
-  </div>
-</dialog>
-<dialog id="dlgAviso" class="dlg-confirmar" role="alertdialog" aria-labelledby="avTit" aria-describedby="avTxt">
-  <div class="d-cuerpo">
-    <h3 id="avTit" class="conf-tit"></h3>
-    <p id="avTxt" class="conf-txt"></p>
-    <div class="conf-botones conf-uno"><button type="button" class="conf-ok" id="avOk">Aceptar</button></div>
   </div>
 </dialog>
 
@@ -942,6 +934,6 @@
 <div class="toast" id="toast" role="status" hidden><span id="toastTxt"></span><button type="button" id="toastBtn">Deshacer</button></div>
 <div class="fiesta" id="fiesta" aria-hidden="true"></div>
 
-<script src="app.js?v=v260"></script>
+<script src="app.js?v=v238"></script>
 </body>
 </html>

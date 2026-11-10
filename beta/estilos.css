@@ -2468,3 +2468,21 @@ dialog#dlgAviso { margin: auto; }
   #navSemana #hoyBtn { padding: 0 9px; font-size: 15px; }
   #navSemana #calBtn { width: 40px; min-width: 40px; font-size: 17px; }
 }
+
+/* v255: en escritorio, la barra de semana se reparte en tres zonas iguales: [vacía] [‹ rango ›] [Hoy · calendario].
+   El selector ‹ rango › queda en el centro exacto; el rango tiene ancho fijo (11em, cabe «Dentro de 12 semanas»), así
+   que las flechas no se mueven al cambiar de semana ni al aparecer o desaparecer «Hoy». «Hoy» y el calendario forman un
+   grupo secundario al principio de la zona derecha (el calendario ocupa el sitio de «Hoy» cuando este está oculto).
+   No cambia qué hace cada botón ni cuándo se muestra «Hoy». La barra de progreso de debajo sigue a todo el ancho.
+   El móvil (≤ 760 px) no cambia. */
+@media (min-width: 761px) {
+  #navSemana { display: grid; grid-template-columns: minmax(0, 1fr) auto 11em auto minmax(0, 1fr); align-items: center; gap: 0 8px; }
+  #navSemana > * { grid-row: 1; }
+  #navSemana #antBtn { grid-column: 2; }
+  #navSemana .semana-info { grid-column: 3; min-width: 0; width: 11em; }
+  #navSemana #sigBtn { grid-column: 4; }
+  #navSemana #hoyBtn, #navSemana #calBtn { grid-column: 5; justify-self: start; }
+  #navSemana #hoyBtn { width: 64px; margin-left: 16px; padding: 0; }
+  #navSemana #calBtn { margin-left: 16px; }
+  #navSemana:has(> #hoyBtn:not([hidden])) #calBtn { margin-left: calc(16px + 64px + 6px); }
+}

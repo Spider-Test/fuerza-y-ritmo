@@ -78,7 +78,7 @@ const escribir = (k, v) => {
 };
 // Datos de cada día que no son series (ejercicios añadidos aún sin series, entrenos y partes vacíos, su descripción,
 // su letra y su posición): se guardan en el día (tabla entrenos, columna extra) para verlos igual en todos los dispositivos
-const CLAVES_EXTRA = new Set(["bloques-vacios-v1", "bloques-v1", "sesiones-v1", "espera-grupo-v1", "partes-v1", "espera-parte-v1", "espera-nota-v1", "espera-letra-v1", "espera-antes-v1"]);
+const CLAVES_EXTRA = new Set(["orden-grupos-v1", "orden-partes-v1", "bloques-vacios-v1", "bloques-v1", "sesiones-v1", "espera-grupo-v1", "partes-v1", "espera-parte-v1", "espera-nota-v1", "espera-letra-v1", "espera-antes-v1"]);
 if (BETA) { document.documentElement.classList.add("beta"); document.title = "Fuerza y Ritmo β"; document.querySelector('meta[name="apple-mobile-web-app-title"]').content = "Fuerza y Ritmo β"; }
 
 // Cada tabla se sincroniza por cuenta; los cambios locales en conflicto se conservan.
@@ -141,7 +141,22 @@ let partesVacias = leer("partes-v1") || {}, esperaParte = leer("espera-parte-v1"
 // Bloques vacíos (aún sin ejercicios): «fecha|id» → { g: entreno, p: parte, r: rondas }. Se suben con el día como lo demás
 let bloquesVacios = leer("bloques-vacios-v1") || {};
 const guardarVacios = () => escribir("bloques-vacios-v1", bloquesVacios);
-const guardarSesiones = () => { escribir("sesiones-v1", sesionesVacias); escribir("espera-grupo-v1", esperaGrupo); escribir("partes-v1", partesVacias); escribir("espera-parte-v1", esperaParte); };
+// Orden EXPLÍCITO (v249, FASE_03 §3.1): nombres de los entrenos de cada día (fecha -> [nombre…]) y de las partes de cada entreno (fecha|entreno -> [nombre…]),
+// tal como los dejó el usuario. Sin él, el orden sale de las series y un entreno o parte VACÍO (sin series) siempre acababa al final.
+// Se sube con el día dentro de entrenos.extra (claves «og» y «op»). Los datos anteriores sin estas claves siguen mostrándose como siempre.
+let ordenGrupos = leer("orden-grupos-v1") || {}, ordenPartes = leer("orden-partes-v1") || {};
+// Coloca los elementos de «actual» que constan en «lista»: ocupan, en el orden de la lista, los huecos que ya ocupaban elementos conocidos;
+// los que no constan (nuevos, de plantillas, etc.) no se mueven. Nombres duplicados: vale la primera posición.
+function aplicarOrdenExplicito(actual, lista, nombre) {
+  if (!Array.isArray(lista) || lista.length < 2) return actual;
+  const pos = new Map(); lista.forEach((n, i) => { if (!pos.has(n)) pos.set(n, i); });
+  const huecos = [], conocidos = [];
+  actual.forEach((x, i) => { if (pos.has(nombre(x))) { huecos.push(i); conocidos.push(x); } });
+  conocidos.sort((a, b) => pos.get(nombre(a)) - pos.get(nombre(b)));
+  const r = actual.slice(); huecos.forEach((h, k) => { r[h] = conocidos[k]; });
+  return r;
+}
+const guardarSesiones = () => { escribir("orden-grupos-v1", ordenGrupos); escribir("orden-partes-v1", ordenPartes); escribir("sesiones-v1", sesionesVacias); escribir("espera-grupo-v1", esperaGrupo); escribir("partes-v1", partesVacias); escribir("espera-parte-v1", esperaParte); };
 // Nombres de las partes de un entreno: las que tienen series y las creadas vacías
 const nombresPartes = (fecha, grupo) => [...new Set(seriesDelDia(fecha).filter(s => (s.grupo || "") === grupo).map(s => s.seccion || "").concat(partesVacias[fecha + "|" + grupo] || []))];        // fecha -> ejercicios añadidos que aún no tienen series
 let porta = leer("portapapeles-v1");            // lo último copiado: {nombre, html, items}
@@ -763,12 +778,82 @@ let historial = [], rehechos = [], pasoHist = null, sinHistorial = false, ultimo
 function claveDatoValida(clave) {
   return typeof clave === "string" && clave.length > 0 && !["__proto__", "constructor", "prototype"].includes(clave);
 }
+// Anota «cómo estaba antes» algo en el paso actual del historial (lo reutiliza también el orden explícito de entrenos y partes, tabla «@orden»)
+function registrarAntes(t, k, antes) {
+  if (sinHistorial || Date.now() - ultimoGesto >= 3000) return;
+  if (!pasoHist) { pasoHist = []; historial.push(pasoHist); if (historial.length > 80) historial.shift(); rehechos = []; setTimeout(() => { pasoHist = null; }, 0); }
+  if (!pasoHist.some(x => x.t === t && x.k === k)) pasoHist.push({ t, k, antes });
+}
+// Orden explícito dentro del historial: clave «g|fecha» (entrenos del día) o «p|fecha|entreno» (partes; y la lista antigua de partes vacías)
+function estadoOrden(k) {
+  const tipo = k[0], clave = k.slice(2), mapa = tipo === "g" ? ordenGrupos : ordenPartes;
+  return { lista: Object.hasOwn(mapa, clave) ? mapa[clave].slice() : null, vacias: tipo === "p" ? (partesVacias[clave] ? partesVacias[clave].slice() : null) : undefined };
+}
+function ponerEstadoOrden(k, e) {
+  const tipo = k[0], clave = k.slice(2), mapa = tipo === "g" ? ordenGrupos : ordenPartes;
+  if (e.lista) mapa[clave] = e.lista.slice(); else delete mapa[clave];
+  if (tipo === "p") { if (e.vacias) partesVacias[clave] = e.vacias.slice(); else delete partesVacias[clave]; }
+}
+// Traslado de entreno o día (moverADia) dentro del historial: clave «origen|destino» y estado local de ambos días antes del traslado
+// (ejercicios sin series, entrenos y partes vacíos, descripciones, letras, posiciones y órdenes explícitos)
+function mapasDia() { return { esperaGrupo, esperaParte, esperaNota, esperaLetra, esperaAntes, partesVacias, ordenPartes }; }
+const copiaJson = x => JSON.parse(JSON.stringify(x));
+function estadoDias(k) {
+  const r = {};
+  k.split("|").forEach(f => {
+    const pre = f + "|", e = { enEspera: enEspera[f] ? copiaJson(enEspera[f]) : null, sesiones: sesionesVacias[f] ? copiaJson(sesionesVacias[f]) : null, og: ordenGrupos[f] ? copiaJson(ordenGrupos[f]) : null, mapas: {} };
+    Object.entries(mapasDia()).forEach(([n, m]) => { e.mapas[n] = {}; Object.keys(m).filter(x => x.startsWith(pre)).forEach(x => { e.mapas[n][x] = copiaJson(m[x]); }); });
+    r[f] = e;
+  });
+  return r;
+}
+// Estado de ambos días más la fecha actual de las series trasladadas (lo que cambia moverADia)
+function instantaneaDia(k, ids) {
+  return { dias: estadoDias(k), series: Object.fromEntries(ids.filter(id => db.series[id]).map(id => [id, db.series[id].fecha])) };
+}
+// Valor resultante de revertir un cambio (de → a) sobre el valor ACTUAL c: sin cambios posteriores se revierte; lo cambiado después se respeta.
+// En listas solo se quitan los elementos que añadió el traslado y se devuelven los que quitó (conservando lo añadido o borrado después).
+function fusionarValor(c, de, a) {
+  const J = JSON.stringify;
+  if (J(c) === J(de)) return a;
+  if (J(c) === J(a)) return c;
+  if ((c == null || Array.isArray(c)) && (de == null || Array.isArray(de)) && (a == null || Array.isArray(a))) {
+    const C = c || [], D = de || [], A = a || [];
+    const anadidos = D.filter(x => !A.includes(x)), quitados = A.filter(x => !D.includes(x));
+    const base = C.filter(x => !anadidos.includes(x));
+    const r = A.filter(x => base.includes(x) || quitados.includes(x)).concat(base.filter(x => !A.includes(x)));
+    return r.length ? r : undefined;
+  }
+  return c;
+}
+// Deshace SOLO el traslado: devuelve la fecha a las series que siguen en el destino y revierte en los metadatos lo que cambió el traslado.
+// No restaura instantáneas completas: los cambios hechos después en esos días (pesos, otras series, metadatos) se conservan.
+// x.despues = estado justo después del traslado; x.antes = estado justo antes
+function aplicarDeltaDia(x) {
+  const de = x.despues, a = x.antes;
+  if (!de || !a) return;
+  Object.keys(de.series).forEach(id => {
+    const r = db.series[id];
+    if (r && r.fecha === de.series[id] && a.series[id] !== undefined && a.series[id] !== r.fecha) cambiar("series", { ...r, fecha: a.series[id] }, true);
+  });
+  const poner = (obj, clave, v) => { if (v === undefined || v === null) delete obj[clave]; else obj[clave] = copiaJson(v); };
+  x.k.split("|").forEach(f => {
+    const D = de.dias[f] || {}, A = a.dias[f] || {}, pre = f + "|";
+    poner(enEspera, f, fusionarValor(enEspera[f], D.enEspera ?? undefined, A.enEspera ?? undefined));
+    poner(sesionesVacias, f, fusionarValor(sesionesVacias[f], D.sesiones ?? undefined, A.sesiones ?? undefined));
+    poner(ordenGrupos, f, fusionarValor(ordenGrupos[f], D.og ?? undefined, A.og ?? undefined));
+    Object.entries(mapasDia()).forEach(([n, m]) => {
+      const dm = (D.mapas || {})[n] || {}, am = (A.mapas || {})[n] || {};
+      new Set([...Object.keys(m).filter(c => c.startsWith(pre)), ...Object.keys(dm), ...Object.keys(am)]).forEach(c => poner(m, c, fusionarValor(m[c], dm[c], am[c])));
+    });
+  });
+  guardarEspera(); guardarSesiones(); escribir("espera-nota-v1", esperaNota); escribir("espera-letra-v1", esperaLetra); escribir("espera-antes-v1", esperaAntes);
+}
 function cambiar(tabla, fila, enLote) {
   if (!Object.prototype.hasOwnProperty.call(TABLAS, tabla) || !claveDatoValida(fila?.[TABLAS[tabla].clave])) throw new Error("El registro no tiene un identificador válido.");
   if (!sinHistorial && Date.now() - ultimoGesto < 3000) {
     const k = fila[TABLAS[tabla].clave], antes = db[tabla][k];
-    if (!pasoHist) { pasoHist = []; historial.push(pasoHist); if (historial.length > 80) historial.shift(); rehechos = []; setTimeout(() => { pasoHist = null; }, 0); }
-    if (!pasoHist.some(x => x.t === tabla && x.k === k)) pasoHist.push({ t: tabla, k, antes: antes ? { ...antes } : null });
+    registrarAntes(tabla, k, antes ? { ...antes } : null);
   }
   fila.actualizado = new Date().toISOString();
   fila.sucio = true;
@@ -778,14 +863,19 @@ function cambiar(tabla, fila, enLote) {
 }
 // Aplica un paso del historial y devuelve el paso contrario (para rehacer o volver a deshacer)
 function aplicarPaso(paso) {
-  const contrario = paso.map(x => ({ t: x.t, k: x.k, antes: db[x.t][x.k] ? { ...db[x.t][x.k] } : null }));
+  const contrario = paso.map(x => x.t === "@orden" ? { t: x.t, k: x.k, antes: estadoOrden(x.k) } : x.t === "@dia" ? { t: x.t, k: x.k, antes: instantaneaDia(x.k, Object.keys(x.antes.series)) } : ({ t: x.t, k: x.k, antes: db[x.t][x.k] ? { ...db[x.t][x.k] } : null }));
   sinHistorial = true;
+  let conOrden = false;
   paso.slice().reverse().forEach(x => {
+    if (x.t === "@orden") { ponerEstadoOrden(x.k, x.antes); conOrden = true; return; }
+    if (x.t === "@dia") { aplicarDeltaDia(x); return; }
     const actual = db[x.t][x.k];
     if (x.antes) { const c = { ...x.antes }; delete c.sucio; cambiar(x.t, c, true); }
     else if (actual) cambiar(x.t, { ...actual, borrado: true }, true);
   });
   sinHistorial = false;
+  contrario.forEach(c => { if (c.t === "@dia") c.despues = instantaneaDia(c.k, Object.keys(c.antes.series)); });   // para rehacer: el traslado se vuelve a aplicar como delta
+  if (conOrden) guardarSesiones();
   persistir();
   pintarTodo();
   if (ent) pintarEntreno();
@@ -839,11 +929,16 @@ function mezclar(tabla, f) {
   return true;
 }
 // ---- Extra de cada día: construirlo desde lo guardado en el dispositivo y aplicarlo cuando llega del servidor ----
+const PROPIEDADES_EXTRA = new Set(["e", "s", "g", "p", "pa", "n", "l", "a", "bv", "og", "op"]);
 function extraDe(f) {
   const pre = f + "|";
   const sub = o => { const r = {}; Object.keys(o || {}).filter(k => k.startsWith(pre)).sort().forEach(k => { r[k.slice(pre.length)] = o[k]; }); return r; };
-  const e = { e: enEspera[f] || [], s: sesionesVacias[f] || [], g: sub(esperaGrupo), p: sub(partesVacias), pa: sub(esperaParte), n: sub(esperaNota), l: sub(esperaLetra), a: sub(esperaAntes), bv: sub(bloquesVacios) };
+  const e = { e: enEspera[f] || [], s: sesionesVacias[f] || [], g: sub(esperaGrupo), p: sub(partesVacias), pa: sub(esperaParte), n: sub(esperaNota), l: sub(esperaLetra), a: sub(esperaAntes), bv: sub(bloquesVacios), og: ordenGrupos[f] || [], op: sub(ordenPartes) };
   Object.keys(e).forEach(k => { if (Array.isArray(e[k]) ? !e[k].length : !Object.keys(e[k]).length) delete e[k]; });
+  // v249: lo que esta versión no conoce (p. ej. propiedades de una versión posterior) se conserva tal cual al volver a serializar el día;
+  // las propiedades CONOCIDAS se reconstruyen siempre desde el estado local, así que borrarlas a propósito sigue funcionando
+  const previo = (db.entrenos[f] || {}).extra;
+  if (previo && typeof previo === "object" && !Array.isArray(previo)) Object.keys(previo).forEach(k => { if (!PROPIEDADES_EXTRA.has(k) && !(k in e)) e[k] = previo[k]; });
   return e;
 }
 let aplicandoExtra = false, timerExtra = null;
@@ -854,6 +949,8 @@ function aplicarExtra(f, e) {
   if ((e.e || []).length) enEspera[f] = e.e.slice(); else delete enEspera[f];
   if ((e.s || []).length) sesionesVacias[f] = e.s.slice(); else delete sesionesVacias[f];
   poner(esperaGrupo, e.g); poner(partesVacias, e.p); poner(esperaParte, e.pa); poner(esperaNota, e.n); poner(esperaLetra, e.l); poner(esperaAntes, e.a); poner(bloquesVacios, e.bv);
+  if ((e.og || []).length) ordenGrupos[f] = e.og.slice(); else delete ordenGrupos[f];
+  poner(ordenPartes, e.op);
   guardarVacios();
   escribir("bloques-v1", enEspera); guardarSesiones(); escribir("espera-nota-v1", esperaNota); escribir("espera-letra-v1", esperaLetra); escribir("espera-antes-v1", esperaAntes);
   aplicandoExtra = false;
@@ -868,8 +965,8 @@ function marcarExtra() {
 function volcarExtra() {
     clearTimeout(timerExtra);
     if (!sesion || sesion.user_id !== cuentaLocal) return;
-    const fechas = new Set([...Object.keys(enEspera), ...Object.keys(sesionesVacias)]);
-    [esperaGrupo, partesVacias, esperaParte, esperaNota, esperaLetra, esperaAntes, bloquesVacios].forEach(o => Object.keys(o || {}).forEach(k => fechas.add(k.split("|")[0])));
+    const fechas = new Set([...Object.keys(enEspera), ...Object.keys(sesionesVacias), ...Object.keys(ordenGrupos)]);
+    [ordenPartes, esperaGrupo, partesVacias, esperaParte, esperaNota, esperaLetra, esperaAntes, bloquesVacios].forEach(o => Object.keys(o || {}).forEach(k => fechas.add(k.split("|")[0])));
     Object.values(db.entrenos).forEach(x => { if (x.extra && Object.keys(x.extra).length) fechas.add(x.fecha); });
     let hay = false;
     // Guardado interno y automático: no es un paso que deshacer (si no, Ctrl+Z se «gastaba» en él y se perdía el rehacer)
@@ -1797,28 +1894,24 @@ function cabeceraParte(dia, grupo, p, color, nNombradas, partes, seriesItem) {
   cab.querySelector(".g-prog").textContent = ss.length ? ss.filter(hecha).length + "/" + ss.length : p.ids.length ? "" : "vacía";
   cab.querySelector(".menu-btn").setAttribute("aria-label", "Opciones de la parte " + p.nombre);
   cab.querySelector(".menu-btn").addEventListener("click", () => {
-    const k = partes.indexOf(p);
+    const nombresVis = partes.filter(x => x.nombre).map(x => x.nombre), k = nombresVis.indexOf(p.nombre);
     const mover = paso => {
-      // Reordena las partes repartiendo los «orden» existentes en el nuevo orden de partes
-      const orden = partes.slice();
-      let j = k + paso;
-      while (j >= 0 && j < orden.length && !orden[j].nombre) j += paso;   // los ejercicios sueltos se quedan en su sitio
-      if (j < 0 || j >= orden.length) return;
-      [orden[k], orden[j]] = [orden[j], orden[k]];
-      const vacias = partesVacias[dia.id + "|" + grupo] || [];
-      if (vacias.length) partesVacias[dia.id + "|" + grupo] = orden.map(x => x.nombre).filter(n => vacias.includes(n));
-      guardarSesiones();
-      reordenar(orden.flatMap(x => x.ids.map(id => seriesItem(id))), "Parte movida");
-      pintarDia(dia);
+      // Mismo orden persistente que el arrastre con el asa: se intercambia con la parte con nombre anterior o siguiente
+      const j = k + paso;
+      if (k < 0 || j < 0 || j >= nombresVis.length) return;
+      const n = nombresVis.slice();
+      [n[k], n[j]] = [n[j], n[k]];
+      cab.ordenarPartes(n);
     };
+    const plegada = !!(cab.parentElement && cab.parentElement.classList.contains("p-plegada"));   // desplegada, «＋ Añadir» ya está a la vista en la propia parte
     abrirMenu(p.nombre, ss.length ? ss.length + (ss.length === 1 ? " serie" : " series") : "Parte vacía", [
       { texto: "Cambiar nombre de la parte…", accion: () => cambiarNombreParte(dia, grupo, p.nombre) },
-      { texto: "+ Ejercicio en esta parte", accion: () => abrirSelector(dia, null, grupo, p.nombre) },
+      plegada && { texto: "+ Ejercicio en esta parte", accion: () => abrirSelector(dia, null, grupo, p.nombre) },
       ...(() => { const otros = [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].map(x => x.dataset.grupo || "").filter(x => x !== grupo);
         return otros.length ? [{ texto: "Mover la parte a otro entreno…", accion: () => abrirMenu("¿A qué entreno?", "La parte «" + p.nombre + "» pasa entera, con sus ejercicios y bloques", otros.map(x => ({ texto: x || "Entreno 1", accion: () => moverParteAEntreno(dia, grupo, p.nombre, x, ss) }))) }] : []; })(),
-      { texto: "+ Bloque en esta parte", accion: () => abrirBloque(dia, grupo, p.nombre) },
-      partes.slice(0, k).some(x => x.nombre) && { texto: "Subir parte", accion: () => mover(-1) },
-      partes.slice(k + 1).some(x => x.nombre) && { texto: "Bajar parte", accion: () => mover(1) },
+      plegada && { texto: "+ Bloque en esta parte", accion: () => abrirBloque(dia, grupo, p.nombre) },
+      k > 0 && { texto: "Subir parte", accion: () => mover(-1) },
+      k >= 0 && k < nombresVis.length - 1 && { texto: "Bajar parte", accion: () => mover(1) },
       { texto: "Quitar la parte (sus ejercicios quedan sin parte)", accion: () => {
         ss.forEach(x => cambiar("series", { ...x, seccion: "" }, true));
         renombrarParteLocal(dia.id, grupo, p.nombre, "");
@@ -1833,13 +1926,45 @@ function cabeceraParte(dia, grupo, p, color, nNombradas, partes, seriesItem) {
       } }
     ]);
   });
+  // Aplica un orden de partes (nombres) de forma persistente: lo usan el asa de arrastre y «Subir/Bajar parte»
+  cab.ordenarPartes = nombres => {
+    const nuevo = aplicarOrdenExplicito(partes, nombres, x => x.nombre);
+    const kp = dia.id + "|" + grupo, vacias = partesVacias[kp] || [];
+    fijarOrden("p", kp, nombres, nuevo.flatMap(x => x.ids.map(id => seriesItem(id))), "Parte movida", vacias.length ? nombres.filter(n => vacias.includes(n)) : null);
+  };
   return cab;
+}
+// Guarda un orden explícito (tipo «g»: entrenos del día; «p»: partes de un entreno), alinea el «orden» de las series para el modo entreno y lo
+// registra como UN paso del historial (Ctrl/Cmd+Z y Rehacer) junto con las series; el botón del aviso deshace ese mismo paso (sin duplicarlo)
+function fijarOrden(tipo, clave, nombres, conjuntosSeries, texto, vaciasNuevas) {
+  const k = tipo + "|" + clave, mapa = tipo === "g" ? ordenGrupos : ordenPartes;
+  ultimoGesto = Date.now();   // el usuario acaba de actuar (un arrastre largo supera los 3 s del historial automático)
+  const previo = estadoOrden(k);
+  registrarAntes("@orden", k, previo);
+  const paso = pasoHist;
+  const antesS = conjuntosSeries.flat().filter(Boolean).map(s => ["series", { ...s }]);
+  mapa[clave] = nombres.slice();
+  if (tipo === "p" && vaciasNuevas) partesVacias[clave] = vaciasNuevas;
+  guardarSesiones();
+  reordenar(conjuntosSeries, "");   // puede no hacer nada si hay entrenos o partes vacíos: el orden ya consta en la lista explícita
+  persistir();
+  pintarBloques(true);
+  avisoDeshacer(texto, null);
+  $("toastBtn").hidden = false;
+  deshacerSug = () => {
+    if (paso && historial[historial.length - 1] === paso) { deshacerPaso(false); return; }   // mismo paso del historial: sin pasos duplicados
+    sinHistorial = true;   // el paso ya no es el último: se restaura directamente, sin crear otro
+    try { antesS.forEach(([t, f]) => { const c = { ...f }; delete c.sucio; cambiar(t, c, true); }); ponerEstadoOrden(k, previo); }
+    finally { sinHistorial = false; }
+    guardarSesiones(); persistir(); pintarTodo();
+  };
 }
 // Renombra (n), deja sin parte ("") o quita (null) una parte en lo que solo vive en este dispositivo
 function renombrarParteLocal(fecha, grupo, viejo, n) {
   const k = fecha + "|" + grupo, l = (partesVacias[k] || []).filter(x => x !== viejo);
   if (n) l.push(n);
   if (l.length) partesVacias[k] = [...new Set(l)]; else delete partesVacias[k];
+  if (ordenPartes[k]) { const r = [...new Set(n ? ordenPartes[k].map(x => x === viejo ? n : x) : ordenPartes[k].filter(x => x !== viejo))]; if (r.length) ordenPartes[k] = r; else delete ordenPartes[k]; }
   Object.keys(esperaParte).forEach(e => { if (e.startsWith(fecha + "|") && (esperaGrupo[e] || "") === grupo && esperaParte[e] === viejo) { if (n) esperaParte[e] = n; else delete esperaParte[e]; } });
   Object.entries(bloquesVacios).forEach(([e,b]) => { if (e.startsWith(fecha + "|") && (b.g || "") === grupo && b.p === viejo) b.p = n || ""; });
   guardarSesiones(); guardarVacios();
@@ -1907,6 +2032,7 @@ function moverParteAEntreno(dia, origen, parte, destino, seriesParte) {
   const ko = dia.id + "|" + origen, kd = dia.id + "|" + destino;
   if ((partesVacias[ko] || []).includes(parte)) { partesVacias[ko] = partesVacias[ko].filter(x => x !== parte); if (!partesVacias[ko].length) delete partesVacias[ko]; }
   if (!seriesParte.length && !(partesVacias[kd] || []).includes(parte)) (partesVacias[kd] = partesVacias[kd] || []).push(parte);
+  if (ordenPartes[ko]) { const r = ordenPartes[ko].filter(x => x !== parte); if (r.length) ordenPartes[ko] = r; else delete ordenPartes[ko]; }   // v249: ya no pertenece al orden del entreno de origen
   guardarSesiones(); guardarVacios(); persistir();
   pintarDia(dia);
   avisoDeshacer("Parte «" + parte + "» movida al entreno «" + (destino || "Entreno 1") + "»", antes.length ? antes : null);
@@ -1971,9 +2097,14 @@ async function nuevoEntreno(dia) {
 // Pasar un entreno (o todo el día si grupo es null) a otro día: sus series, los ejercicios aún sin series y sus partes vacías
 function moverADia(dia, grupo, f) {
   if (f === dia.id) return;
-  const ss = seriesDelDia(dia.id).filter(x => grupo === null || (x.grupo || "") === grupo);
-  const antes = ss.map(x => ["series", { ...x }]);
-  ss.forEach(x => cambiar("series", { ...x, fecha: f }, true));
+  // v249: el traslado es UN paso del historial con las series y todo el estado local de ambos días (también si solo hay elementos vacíos)
+  ultimoGesto = Date.now();
+  const claveDias = dia.id + "|" + f;
+  const ss = seriesDelDia(dia.id).filter(x => grupo === null || (x.grupo || "") === grupo), idsSeries = ss.map(x => x.id);
+  registrarAntes("@dia", claveDias, instantaneaDia(claveDias, idsSeries));
+  const pasoDia = pasoHist, entradaDia = pasoDia && pasoDia.find(x => x.t === "@dia" && x.k === claveDias);
+  // Las series se mueven sin paso propio: el traslado ya es una sola entrada del historial que solo revierte la fecha de esas series
+  { const sinH = sinHistorial; sinHistorial = true; ss.forEach(x => cambiar("series", { ...x, fecha: f }, true)); sinHistorial = sinH; }
   const vale = g => grupo === null || g === grupo;
   // Lo que vive fuera de las series: ejercicios sin series, entrenos y partes vacías, descripciones, letras y posiciones
   (enEspera[dia.id] || []).filter(id => vale(esperaGrupo[dia.id + "|" + id] || "")).forEach(id => {
@@ -1989,10 +2120,34 @@ function moverADia(dia, grupo, f) {
   Object.keys(partesVacias).filter(k => k.startsWith(dia.id + "|") && vale(k.slice(dia.id.length + 1))).forEach(k => {
     const nk = f + k.slice(dia.id.length); partesVacias[nk] = [...new Set((partesVacias[nk] || []).concat(partesVacias[k]))]; delete partesVacias[k];
   });
+  // v249: el orden explícito viaja con lo movido, detrás de lo que ya hubiera en el destino (sin sobrescribirlo)
+  {
+    const og = ordenGrupos[dia.id] || [], movidos = grupo === null ? og.slice() : og.includes(grupo) ? [grupo] : [];
+    if (movidos.length) {
+      ordenGrupos[f] = [...new Set((ordenGrupos[f] || []).concat(movidos))];
+      const resto = og.filter(n => !vale(n));
+      if (resto.length) ordenGrupos[dia.id] = resto; else delete ordenGrupos[dia.id];
+    }
+    Object.keys(ordenPartes).filter(k => k.startsWith(dia.id + "|") && vale(k.slice(dia.id.length + 1))).forEach(k => {
+      const nk = f + k.slice(dia.id.length); ordenPartes[nk] = [...new Set((ordenPartes[nk] || []).concat(ordenPartes[k]))]; delete ordenPartes[k];
+    });
+  }
   guardarEspera(); guardarSesiones(); escribir("espera-nota-v1", esperaNota); escribir("espera-letra-v1", esperaLetra); escribir("espera-antes-v1", esperaAntes);
   persistir();
   irADia(f);
-  avisoDeshacer((grupo === null ? "Entrenamiento" : "«" + (grupo || "Entreno 1") + "»") + " movido al " + NOMBRES[(deIso(f).getDay() + 6) % 7].toLowerCase() + " " + fmt(deIso(f)), antes.length ? antes : null);
+  avisoDeshacer((grupo === null ? "Entrenamiento" : "«" + (grupo || "Entreno 1") + "»") + " movido al " + NOMBRES[(deIso(f).getDay() + 6) % 7].toLowerCase() + " " + fmt(deIso(f)), null);
+  $("toastBtn").hidden = false;
+  if (entradaDia) entradaDia.despues = instantaneaDia(claveDias, idsSeries);
+  deshacerSug = () => {
+    if (!entradaDia || !entradaDia.despues) return;
+    if (historial[historial.length - 1] === pasoDia) { deshacerPaso(false); return; }   // sin cambios posteriores en el historial: el mismo paso, sin duplicarlo
+    // Hay pasos posteriores: se revierte solo el traslado (delta) y se conservan esos cambios; la entrada ya no tiene sentido en el historial
+    const sinH = sinHistorial; sinHistorial = true;
+    try { aplicarDeltaDia(entradaDia); } finally { sinHistorial = sinH; }
+    const i = pasoDia.indexOf(entradaDia); if (i >= 0) pasoDia.splice(i, 1);
+    if (!pasoDia.length) { const h = historial.indexOf(pasoDia); if (h >= 0) historial.splice(h, 1); }
+    persistir(); pintarTodo();
+  };
 }
 // Juntar dos entrenos del mismo día en uno («Pecho + Pierna»): primero los del primero y detrás los del segundo.
 // Partes con el mismo nombre se juntan; el mismo ejercicio en la misma parte queda como otra tarjeta (no se mezcla)
@@ -2020,10 +2175,10 @@ function fusionarEntrenos(dia, primero, segundo, nombre, separarCalentamientos) 
   if (otros.has(nombre) && !deUno(nombre)) { avisoDeshacer("Ya hay otro entreno con ese nombre. Elige un nombre diferente."); return false; }
   const filas = [primero, segundo].flatMap(g => delDia.filter(s => (s.grupo || "") === g).sort((a, b) => n0(a.orden) - n0(b.orden)));
   const antes = filas.map(s => ["series", { ...s }]);
-  const mapas = { partesVacias, esperaGrupo, esperaParte, esperaAntes, bloquesVacios, gruposPlegados };
+  const mapas = { partesVacias, esperaGrupo, esperaParte, esperaAntes, bloquesVacios, gruposPlegados, ordenPartes };
   const copia = x => JSON.parse(JSON.stringify(x));
   const meta = Object.fromEntries(Object.entries(mapas).map(([n, m]) => [n, copia(Object.fromEntries(Object.entries(m).filter(([k]) => k.startsWith(fecha + "|"))))]));
-  const sesionesAntes = copia(sesionesVacias[fecha] || []);
+  const sesionesAntes = copia(sesionesVacias[fecha] || []), ordenAntes = ordenGrupos[fecha] ? copia(ordenGrupos[fecha]) : null;
   const destinoParte = (g, sec, calentamiento = esNombreCalentamiento(sec)) => !calentamiento ? sec || "" :
     separarCalentamientos ? (sec || "Calentamiento") + " · " + (g || "Entreno 1") : "Calentamiento";
   const usadas = new Map(), copias = new Map(), bloques = new Map(), claves = new Map();
@@ -2064,6 +2219,13 @@ function fusionarEntrenos(dia, primero, segundo, nombre, separarCalentamientos) 
   delete partesVacias[fecha + "|" + primero]; delete partesVacias[fecha + "|" + segundo];
   if (partes.length) partesVacias[fecha + "|" + nombre] = partes;
   sesionesVacias[fecha] = [...new Set((sesionesVacias[fecha] || []).filter(g => !deUno(g)).concat(nombre))];
+  // v249: orden explícito: el entreno fusionado ocupa el sitio del primero que aparezca; sus partes siguen el orden de ambos entrenos
+  {
+    if (ordenGrupos[fecha]) ordenGrupos[fecha] = [...new Set(ordenGrupos[fecha].map(n => deUno(n) ? nombre : n))];
+    const op = [primero, segundo].flatMap(g => (ordenPartes[fecha + "|" + g] || []).map(sec => destinoParte(g, sec)));
+    delete ordenPartes[fecha + "|" + primero]; delete ordenPartes[fecha + "|" + segundo];
+    if (op.length) ordenPartes[fecha + "|" + nombre] = [...new Set(op)];
+  }
   Object.entries(bloquesVacios).forEach(([k, b]) => {
     if (k.startsWith(fecha + "|") && deUno(b.g || "")) bloquesVacios[k] = { ...b, g: nombre, p: destinoParte(b.g || "", b.p || "") };
   });
@@ -2080,6 +2242,7 @@ function fusionarEntrenos(dia, primero, segundo, nombre, separarCalentamientos) 
       Object.assign(m, copia(meta[n]));
     });
     if (sesionesAntes.length) sesionesVacias[fecha] = sesionesAntes; else delete sesionesVacias[fecha];
+    if (ordenAntes) ordenGrupos[fecha] = ordenAntes; else delete ordenGrupos[fecha];
     guardar(); pintarDia(dia);
   };
   return true;
@@ -2102,6 +2265,8 @@ async function cambiarNombreEntreno(dia, grupo) {
   sesionesVacias[fecha] = (sesionesVacias[fecha] || []).map(g => g === grupo ? nombre : g);
   (enEspera[fecha] || []).forEach(id => { const k = fecha + "|" + id; if ((esperaGrupo[k] || "") === grupo) esperaGrupo[k] = nombre; });
   if (partesVacias[viejo]) { partesVacias[nuevo] = partesVacias[viejo]; delete partesVacias[viejo]; }
+  if (ordenPartes[viejo]) { ordenPartes[nuevo] = ordenPartes[viejo]; delete ordenPartes[viejo]; }
+  if (ordenGrupos[fecha]) ordenGrupos[fecha] = ordenGrupos[fecha].map(g => g === grupo ? nombre : g);
   Object.entries(bloquesVacios).forEach(([k,b]) => { if (k.startsWith(fecha + "|") && (b.g || "") === grupo) b.g = nombre; });
   if (Object.hasOwn(gruposPlegados, viejo)) { gruposPlegados[nuevo] = gruposPlegados[viejo]; delete gruposPlegados[viejo]; }
   partes.forEach(p => {
@@ -2131,7 +2296,7 @@ async function cambiarNombreParte(dia, grupo, parte) {
 
 function menuGrupo(dia, grupo) {
   const series = seriesDelDia(dia.id).filter(s => (s.grupo || "") === grupo);
-  const nGrupos = new Set(seriesDelDia(dia.id).map(s => s.grupo || "")).size;
+  const nGrupos = gruposDelDia(dia.id).length;   // v249: cuentan también los entrenos vacíos
   abrirMenu(grupo || "Entrenamiento", resumenItems(itemsDe(series)), [
     { texto: "Cambiar nombre del entrenamiento…", accion: () => cambiarNombreEntreno(dia, grupo) },
     series.length && { texto: series.every(hecha) ? "✓ Completado · Ver entrenamiento" : "▶ Iniciar solo este entrenamiento", accion: () => empezarEntreno(dia, grupo) },
@@ -2164,6 +2329,9 @@ function menuGrupo(dia, grupo) {
       (enEspera[dia.id] || []).filter(id => (esperaGrupo[dia.id + "|" + id] || "") === grupo).forEach(id => { quitarEspera(dia.id, id); delete esperaGrupo[dia.id + "|" + id]; delete esperaParte[dia.id + "|" + id]; });
       // Sus partes vacías también (si no, el entreno seguía apareciendo vacío, «0/0»)
       delete partesVacias[dia.id + "|" + grupo];
+      // v249: y su sitio en el orden explícito (los demás entrenos conservan el suyo)
+      if (ordenGrupos[dia.id]) { const r = ordenGrupos[dia.id].filter(x => x !== grupo); if (r.length) ordenGrupos[dia.id] = r; else delete ordenGrupos[dia.id]; }
+      delete ordenPartes[dia.id + "|" + grupo];
       guardarEspera(); guardarSesiones(); persistir(); pintarDia(dia);
     } }
   ]);
@@ -2721,6 +2889,7 @@ function pintarDiaSinAncla(dia) {
     g.ids.push("v:" + k.slice(dia.id.length + 1));
   });
   // Cada sesión va en su propio contenedor para poder moverla entera
+  { const og = aplicarOrdenExplicito(grupos, ordenGrupos[dia.id], g => g.nombre); grupos.splice(0, grupos.length, ...og); }   // v249: orden explícito (también para entrenos vacíos)
   const conAsa = grupos.filter(g => g.nombre).length > 1 && grupos.length > 1;
   const varios = grupos.length > 1;   // varios entrenos el mismo día: cada uno en su caja, con su cabecera y sus botones
   dia.col.classList.toggle("varios-entrenos", varios);
@@ -2753,7 +2922,7 @@ function pintarDiaSinAncla(dia) {
       cab.querySelector(".g-prog").textContent = deG.filter(hecha).length + "/" + deG.length;
       cab.querySelector(".menu-btn").setAttribute("aria-label", "Opciones del entreno " + (g.nombre || "1"));
       cab.querySelector(".menu-btn").addEventListener("click", () => menuGrupo(dia, g.nombre));
-      if (conAsa) cab.appendChild(asaArrastre(caja, () => [...cont.querySelectorAll(":scope > .grupo")], n => reordenar(n.map(x => seriesDeGrupo(dia.id, x.dataset.grupo)), "Sesión movida"), "Sesión " + g.nombre));
+      if (conAsa) cab.appendChild(asaArrastre(caja, () => [...cont.querySelectorAll(":scope > .grupo")], n => fijarOrden("g", dia.id, n.map(x => x.dataset.grupo || ""), n.map(x => seriesDeGrupo(dia.id, x.dataset.grupo || "")), "Sesión movida"), "Sesión " + g.nombre));
       caja.appendChild(cab);
     }
     const filasGrupo = delDia.filter(s => (s.grupo || "") === g.nombre);
@@ -2779,6 +2948,7 @@ function pintarDiaSinAncla(dia) {
       else partes.push({ nombre: "", ids: [id] });
     });
     (partesVacias[dia.id + "|" + g.nombre] || []).forEach(n => parteDeNombre(n));
+    { const po = aplicarOrdenExplicito(partes, ordenPartes[dia.id + "|" + g.nombre], p => p.nombre); partes.splice(0, partes.length, ...po); }   // v249: orden explícito de partes (también vacías)
     const conNombre = partes.filter(p => p.nombre);
     // Letras como en las hojas de entrenamiento: cada parte empieza una letra nueva (A, B…) y dentro de ella
     // un ejercicio o bloque puede empezar otra (C1, C2… para una superserie aparte); la numeración sigue la letra
@@ -2795,6 +2965,8 @@ function pintarDiaSinAncla(dia) {
         const cabP = cabeceraParte(dia, g.nombre, p, color, conNombre.length, partes, seriesItem);
         dest.appendChild(cabP);
         caja.appendChild(dest);
+        // v249: asa para arrastrar la parte entera (con o sin ejercicios) dentro de su entreno; usa el mismo orden persistente que «Subir/Bajar parte»
+        if (conNombre.length > 1) cabP.appendChild(asaArrastre(dest, () => [...caja.querySelectorAll(":scope > .parte-caja")], n => cabP.ordenarPartes(n.map(x => x.dataset.parte || "")), "parte " + p.nombre));
         const claveP = "p|" + dia.id + "|" + g.nombre + "|" + p.nombre, tg = cabP.querySelector(".p-toggle");
         const ponerP = pl => { dest.classList.toggle("p-plegada", pl); tg.setAttribute("aria-expanded", String(!pl)); };
         ponerP(gruposPlegados[claveP] !== 0);
@@ -8207,11 +8379,13 @@ function moverItem(fecha, grupo, clave, paso) {
   reordenar(items.map(x => x.series), "Ejercicio movido");
 }
 function moverGrupo(fecha, nombre, paso) {
-  const gs = estructuraDia(fecha), i = gs.findIndex(x => x.nombre === nombre), j = i + paso;
-  if (i < 0 || j < 0 || j >= gs.length) return;
-  const lista = gs.slice();
-  [lista[i], lista[j]] = [lista[j], lista[i]];
-  reordenar(lista.map(g => g.items.flatMap(x => x.series)), "Sesión movida");
+  // v249: orden visible real del día (incluye entrenos vacíos) y orden explícito persistente
+  const dia = dias.find(d => d.id === fecha);
+  const nombres = dia ? [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].map(x => x.dataset.grupo || "") : gruposDelDia(fecha);
+  const i = nombres.indexOf(nombre), j = i + paso;
+  if (i < 0 || j < 0 || j >= nombres.length) return;
+  [nombres[i], nombres[j]] = [nombres[j], nombres[i]];
+  fijarOrden("g", fecha, nombres, nombres.map(n => seriesDeGrupo(fecha, n)), "Sesión movida");
 }
 // Asa ≡: se arrastra (dedo o ratón) con vista en vivo, o se mueve con las flechas del teclado
 // zonas (opcional): { lista: () => [elementos], alSoltar: zona => … } — soltar encima de una (p. ej. la cabecera
@@ -8702,16 +8876,19 @@ function deslizable(li, derecha, izquierda) {
 let ent = null, bloqueoPantalla = null;
 // Mismo orden que en pantalla: por sesión y, dentro, ejercicio a ejercicio o bloque ronda a ronda
 function colaEntreno(fecha, grupo = null) {
-  const delDia = seriesDelDia(fecha).filter(s => grupo === null || (s.grupo || "") === grupo), grupos = [], cola = [];
+  const delDia = seriesDelDia(fecha).filter(s => grupo === null || (s.grupo || "") === grupo), cola = [];
+  let grupos = [];
   delDia.forEach(s => { if (!grupos.includes(s.grupo || "")) grupos.push(s.grupo || ""); });
+  grupos = aplicarOrdenExplicito(grupos, ordenGrupos[fecha], g => g);   // v249: mismo orden de entrenos que Semana (incluidos los que estaban vacíos)
   grupos.forEach(g => {
-    const partes = [];
+    let partes = [];
     delDia.filter(s => (s.grupo || "") === g).forEach(s => {
       const nombre = s.seccion || "";
       let p = nombre ? partes.find(x => x.nombre === nombre) : partes[partes.length - 1];
       if (!p || (!nombre && p.nombre)) { p = { nombre, filas: [] }; partes.push(p); }
       p.filas.push(s);
     });
+    partes = aplicarOrdenExplicito(partes, ordenPartes[fecha + "|" + g], p => p.nombre);   // v249: mismo orden de partes que Semana
     partes.forEach(p => {
       const claves = [...new Set(p.filas.map(claveSerie))];
       claves.forEach(k => p.filas.filter(s => claveSerie(s) === k)
@@ -8932,7 +9109,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v248" + (BETA ? " beta" : "");
+const VERSION_APP = "v249" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

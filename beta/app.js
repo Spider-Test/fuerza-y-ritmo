@@ -3058,7 +3058,14 @@ function pintarDiaSinAncla(dia) {
     iniciar.addEventListener("click", () => empezarEntreno(dia, g.nombre));
     // v252: con un solo entreno en el día, el botón inferior del día («Empezar/Seguir entreno (x/y)») ya inicia este mismo entreno:
     // la franja de arriba sobra. Se mantiene si hay varios entrenos (para elegir uno) o si aún no tiene series (aviso, sin botón inferior)
-    if (varios || !filasGrupo.length) caja.appendChild(iniciar);
+    // v257: sin series no hay nada que empezar: en vez del botón desactivado (que se veía como una tarjeta verde grande), una nota
+    // compacta y secundaria bajo el encabezado. Con series, la franja de siempre (sin cambios)
+    if (!filasGrupo.length) {
+      const nota = document.createElement("p");
+      nota.className = "grupo-aviso-vacio";
+      nota.textContent = "Añade series para empezar este entrenamiento";
+      caja.appendChild(nota);
+    } else if (varios) caja.appendChild(iniciar);
     // Partes opcionales del entreno (Calentamiento, Parte principal…): si no hay ninguna, todo va seguido como siempre
     const seriesItem = id => id.startsWith("b:") ? delDia.filter(s => s.bloque_id === id.slice(2)) : delDia.filter(s => claveSerie(s) === id && (s.grupo || "") === g.nombre);
     const parteDe = id => { if (id.startsWith("v:")) return (bloquesVacios[dia.id + "|" + id.slice(2)] || {}).p || ""; const ss = seriesItem(id); return ss.length ? ss[0].seccion || "" : esperaParte[dia.id + "|" + id] || ""; };
@@ -9290,7 +9297,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v256" + (BETA ? " beta" : "");
+const VERSION_APP = "v257" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

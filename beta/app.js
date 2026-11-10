@@ -1376,6 +1376,26 @@ function confirmar(titulo, texto, si) {
     $("confNo").focus();
   });
 }
+// Aviso importante (INC-UI-006): ventana modal centrada con título, explicación y «Aceptar». Solo informa: no cambia de pantalla ni modifica datos.
+// Si ya hay uno abierto se sustituye (no se acumulan). Para confirmaciones menores se sigue usando setEstado.
+function avisoImportante(titulo, texto) {
+  const d = $("dlgAviso");
+  if (!d) { setEstado(texto || titulo, true); return Promise.resolve(); }
+  return new Promise(res => {
+    $("avTit").textContent = titulo;
+    $("avTxt").textContent = texto || "";
+    $("avTxt").hidden = !texto;
+    let hecho = false;
+    const fin = (cerrar = true) => { if (hecho) return; hecho = true; if (cerrar && d.open) d.close(); res(); };
+    if (d._fin) d._fin(false);       // sustituye al aviso anterior sin cerrar la ventana (evita un «close» diferido que cerraría el nuevo)
+    d._fin = fin;
+    $("avOk").onclick = () => fin();
+    d.onclose = () => fin();
+    d.onclick = e => { if (e.target === d) fin(); };
+    if (!d.open) d.showModal();
+    $("avOk").focus({ preventScroll: true });
+  });
+}
 // Texto de la confirmación a partir del antiguo «Pulsa otra vez: …»
 const textoConfirmar = t => { const m = String(t || "").match(/^Pulsa otra vez:\s*(.+)$/i); return m ? m[1].charAt(0).toUpperCase() + m[1].slice(1) + "." : "No se puede deshacer."; };
 function abrirMenu(titulo, detalle, opciones, extra) {
@@ -2513,26 +2533,30 @@ function compartidoValido(c) {
 
 const MENSAJES_ESTADO_COMPARTIDO = {
   caducado: "Este código ha caducado. Pide a tu amigo que lo comparta de nuevo.",
-  revocado: "Su autor ha revocado este enlace. Pídele que lo comparta de nuevo.",
+  revocado: "El autor ha revocado este enlace. Pídele que vuelva a compartir el entrenamiento.",
   no_encontrado: "No hay nada compartido con ese código.",
   formato_invalido: "Ese código no es válido: son 8 letras y números.",
   demasiados_intentos: "Demasiados intentos fallidos seguidos. Espera unos minutos antes de volver a probar.",
   no_autorizado: "Tu cuenta aún no puede abrir contenido compartido."
 };
+const TITULOS_ESTADO_COMPARTIDO = {
+  caducado: "Enlace caducado", revocado: "Enlace revocado", no_encontrado: "Código no encontrado",
+  formato_invalido: "Código no válido", demasiados_intentos: "Demasiados intentos", no_autorizado: "Cuenta sin acceso"
+};
 // Importar: primero solo se VE (con el estado de sus ejercicios). Al añadir, se analizan los ejercicios, se pide confirmación si falta alguno
 // y solo entonces se escribe algo. Todo lo que se guarda es una copia tuya; el contenido original no se modifica.
 async function abrirCompartido(texto) {
   const m = (texto || "").toUpperCase().match(/([A-Z2-9]{8})\s*$/);
-  if (!m) { setEstado("Ese código no es válido: son 8 letras y números.", true); return; }
+  if (!m) { avisoImportante(TITULOS_ESTADO_COMPARTIDO.formato_invalido, MENSAJES_ESTADO_COMPARTIDO.formato_invalido); return; }
   let c = null;
   try {
     const r = await api("/rest/v1/rpc/ver_compartido", { method: "POST", body: JSON.stringify({ p_codigo: m[1] }) });
     if (r.ok) c = await r.json();
   } catch { setEstado("Necesitas conexión para abrir algo compartido.", true); return; }
   // Servidor con la migración H1: {estado, ...}. Servidor anterior: el contenido directo (sin «estado») o null.
-  if (c && c.estado && c.estado !== "ok") { setEstado(MENSAJES_ESTADO_COMPARTIDO[c.estado] || "No se ha podido abrir lo compartido.", true); return; }
-  if (!c) { setEstado("No hay nada compartido con el código " + m[1] + ".", true); return; }
-  if (!compartidoValido(c)) { setEstado("El contenido compartido no tiene un formato válido.", true); return; }
+  if (c && c.estado && c.estado !== "ok") { avisoImportante(TITULOS_ESTADO_COMPARTIDO[c.estado] || "No se ha podido abrir", MENSAJES_ESTADO_COMPARTIDO[c.estado] || "No se ha podido abrir lo compartido."); return; }
+  if (!c) { avisoImportante(TITULOS_ESTADO_COMPARTIDO.no_encontrado, "No hay nada compartido con el código " + m[1] + "."); return; }
+  if (!compartidoValido(c)) { avisoImportante("Contenido no válido", "El contenido compartido no tiene un formato válido."); return; }
   const de = "Compartido por " + (c.autor || "un amigo");
   const conResumen = vista => { const d = document.createElement("div"); d.append(resumenCatalogoCompartido(c), vista); return d; };
   const listaEj = itemsDeLista(c);
@@ -8896,7 +8920,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v246" + (BETA ? " beta" : "");
+const VERSION_APP = "v247" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

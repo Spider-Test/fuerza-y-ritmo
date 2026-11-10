@@ -2373,3 +2373,10 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); box-sha
     transform: translate(var(--vv-tx, 0px), var(--vv-ty, 0px)) scale(var(--vv-s, 1));
   }
 }
+
+/* INC-UI-006 (v247): aviso importante modal y centrado, con un solo botón «Aceptar» (reutiliza el estilo de la confirmación) */
+dialog#dlgAviso { margin: auto; }
+.conf-botones.conf-uno { grid-template-columns: 1fr; }
+.conf-ok { border: 0; background: var(--accent); color: #fff; }
+@media (prefers-color-scheme: dark) { .conf-ok { color: #08121b; } }
+.conf-ok:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }

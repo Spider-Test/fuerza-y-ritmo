@@ -2384,3 +2384,9 @@ dialog#dlgAviso { margin: auto; }
 /* FASE_03 (v249): asa para arrastrar partes enteras, en la cabecera de la parte */
 .parte-cab .asa { flex: none; opacity: 1; }
 @media (max-width: 760px) { .parte-cab .asa { width: 36px; height: 40px; } }
+
+/* INC-SEM-003 (v250): destino para soltar al final del entreno, después de su última parte. Ocupa siempre la misma altura
+   (no desplaza nada al empezar un arrastre); solo se ve resaltado mientras se arrastra un ejercicio o bloque */
+.fin-grupo { flex: none; box-sizing: border-box; height: 30px; margin: 2px 0; border: 2px dashed transparent; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center; font-size: 12px; color: transparent; user-select: none; pointer-events: none; }
+.arrastre-ej .fin-grupo { border-color: var(--accent); color: var(--muted, inherit); background: var(--accent-soft); }

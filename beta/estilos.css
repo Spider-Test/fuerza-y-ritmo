@@ -2490,3 +2490,15 @@ dialog#dlgAviso { margin: auto; }
 /* v257: aviso de entrenamiento sin series: nota compacta y secundaria bajo el encabezado (no es un botón; antes era el botón
    «grupo-iniciar» desactivado, con aspecto de tarjeta verde grande). Texto atenuado con contraste suficiente en claro y oscuro */
 .grupo-aviso-vacio { margin: 4px 0 6px; padding: 2px 8px; font-size: 13px; line-height: 1.35; font-weight: 500; color: var(--muted); border-left: 2px solid var(--line); }
+
+/* v258: nombre del entreno editable tocando su texto. El texto ya no ocupa todo el ancho: la flecha y el espacio libre de la
+   cabecera siguen plegando/desplegando. Mientras se edita, el campo sustituye al nombre en la misma fila */
+#vistaSemana .grupo-cab .g-toggle .gn-txt.gn-editable { flex: 0 1 auto; cursor: text; text-decoration: underline dotted transparent; text-underline-offset: 4px; }
+@media (hover: hover) { #vistaSemana .grupo-cab .g-toggle .gn-txt.gn-editable:hover { text-decoration-color: currentColor; } }
+#vistaSemana .grupo-cab .g-toggle .flecha-dia { flex: none; min-width: 20px; }
+#vistaSemana .grupo-cab.gn-editando > .g-toggle { display: none !important; }
+#vistaSemana .grupo-cab > .gn-edit {
+  flex: 1 1 auto; min-width: 0; width: 100%; box-sizing: border-box; grid-column: 1; margin: 2px 0;
+  font-family: var(--display); font-weight: 700; font-size: 17px; letter-spacing: 0.03em; text-transform: uppercase;
+  color: var(--entreno); background: var(--card); border: 1px solid color-mix(in srgb, var(--entreno) 45%, var(--line)); border-radius: 6px; padding: 6px 8px;
+}

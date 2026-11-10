@@ -2330,7 +2330,14 @@ async function cambiarNombreEntreno(dia, grupo) {
   const nombre = await pedirNombre("Nombre del entrenamiento", grupo, "Solo cambia el nombre de este entrenamiento del día. Se conservan sus partes, series y progreso.");
   try { comprobarSesion(ctx); } catch { return; }
   if (!nombre || nombre === grupo) return;
-  if (dia.id !== fecha || !gruposDelDia(fecha).includes(grupo)) { setEstado("El entrenamiento ha cambiado. Abre su menú de nuevo.", true); return; }
+  if (dia.id !== fecha) { setEstado("El entrenamiento ha cambiado. Abre su menú de nuevo.", true); return; }
+  renombrarEntreno(dia, grupo, nombre);
+}
+// v258: aplica el cambio de nombre (lo usan el diálogo del menú y la edición directa en el título)
+function renombrarEntreno(dia, grupo, nombre) {
+  const fecha = dia.id;
+  if (!nombre || nombre === grupo) return;
+  if (!gruposDelDia(fecha).includes(grupo)) { setEstado("El entrenamiento ha cambiado. Abre su menú de nuevo.", true); return; }
   if (gruposDelDia(fecha).some(g => g !== grupo && norm(g) === norm(nombre))) { setEstado("Ya hay un entrenamiento con ese nombre en este día. Elige otro para mantenerlos separados.", true); return; }
   const partes = nombresPartes(fecha, grupo), viejo = fecha + "|" + grupo, nuevo = fecha + "|" + nombre;
   seriesDelDia(fecha).filter(s => (s.grupo || "") === grupo).forEach(s => cambiar("series", { ...s, grupo: nombre }, true));
@@ -2349,6 +2356,32 @@ async function cambiarNombreEntreno(dia, grupo) {
   if (ent?.dia.id === fecha && ent.grupo === grupo) ent.grupo = nombre;
   guardarSesiones(); guardarVacios(); escribir("grupos-plegados-v1", gruposPlegados); persistir(); pintarDia(dia);
   setEstado("Entrenamiento renombrado: " + nombre);
+}
+// v258: edición directa del nombre del entreno en su cabecera
+function editarNombreEnLinea(dia, grupo, cab) {
+  if (cab.querySelector(".gn-edit")) return;
+  const inp = document.createElement("input");
+  inp.className = "gn-edit"; inp.value = grupo; inp.placeholder = grupo || "Nombre del entrenamiento";
+  inp.autocomplete = "off"; inp.enterKeyHint = "done"; inp.spellcheck = false;
+  inp.setAttribute("aria-label", "Nombre del entrenamiento: Intro guarda, Esc cancela");
+  cab.classList.add("gn-editando");
+  cab.prepend(inp);
+  inp.focus(); inp.select();
+  let hecho = false;
+  const terminar = guardar => {
+    if (hecho) return;
+    hecho = true;
+    const v = inp.value.trim();
+    cab.classList.remove("gn-editando");
+    inp.remove();
+    if (guardar && v && v !== grupo) renombrarEntreno(dia, grupo, v);
+  };
+  inp.addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); terminar(true); }
+    else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); terminar(false); }
+  });
+  inp.addEventListener("blur", () => terminar(true));
+  ["click", "pointerdown"].forEach(t => inp.addEventListener(t, e => e.stopPropagation()));
 }
 async function cambiarNombreParte(dia, grupo, parte) {
   const fecha = dia.id, ctx = contextoSesion();
@@ -2372,7 +2405,8 @@ function menuGrupo(dia, grupo) {
   const nGrupos = gruposDelDia(dia.id).length;   // v249: cuentan también los entrenos vacíos
   abrirMenu(grupo || "Entrenamiento", resumenItems(itemsDe(series)), [
     { texto: "Cambiar nombre del entrenamiento…", accion: () => cambiarNombreEntreno(dia, grupo) },
-    series.length && { texto: series.every(hecha) ? "✓ Completado · Ver entrenamiento" : "▶ Iniciar solo este entrenamiento", accion: () => empezarEntreno(dia, grupo) },
+    // v258: sin «▶ Iniciar solo este entrenamiento»: lo cubren la franja «▶ Empezar/Seguir este entrenamiento» (varios entrenos) y el
+    // botón inferior del día (uno solo)
     { texto: "📅 Mover a otro día…", accion: () => elegirDiaDestino(lunesDe(deIso(dia.id)), "¿A qué día muevo «" + (grupo || "Entreno 1") + "»?", f => moverADia(dia, grupo, f)) },
     ...(() => { const otros = [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].map(x => x.dataset.grupo || "").filter(x => x !== grupo);
       return otros.length ? [{ texto: "🔗 Fusionar con otro entreno del día…", accion: () => abrirMenu("¿Con qué entreno lo junto?", "«" + (grupo || "Entreno 1") + "» va primero y el otro detrás, en un solo entreno", otros.map(x => ({ texto: x || "Entreno 1", accion: async () => {
@@ -2388,8 +2422,10 @@ function menuGrupo(dia, grupo) {
         ]);
         else nombrar(false);
       } }))) }] : []; })(),
-    nGrupos > 1 && { texto: "Subir sesión", accion: () => moverGrupo(dia.id, grupo, -1) },
-    nGrupos > 1 && { texto: "Bajar sesión", accion: () => moverGrupo(dia.id, grupo, 1) },
+    // v258: sin «Subir/Bajar sesión»: cada entreno lleva su asa ≡ en cuanto hay más de uno en el día (arrastre, o flechas ↑/↓ del
+    // teclado con el asa enfocada). Si el día no se ve (no hay caja que arrastrar), se mantienen como alternativa
+    nGrupos > 1 && !dia.bloquesEl.querySelector(":scope > .grupo .grupo-cab .asa") && { texto: "Subir sesión", accion: () => moverGrupo(dia.id, grupo, -1) },
+    nGrupos > 1 && !dia.bloquesEl.querySelector(":scope > .grupo .grupo-cab .asa") && { texto: "Bajar sesión", accion: () => moverGrupo(dia.id, grupo, 1) },
     series.filter(s => !s.bloque_id).length > 1 && { texto: "Seleccionar series para agrupar en bloque", accion: () => empezarSelSeries(dia) },
     series.length && { texto: "Copiar entreno", accion: () => copiar(grupo || "Entreno 1", "", series, "entreno") },
     series.length && { texto: "Guardar en una lista de entrenamientos…", accion: () => guardarEnLista(grupo || "Entrenamiento", series) },
@@ -2996,7 +3032,7 @@ function pintarDiaSinAncla(dia) {
   });
   // Cada sesión va en su propio contenedor para poder moverla entera
   { const og = aplicarOrdenExplicito(grupos, ordenGrupos[dia.id], g => g.nombre); grupos.splice(0, grupos.length, ...og); }   // v249: orden explícito (también para entrenos vacíos)
-  const conAsa = grupos.filter(g => g.nombre).length > 1 && grupos.length > 1;
+  const conAsa = grupos.length > 1;   // v258: también con un entreno y «Ejercicios sueltos» (antes solo con dos o más entrenos con nombre)
   const varios = grupos.length > 1;   // varios entrenos el mismo día: cada uno en su caja, con su cabecera y sus botones
   dia.col.classList.toggle("varios-entrenos", varios);
   // v253: si el día tiene algún entreno con nombre, lo que no tiene entreno (grupo "") se presenta como «Ejercicios sueltos»
@@ -3044,7 +3080,15 @@ function pintarDiaSinAncla(dia) {
       cab.querySelector(".g-prog").textContent = deG.filter(hecha).length + "/" + deG.length;
       cab.querySelector(".menu-btn").setAttribute("aria-label", "Opciones del entreno " + (g.nombre || "1"));
       cab.querySelector(".menu-btn").addEventListener("click", () => menuGrupo(dia, g.nombre));
-      if (conAsa) cab.appendChild(asaArrastre(caja, () => [...cont.querySelectorAll(":scope > .grupo")], n => fijarOrden("g", dia.id, n.map(x => x.dataset.grupo || ""), n.map(x => seriesDeGrupo(dia.id, x.dataset.grupo || "")), "Sesión movida"), "Sesión " + g.nombre));
+      // v258: tocar el TEXTO del nombre lo edita ahí mismo (Intro o salir del campo guarda; Esc o dejarlo igual/vacío cancela).
+      // La flecha y el resto de la cabecera siguen plegando/desplegando. «Ejercicios sueltos» no se edita así (no es un entreno)
+      if (g.nombre || !hayNombrados) {
+        const txt = cab.querySelector(".gn-txt");
+        txt.classList.add("gn-editable");
+        txt.title = "Toca el nombre para cambiarlo";
+        txt.addEventListener("click", e => { e.stopPropagation(); e.preventDefault(); editarNombreEnLinea(dia, g.nombre, cab); });
+      }
+      if (conAsa) cab.appendChild(asaArrastre(caja, () => [...cont.querySelectorAll(":scope > .grupo")], n => fijarOrden("g", dia.id, n.map(x => x.dataset.grupo || ""), n.map(x => seriesDeGrupo(dia.id, x.dataset.grupo || "")), "Sesión movida"), "el entreno " + (g.nombre || (hayNombrados ? "Ejercicios sueltos" : "Entreno 1"))));
       caja.appendChild(cab);
     }
     const filasGrupo = delDia.filter(s => (s.grupo || "") === g.nombre);
@@ -9297,7 +9341,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v257" + (BETA ? " beta" : "");
+const VERSION_APP = "v258" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

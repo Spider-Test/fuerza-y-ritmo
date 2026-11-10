@@ -1921,7 +1921,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); box-sha
   #vistaSemana .g-toggle .g-res { flex: 1 1 auto; min-width: 0; }
   #vistaSemana .dia-cuerpo-in > .add-fila {
     min-width: 0;
-    width: 100%;
+    width: auto;   /* v252: con sus márgenes laterales (8–10 px), «100%» la hacía más ancha que la tarjeta y cortaba la columna derecha */
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   #vistaSemana .add-fila > .add-ej { min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
@@ -2390,3 +2390,7 @@ dialog#dlgAviso { margin: auto; }
 .fin-grupo { flex: none; box-sizing: border-box; height: 30px; margin: 2px 0; border: 2px dashed transparent; border-radius: 10px;
   display: flex; align-items: center; justify-content: center; font-size: 12px; color: transparent; user-select: none; pointer-events: none; }
 .arrastre-ej .fin-grupo { border-color: var(--accent); color: var(--muted, inherit); background: var(--accent-soft); }
+
+/* v252: el nombre del entrenamiento destaca algo más que partes (15 px) y ejercicios (15 px); mismo color, tipo y mayúsculas */
+#vistaSemana .grupo-cab .g-toggle .gn-txt { font-size: 19px; line-height: 1.2; letter-spacing: 0.05em; }
+@media (max-width: 760px) { #vistaSemana .grupo-cab .g-toggle .gn-txt { font-size: 18px; line-height: 1.2; } }

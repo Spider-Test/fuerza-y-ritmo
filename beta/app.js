@@ -3037,7 +3037,9 @@ function pintarDiaSinAncla(dia) {
     iniciar.disabled = !filasGrupo.length;
     iniciar.setAttribute("aria-label", (completado ? "Ver entrenamiento completado: " : "Iniciar solo ") + (g.nombre || "Entreno 1"));
     iniciar.addEventListener("click", () => empezarEntreno(dia, g.nombre));
-    caja.appendChild(iniciar);
+    // v252: con un solo entreno en el día, el botón inferior del día («Empezar/Seguir entreno (x/y)») ya inicia este mismo entreno:
+    // la franja de arriba sobra. Se mantiene si hay varios entrenos (para elegir uno) o si aún no tiene series (aviso, sin botón inferior)
+    if (varios || !filasGrupo.length) caja.appendChild(iniciar);
     // Partes opcionales del entreno (Calentamiento, Parte principal…): si no hay ninguna, todo va seguido como siempre
     const seriesItem = id => id.startsWith("b:") ? delDia.filter(s => s.bloque_id === id.slice(2)) : delDia.filter(s => claveSerie(s) === id && (s.grupo || "") === g.nombre);
     const parteDe = id => { if (id.startsWith("v:")) return (bloquesVacios[dia.id + "|" + id.slice(2)] || {}).p || ""; const ss = seriesItem(id); return ss.length ? ss[0].seccion || "" : esperaParte[dia.id + "|" + id] || ""; };
@@ -8775,6 +8777,7 @@ function asaArrastreDia(el, caja, hermanos, alSoltar, nombre, zonas) {
     const pedir = () => { if (!pendiente) { pendiente = true; requestAnimationFrame(pintar); } };
     const mover = ev => { dedoY = ev.clientY; if (Math.abs(dedoY - ultY) > 2) { dir = dedoY > ultY ? 1 : -1; ultY = dedoY; } pedir(); };
     const fin = ev => {
+      if (!vivo) return;   // v252: una sola vez (pointerup/pointercancel y la pérdida de captura pueden llegar seguidos)
       vivo = false;
       zonaFin.classList.remove("arrastre-ej");
       clearTimeout(tZona); clearTimeout(tPl);
@@ -8801,6 +8804,7 @@ function asaArrastreDia(el, caja, hermanos, alSoltar, nombre, zonas) {
       nuevo.removeEventListener("pointermove", mover);
       nuevo.removeEventListener("pointerup", fin);
       nuevo.removeEventListener("pointercancel", fin);
+      nuevo.removeEventListener("lostpointercapture", perdido);
       el.classList.remove("arrastrando", "arrastre-fijo", "sobre-zona");
       el.style.transform = ""; el.style.marginBottom = "";
       objetivos.forEach(x => { x.style.transition = ""; x.style.transform = ""; });
@@ -8821,6 +8825,10 @@ function asaArrastreDia(el, caja, hermanos, alSoltar, nombre, zonas) {
     nuevo.addEventListener("pointermove", mover);
     nuevo.addEventListener("pointerup", fin);
     nuevo.addEventListener("pointercancel", fin);
+    // v252: si el navegador pierde el puntero sin pointerup ni pointercancel, se trata como una cancelación: todo vuelve a su sitio y
+    // lo desplegado al pasar se vuelve a plegar (antes el arrastre se quedaba a medias, con el hueco y las partes abiertas)
+    const perdido = () => fin({ type: "pointercancel" });
+    nuevo.addEventListener("lostpointercapture", perdido);
   });
   return nuevo;
 }
@@ -9267,7 +9275,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v251" + (BETA ? " beta" : "");
+const VERSION_APP = "v252" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

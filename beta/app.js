@@ -3439,7 +3439,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
   b.innerHTML = '<div class="bloque-cab"><button type="button" class="ej-nombre"></button><button type="button" class="quitar" aria-label="Quitar ejercicio">✕</button></div>' +
     '<ol class="series"></ol>' +
     '<form class="nueva-serie">' +
-      '<div class="ns-fila ns-principal"><label class="veces-l veces-izq" title="Cuántas series iguales"><input class="veces" inputmode="numeric" pattern="[0-9]*" value="1" aria-label="Cuántas series iguales" autocomplete="off" enterkeyhint="next"><span class="vz-et">series</span></label><span class="x-series">×</span>' + (dist
+      '<div class="ns-fila ns-principal"><label class="veces-l veces-izq" title="Cuántas series iguales"><span class="paso paso-veces"><button type="button" class="menos" aria-label="Una serie menos" tabindex="-1">−</button><input class="veces" inputmode="numeric" pattern="[0-9]*" value="1" aria-label="Cuántas series iguales" autocomplete="off" enterkeyhint="next"><button type="button" class="mas" aria-label="Una serie más" tabindex="-1">+</button></span><span class="vz-et">series</span></label><span class="x-series">×</span>' + (dist
         ? '<button type="button" class="modo-dist" aria-label="Cambiar entre metros y tiempo">m</button>' + paso('<input class="in-a" inputmode="decimal" placeholder="' + UD() + '" aria-label="Distancia en ' + UD() + '" autocomplete="off" enterkeyhint="next">') +
           paso('<input class="in-b" inputmode="decimal" placeholder="tiempo 3,40" aria-label="Tiempo (minutos y segundos)" autocomplete="off" enterkeyhint="next">')
         : mov ? paso('<input class="in-a" inputmode="numeric" pattern="[0-9]*" placeholder="reps" aria-label="Repeticiones (opcional si pones tiempo)" autocomplete="off" enterkeyhint="next">') +
@@ -3731,7 +3731,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
   if (modoDist) modoDist.addEventListener("click", () => { const x = fa.value; ponerPorTiempo(!porTiempo); fa.value = fb.value; fb.value = x; fa.focus(); pintarObjetivo(); });
   if (dist) { [fa, fb, fc].forEach(x => x.addEventListener("input", pintarObjetivo)); b.querySelector(".veces").addEventListener("input", pintarObjetivo); }
   // − y +: kg (o %) y reps en fuerza; metros y segundos en carrera y natación
-  b.querySelectorAll(".paso").forEach(p => {
+  b.querySelectorAll(".paso:not(.paso-veces)").forEach(p => {
     const inp = p.querySelector("input");
     p.querySelectorAll("button").forEach(x => x.addEventListener("click", () => {
       const clase = mov ? (inp === fa ? "reps" : "s") : !dist && inp === fb && enTiempo() ? "s" : inp === fa ? (dist ? (porTiempo ? "t" : "m") : (enPct ? "pct" : "kg")) : (dist ? (porTiempo ? "m" : "t") : "reps");
@@ -3739,6 +3739,19 @@ function bloque(dia, id, series, grupo, parte, copia) {
       pintarCalc();
     }));
   });
+  // v260 (MEJ-SEM-002): − y + del número de series iguales que se crearán (1–50). Solo cambian ese número: reps, carga, tiempo,
+  // distancia y descanso no se tocan. Al editar series ya guardadas, − no baja del número de series guardadas (bajar de ahí y pulsar OK
+  // las borraría; escribirlo a mano sigue funcionando como antes). El evento «input» repinta las filas por serie y el objetivo, como al escribir
+  { const pv = b.querySelector(".paso-veces");
+    if (pv) pv.querySelectorAll("button").forEach(x => x.addEventListener("click", e => {
+      e.preventDefault();
+      const guardadas = modoForm === "grupo" ? series.filter(s => !s.calentamiento).length : 0;
+      const minimo = Math.max(1, guardadas), actual = Math.min(50, Math.max(1, parseInt(vecesEl.value, 10) || 1));
+      const nuevo = Math.min(50, Math.max(minimo, actual + (x.classList.contains("mas") ? 1 : -1)));
+      if (nuevo === parseInt(vecesEl.value, 10)) return;
+      vecesEl.value = String(nuevo);
+      vecesEl.dispatchEvent(new Event("input", { bubbles: true }));
+    })); }
   // Objetivo orientativo mientras planificas: cuenta cuántas series añades y su recuperación
   function pintarObjetivo() {
     if (!calc) return;
@@ -9374,7 +9387,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v259" + (BETA ? " beta" : "");
+const VERSION_APP = "v260" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

@@ -2512,3 +2512,39 @@ dialog#dlgAviso { margin: auto; }
   font-family: var(--display); font-weight: 700; font-size: 16px; letter-spacing: 0.03em; text-transform: uppercase;
   color: var(--pc, var(--fg)); background: var(--card); border: 1px solid color-mix(in srgb, var(--pc, var(--fg)) 45%, var(--line)); border-radius: 6px; padding: 6px 8px;
 }
+
+/* v260 (MEJ-SEM-002): − y + junto al número de series (mismo patrón que los de reps y peso, más compacto) */
+.ns-fila .veces-l .paso-veces { flex: none; display: flex; align-items: stretch; }
+.ns-fila .veces-l .paso-veces .veces { width: 2.4em; border-radius: 0; }
+.ns-fila .veces-l .paso-veces button { width: 26px; font-size: 16px; }
+@media (max-width: 760px) { .ns-fila .veces-l .paso-veces button { width: 30px; } .ns-fila .veces-l .paso-veces .veces { width: 2.2em; } }
+/* v260: el −/+ del número de series se ve también en el móvil y en la semana de 7 columnas (allí reps y peso siguen sin −/+, como antes) */
+#vistaSemana .ns-principal .paso-veces button { display: block; }
+#vistaSemana .ns-principal .paso-veces .veces { border-radius: 0; }
+@media (max-width: 760px) { #vistaSemana .ns-principal .paso-veces button { height: auto; min-height: 40px; } }
+/* v260: en fuerza el número de series va en la cabecera del ejercicio (veces-cab). Allí el −/+ es compacto y, en el móvil, pasa a una
+   segunda línea bajo el nombre para no estrecharlo (solo mientras el formulario está abierto, que es cuando se ve) */
+.veces-cab .paso-veces { flex: none; display: flex; align-items: stretch; }
+.veces-cab .paso-veces .veces { width: 2.4em; border-radius: 0; }
+.veces-cab .paso-veces button { width: 28px; font-size: 16px; }
+@media (max-width: 760px) {
+  .bloque-cab:has(> .veces-cab) { flex-wrap: wrap; }
+  .bloque-cab > .veces-cab { order: 5; flex: 1 1 100%; justify-content: flex-start; margin: 4px 0 0; }
+  .veces-cab .paso-veces button { width: 34px; min-height: 40px; }
+  .veces-cab .paso-veces .veces { width: 2.4em; }
+}
+/* v260 (ajuste táctil): en el móvil cada botón −/+ del número de series tiene una zona táctil de 44 × 44 px; el símbolo sigue siendo
+   del mismo tamaño y la casilla del número se estrecha un poco para que todo quepa a 320 px */
+@media (max-width: 760px) {
+  #vistaSemana .bloque .paso-veces button, .veces-cab .paso-veces button, .ns-fila .veces-l .paso-veces button {
+    width: 44px; min-width: 44px; height: 44px; min-height: 44px; font-size: 18px; line-height: 1; padding: 0;
+  }
+  #vistaSemana .bloque .paso-veces { height: auto; }
+  #vistaSemana .bloque .paso-veces .veces { width: 2.1em; min-height: 44px; height: 44px; padding-left: 0; padding-right: 0; box-sizing: border-box; }
+}
+/* v260 (ajuste táctil): con botones de 44 px, en pantallas estrechas el número de series de carrera, natación y movilidad pasa a su
+   propia línea encima de distancia/tiempo/reps, para que esas casillas no se estrechen (en fuerza ya va en la cabecera del ejercicio) */
+@media (max-width: 400px) {
+  #vistaSemana .ns-principal:not(.fila-fuerza) { flex-wrap: wrap; row-gap: 6px; }
+  #vistaSemana .ns-principal:not(.fila-fuerza) > .veces-izq { flex: 1 1 100%; flex-direction: row; justify-content: flex-start; gap: 8px; margin-right: 0; }
+}

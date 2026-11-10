@@ -1921,7 +1921,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); box-sha
   #vistaSemana .g-toggle .g-res { flex: 1 1 auto; min-width: 0; }
   #vistaSemana .dia-cuerpo-in > .add-fila {
     min-width: 0;
-    width: 100%;
+    width: auto;   /* v252: con sus márgenes laterales (8–10 px), «100%» la hacía más ancha que la tarjeta y cortaba la columna derecha */
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   #vistaSemana .add-fila > .add-ej { min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
@@ -2128,44 +2128,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); box-sha
   letter-spacing: 0.06em;
 }
 
-/* Versión principal: superficies superiores sólidas; evita que el contenido se difumine detrás. */
-@media (max-width: 760px) {
-  #app > .cabecera,
-  #navSemana,
-  #vistaSemana .dia-nav:not([hidden]),
-  #organizarNav.organizar-nav,
-  #vistaSemana:not(.solo-dia) .dia:not(.plegado) > .dia-cab,
-  #vistaSemana .parte-caja:not(.p-plegada) > .parte-cab,
-  #vistaSemana .grupo:not(.g-plegado) > .grupo-cab,
-  #vistaSemana .parte-caja .grupo:not(.g-plegado) > .grupo-cab,
-  #vistaSemana .sem-resumenes > details[open] > summary,
-  #vistaEjercicios .cat-sec:not(.cerrada) > .sec-toggle,
-  #vistaMarcas .cat-sec:not(.cerrada) > .sec-toggle,
-  #vistaMarcas .informe-sec[open] > .informe-toggle,
-  #vistaListas .lista-sec:not(.cerrada) > .lista-cab,
-  #vistaPlan > .plan-sec:not(.cerrada) > .sec-toggle,
-  #vistaPlan > .plan-sec:not(.cerrada) > .sec-cab:has(> .sec-toggle) {
-    -webkit-backdrop-filter: none !important;
-    backdrop-filter: none !important;
-  }
-  #navSemana,
-  #vistaSemana .dia-nav:not([hidden]),
-  #organizarNav.organizar-nav { background: var(--bg) !important; }
-  #vistaSemana:not(.solo-dia) .dia:not(.plegado) > .dia-cab,
-  #vistaSemana .parte-caja:not(.p-plegada) > .parte-cab,
-  #vistaSemana .grupo:not(.g-plegado) > .grupo-cab,
-  #vistaSemana .parte-caja .grupo:not(.g-plegado) > .grupo-cab,
-  #vistaSemana .sem-resumenes > details[open] > summary,
-  #vistaEjercicios .cat-sec:not(.cerrada) > .sec-toggle,
-  #vistaMarcas .cat-sec:not(.cerrada) > .sec-toggle,
-  #vistaMarcas .informe-sec[open] > .informe-toggle,
-  #vistaListas .lista-sec:not(.cerrada) > .lista-cab,
-  #vistaPlan > .plan-sec:not(.cerrada) > .sec-toggle,
-  #vistaPlan > .plan-sec:not(.cerrada) > .sec-cab:has(> .sec-toggle) { background: var(--card) !important; }
-  #vistaSemana:not(.solo-dia) .dia.hoy:not(.plegado) > .dia-cab { background: var(--accent-soft) !important; }
-}
-
-/* La navegación superior nunca debe quedarse fija ni difuminar el texto que pasa detrás. */
+/* La barra de secciones de Entrenamientos queda siempre sólida y acompaña al contenido. */
 @media (max-width: 760px) {
   #navSemana, #vistaSemana .dia-nav, #organizarNav,
   #organizarNav.organizar-nav.plan-nav {
@@ -2179,7 +2142,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); box-sha
   }
 }
 
-/* PWA instalada en móvil: reserva el área del reloj/Isla dinámica para que no cubra la primera fila. */
+/* PWA instalada: separa la primera fila de la zona del reloj/Isla dinámica y mantiene la navegación nítida. */
 @media (max-width: 760px) and (display-mode: standalone) {
   body { padding-top: calc(env(safe-area-inset-top, 0px) + 8px) !important; }
   #navSemana, #vistaSemana .dia-nav, #organizarNav,
@@ -2387,58 +2350,201 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); box-sha
    Sus cabeceras móviles ya no son fijas; la cabecera del día queda intacta. */
 #vistaSemana .sem-resumenes > details.resumen-sem { overflow: clip; }
 
-/* Importación: una decisión principal y formulario en columna también en móvil. */
-#iaVistaCaja { display: flex; flex-direction: column; gap: 14px; }
-#iaVistaCaja[hidden] { display: none; }
-#iaVistaCaja .ia-tit { margin: 0; overflow-wrap: anywhere; }
-#iaVistaCaja .nota { margin: 0; }
-#iaVistaCaja .rutina-ses { padding: 14px; border: 1px solid var(--line); }
-#iaVistaCaja .rutina-parte-acordeon { list-style: none; margin: 10px 0; }
-#iaVistaCaja .rutina-parte-det > summary { font-weight: 700; color: var(--fg); padding: 8px 0; }
-#iaVistaCaja .rutina-ses > ul { padding-left: 0; }
-#iaVistaCaja .rutina-ses > ul > li:not(.rutina-parte-acordeon) { margin-left: 18px; }
-#iaDiaOp.ia-guardar { margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
-.ia-guardar > summary { padding: 16px; font-weight: 700; color: var(--accent); cursor: pointer; }
-.ia-guardar-campos, .ia-acciones { display: flex; flex-direction: column; gap: 14px; padding: 0 14px 14px; }
-.ia-guardar-campos > *, .ia-acciones > button { width: 100%; min-width: 0; box-sizing: border-box; margin: 0; }
-.ia-guardar-campos select, .ia-guardar-campos input { width: 100%; min-width: 0; box-sizing: border-box; }
-.ia-guardar-campos button, .ia-acciones button { white-space: normal; text-align: center; }
-.ia-otras > summary, .ia-indicaciones > summary { cursor: pointer; padding: 8px 0; color: var(--muted); }
-.ia-indicaciones > p { padding: 8px 0; }
-.ia-acciones { padding: 8px 0 0; }
+/* Compartir con amigos: vista previa de lo que se envía, caducidad y resolución de ejercicios (H1/H3/H4) */
+.comp-previa { display: flex; flex-direction: column; gap: 10px; }
+.comp-campo { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.comp-campo input, .comp-campo select, .comp-fila select { font: inherit; font-size: 15px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--fg); max-width: 100%; }
+.comp-check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.35; }
+.comp-check input { margin-top: 3px; flex: none; width: 18px; height: 18px; }
+.comp-check-t { display: flex; flex-direction: column; gap: 2px; }
+.comp-check-t small { color: var(--muted); font-size: 12.5px; }
+.comp-fila { display: flex; flex-direction: column; gap: 4px; margin: 0 0 10px; }
+.comp-fila .comp-et { margin: 0; font-size: 14px; font-weight: 600; }
+.comp-resumen { margin-bottom: 8px; }
+.comp-aviso { margin: 6px 0; padding: 8px 10px; border-left: 4px solid var(--accent, #d97706); background: var(--accent-soft); border-radius: 6px; font-size: 14px; line-height: 1.4; }
 
-/* Edición en la misma vista previa: tarjetas conservadas, controles bajo cada ejercicio. */
-#iaVista .ia-parte-editor { border: 1px solid var(--line); border-radius: 12px; padding: 10px; margin: 12px 0; background: var(--card); min-width: 0; }
-#iaVista .ia-parte-editor > summary { padding: 6px 0; font-weight: 700; cursor: pointer; overflow-wrap: anywhere; }
-.ia-editor-cab, .ia-editor-acciones { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.ia-editor-cab > b { flex: 1 1 180px; overflow-wrap: anywhere; }
-.ia-editor-acciones { margin: 4px 0 10px; }
-.ia-ej-editor { padding: 8px 0; border-top: 1px solid var(--line); min-width: 0; }
-.ia-ej-editor > p { margin: 0 0 10px; line-height: 1.5; overflow-wrap: anywhere; }
-.ia-editar-ej { width: 100%; white-space: normal; }
-.ia-ej-campos { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; }
-.ia-serie-editor { min-width: 0; margin: 0; border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
-.ia-serie-editor legend { font-weight: 700; padding: 0 5px; }
-.ia-serie-campos { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
-.ia-ej-campos .campo { min-width: 0; margin: 0; }
-.ia-ej-campos input:not([type="checkbox"]), .ia-ej-campos textarea { width: 100%; min-width: 0; box-sizing: border-box; }
-.ia-ej-campos .chk { margin: 10px 0; }
-@media(max-width: 350px) { .ia-serie-campos { grid-template-columns: minmax(0,1fr); } }
+/* INC-UI-007 (v245): con zoom de pellizco la barra inferior se ancla a la zona realmente visible (variables --vv-* que pone app.js solo
+   mientras html.ampliado). Solo en el diseño móvil, donde la barra es fixed; en escritorio (sticky) y a escala 1 no hay efecto. */
+@media (max-width: 760px) {
+  /* v246: capa de composición propia desde el principio, para no crearla a mitad del gesto de pellizco */
+  .tabbar { will-change: transform; }
+  html.ampliado .tabbar {
+    transform-origin: left bottom;
+    transform: translate(var(--vv-tx, 0px), var(--vv-ty, 0px)) scale(var(--vv-s, 1));
+  }
+}
 
-/* Los menús de nombres siempre están visibles, sin depender de hover. */
-#vistaSemana .dia-cab > .menu-btn, #vistaSemana .grupo-cab > .menu-btn, #vistaSemana .parte-cab > .menu-btn { opacity: 1 !important; visibility: visible !important; }
+/* INC-UI-006 (v247): aviso importante modal y centrado, con un solo botón «Aceptar» (reutiliza el estilo de la confirmación) */
+dialog#dlgAviso { margin: auto; }
+.conf-botones.conf-uno { grid-template-columns: 1fr; }
+.conf-ok { border: 0; background: var(--accent); color: #fff; }
+@media (prefers-color-scheme: dark) { .conf-ok { color: #08121b; } }
+.conf-ok:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
 
-/* Importación: acción accesible durante la edición, sin tocar la navegación general. */
-#dlgIA[open] { display:flex; flex-direction:column; overflow:hidden; }
-#dlgIA > .d-cab { flex-shrink:0; }
-#dlgIA > .d-cuerpo { min-height:0; overflow-y:auto; overscroll-behavior:contain; }
-#iaGuardarBarra { flex-shrink:0; padding:10px 16px; background:var(--card); border-top:1px solid var(--line); }
-#iaGuardarBarra[hidden] { display:none; }
-#iaGuardarBarra button { width:100%; white-space:normal; }
-#iaMensaje:empty { display:none; }
-#iaMensaje { margin:0 0 8px; max-height:100px; overflow-y:auto; }
-.ia-editor-acciones > .campo { flex:1 1 100%; min-width:0; }
-.ia-editor-acciones button { min-height:40px; }
-.ia-editor-acciones button:disabled { opacity:.4; cursor:default; }
-.ia-catalogo select, .ia-editor-acciones select { width:100%; min-width:0; }
-.ia-catalogo { margin:10px 0; overflow-wrap:anywhere; }
+/* FASE_03 (v249): asa para arrastrar partes enteras, en la cabecera de la parte */
+.parte-cab .asa { flex: none; opacity: 1; }
+@media (max-width: 760px) { .parte-cab .asa { width: 36px; height: 40px; } }
+
+/* INC-SEM-003 (v250): destino para soltar al final del entreno, después de su última parte. Ocupa siempre la misma altura
+   (no desplaza nada al empezar un arrastre); solo se ve resaltado mientras se arrastra un ejercicio o bloque */
+.fin-grupo { flex: none; box-sizing: border-box; height: 30px; margin: 2px 0; border: 2px dashed transparent; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center; font-size: 12px; color: transparent; user-select: none; pointer-events: none; }
+.arrastre-ej .fin-grupo { border-color: var(--accent); color: var(--muted, inherit); background: var(--accent-soft); }
+
+/* v252: el nombre del entrenamiento destaca algo más que partes (15 px) y ejercicios (15 px); mismo color, tipo y mayúsculas */
+#vistaSemana .grupo-cab .g-toggle .gn-txt { font-size: 19px; line-height: 1.2; letter-spacing: 0.05em; }
+@media (max-width: 760px) { #vistaSemana .grupo-cab .g-toggle .gn-txt { font-size: 18px; line-height: 1.2; } }
+
+/* v254 (sustituye el bloque v253): el entrenamiento es una jerarquía distinta de sus partes. Las partes usan azul, verde, ámbar,
+   violeta y cian (--p0…--p4) y el acento es verde; el entreno usa un azul noche/grafito (--entreno) que no está en esa paleta,
+   sobre fondo neutro muy suave, con un acento fino a la izquierda. Encabezado compacto: nombre a la izquierda (puede ocupar dos
+   líneas en el móvil) y progreso, ⋯ y ≡ en la misma fila, a la derecha, sin banda alta. «Ejercicios sueltos»: tono neutro. */
+:root { --entreno: #26394d; }
+@media (prefers-color-scheme: dark) { :root { --entreno: #c3cfdc; } }
+#vistaSemana .dia .grupo > .grupo-cab {   /* .dia: misma especificidad que «.grupo:not(.g-plegado) > .grupo-cab» del móvil, y va después */
+  background: color-mix(in srgb, var(--entreno) 6%, var(--card)) !important;
+  border-left: 3px solid color-mix(in srgb, var(--entreno) 75%, var(--card));
+  border-radius: 8px !important;
+  padding: 4px 6px 4px 6px;
+  box-sizing: border-box;
+}
+#vistaSemana .dia .grupo > .grupo-cab .g-nombre { color: var(--entreno); }
+#vistaSemana .dia .grupo > .grupo-cab .g-prog { color: var(--fg); opacity: 0.75; font-weight: 600; }
+#vistaSemana .dia .grupo.grupo-sueltos > .grupo-cab { background: var(--card) !important; border-left-color: var(--line); }
+#vistaSemana .dia .grupo.grupo-sueltos > .grupo-cab .g-nombre { color: var(--muted); }
+@media (max-width: 760px) {
+  #vistaSemana .grupo:not(.g-plegado):not(:has(.parte-caja:not(.p-plegada))) > .grupo-cab {
+    background: color-mix(in srgb, var(--entreno) 6%, var(--card)) !important; border-radius: 8px !important;
+  }
+  #vistaSemana .grupo.grupo-sueltos:not(.g-plegado):not(:has(.parte-caja:not(.p-plegada))) > .grupo-cab { background: var(--card) !important; }
+  /* Una sola fila: nombre (1fr, hasta dos o tres líneas) · progreso · ⋯ · ≡ (si lo hay) */
+  #vistaSemana .dia .grupo > .grupo-cab {
+    grid-template-columns: minmax(0, 1fr); grid-auto-flow: column; grid-auto-columns: auto;
+    gap: 2px 4px; padding: 2px 4px 2px 6px; align-items: center;
+  }
+  #vistaSemana .dia .grupo-cab .g-toggle { grid-column: 1; width: auto; min-height: 40px; padding-top: 4px; padding-bottom: 4px; }
+  #vistaSemana .dia .grupo-cab .g-toggle .gn-txt {   /* hasta dos líneas; si no cabe, «…» (el nombre completo sigue en title/aria y en ⋯ → Cambiar nombre) */
+    white-space: normal; text-overflow: clip; overflow-wrap: anywhere; letter-spacing: 0.03em;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+  }
+  #vistaSemana .dia .grupo-cab .g-prog { justify-self: end; }
+  #vistaSemana .dia .grupo-cab .menu-btn { min-width: 36px; height: 40px; }
+}
+
+/* v254: controles para añadir. Dentro de cada entreno, una sola acción compacta «+ Añadir» (abre un menú: ejercicio, bloque o
+   parte para ese entreno), alineada a la izquierda. En el día con entrenos, «+ Ejercicio suelto» y «+ Entreno», siempre a la vista */
+.add-fila > .add-ej[hidden] { display: none !important; }
+#vistaSemana .grupo > .add-grupo { display: flex; justify-content: flex-start; margin: 4px 0 6px; }
+#vistaSemana .grupo > .add-grupo > .add-en-grupo {
+  flex: none; width: auto; min-height: 36px; margin: 0; padding: 6px 14px; font-size: 14px; font-weight: 650;
+  color: var(--entreno); border: 1px solid color-mix(in srgb, var(--entreno) 30%, var(--line)); border-radius: 18px;
+  background: color-mix(in srgb, var(--entreno) 4%, var(--card));
+}
+#vistaSemana .dia-cuerpo-in > .add-fila.add-dia-general { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+#vistaSemana:not(.solo-dia) .dia-cuerpo-in > .add-fila.add-dia-general { flex-direction: row; }
+@media (max-width: 760px) {
+  #vistaSemana .grupo > .add-grupo > .add-en-grupo { min-height: 40px; font-size: 15px; }
+}
+
+/* v254: barra para cambiar de semana. Rango de fechas como elemento principal, entre sus flechas; «Hoy» y calendario agrupados a
+   la derecha. En el móvil todo cabe en una fila (también en 320 px y con rangos largos), con zonas táctiles de 44 px de alto */
+#navSemana .semana-info { min-width: 0; }
+#navSemana #rango { white-space: nowrap; }
+#navSemana #hoyBtn { margin-left: 4px; }
+@media (max-width: 760px) {
+  #navSemana { display: flex; justify-content: flex-start; gap: 6px; box-sizing: border-box; min-width: 0; }
+  #navSemana .nav-btn { height: 44px; }
+  #navSemana .nav-btn.flecha { width: 40px; min-width: 40px; }
+  #navSemana .semana-info { flex: 1 1 0; min-width: 0; text-align: center; }
+  #navSemana #rango { font-size: 17px; line-height: 1.2; }
+  #navSemana #relativa { font-size: 11px; letter-spacing: 0.05em; white-space: normal; line-height: 1.2; }
+  #navSemana #hoyBtn { padding: 0 12px; margin-left: 2px; }
+  #navSemana #calBtn { width: 44px; min-width: 44px; padding: 0; }
+}
+@media (max-width: 374px) {
+  #navSemana { gap: 4px; }
+  #navSemana .nav-btn.flecha { width: 36px; min-width: 36px; }
+  #navSemana #rango { font-size: 15px; }
+  #navSemana #hoyBtn { padding: 0 9px; font-size: 15px; }
+  #navSemana #calBtn { width: 40px; min-width: 40px; font-size: 17px; }
+}
+
+/* v255: en escritorio, la barra de semana se reparte en tres zonas iguales: [vacía] [‹ rango ›] [Hoy · calendario].
+   El selector ‹ rango › queda en el centro exacto; el rango tiene ancho fijo (11em, cabe «Dentro de 12 semanas»), así
+   que las flechas no se mueven al cambiar de semana ni al aparecer o desaparecer «Hoy». «Hoy» y el calendario forman un
+   grupo secundario al principio de la zona derecha (el calendario ocupa el sitio de «Hoy» cuando este está oculto).
+   No cambia qué hace cada botón ni cuándo se muestra «Hoy». La barra de progreso de debajo sigue a todo el ancho.
+   El móvil (≤ 760 px) no cambia. */
+@media (min-width: 761px) {
+  #navSemana { display: grid; grid-template-columns: minmax(0, 1fr) auto 11em auto minmax(0, 1fr); align-items: center; gap: 0 8px; }
+  #navSemana > * { grid-row: 1; }
+  #navSemana #antBtn { grid-column: 2; }
+  #navSemana .semana-info { grid-column: 3; min-width: 0; width: 11em; }
+  #navSemana #sigBtn { grid-column: 4; }
+  #navSemana #hoyBtn, #navSemana #calBtn { grid-column: 5; justify-self: start; }
+  #navSemana #hoyBtn { width: 64px; margin-left: 16px; padding: 0; }
+  #navSemana #calBtn { margin-left: 16px; }
+  #navSemana:has(> #hoyBtn:not([hidden])) #calBtn { margin-left: calc(16px + 64px + 6px); }
+}
+
+/* v257: aviso de entrenamiento sin series: nota compacta y secundaria bajo el encabezado (no es un botón; antes era el botón
+   «grupo-iniciar» desactivado, con aspecto de tarjeta verde grande). Texto atenuado con contraste suficiente en claro y oscuro */
+.grupo-aviso-vacio { margin: 4px 0 6px; padding: 2px 8px; font-size: 13px; line-height: 1.35; font-weight: 500; color: var(--muted); border-left: 2px solid var(--line); }
+
+/* v258: nombre del entreno editable tocando su texto. El texto ya no ocupa todo el ancho: la flecha y el espacio libre de la
+   cabecera siguen plegando/desplegando. Mientras se edita, el campo sustituye al nombre en la misma fila */
+#vistaSemana .grupo-cab .g-toggle .gn-txt.gn-editable { flex: 0 1 auto; cursor: text; text-decoration: underline dotted transparent; text-underline-offset: 4px; }
+@media (hover: hover) { #vistaSemana .grupo-cab .g-toggle .gn-txt.gn-editable:hover { text-decoration-color: currentColor; } }
+#vistaSemana .grupo-cab .g-toggle .flecha-dia { flex: none; min-width: 20px; }
+#vistaSemana .grupo-cab.gn-editando > .g-toggle { display: none !important; }
+#vistaSemana .grupo-cab > .gn-edit {
+  flex: 1 1 auto; min-width: 0; width: 100%; box-sizing: border-box; grid-column: 1; margin: 2px 0;
+  font-family: var(--display); font-weight: 700; font-size: 17px; letter-spacing: 0.03em; text-transform: uppercase;
+  color: var(--entreno); background: var(--card); border: 1px solid color-mix(in srgb, var(--entreno) 45%, var(--line)); border-radius: 6px; padding: 6px 8px;
+}
+
+/* v259: nombre de la parte editable tocando su texto, igual que el del entreno (la flecha y el espacio libre siguen plegando) */
+#vistaSemana .parte-cab .p-toggle .p-nombre.gn-editable { flex: 0 1 auto; cursor: text; text-decoration: underline dotted transparent; text-underline-offset: 4px; }
+@media (hover: hover) { #vistaSemana .parte-cab .p-toggle .p-nombre.gn-editable:hover { text-decoration-color: currentColor; } }
+#vistaSemana .parte-cab.gn-editando > .p-toggle { display: none !important; }
+#vistaSemana .parte-cab > .gn-edit {
+  flex: 1 1 auto; min-width: 0; width: 100%; box-sizing: border-box; margin: 2px 0;
+  font-family: var(--display); font-weight: 700; font-size: 16px; letter-spacing: 0.03em; text-transform: uppercase;
+  color: var(--pc, var(--fg)); background: var(--card); border: 1px solid color-mix(in srgb, var(--pc, var(--fg)) 45%, var(--line)); border-radius: 6px; padding: 6px 8px;
+}
+
+/* v260 (MEJ-SEM-002): − y + junto al número de series (mismo patrón que los de reps y peso, más compacto) */
+.ns-fila .veces-l .paso-veces { flex: none; display: flex; align-items: stretch; }
+.ns-fila .veces-l .paso-veces .veces { width: 2.4em; border-radius: 0; }
+.ns-fila .veces-l .paso-veces button { width: 26px; font-size: 16px; }
+@media (max-width: 760px) { .ns-fila .veces-l .paso-veces button { width: 30px; } .ns-fila .veces-l .paso-veces .veces { width: 2.2em; } }
+/* v260: el −/+ del número de series se ve también en el móvil y en la semana de 7 columnas (allí reps y peso siguen sin −/+, como antes) */
+#vistaSemana .ns-principal .paso-veces button { display: block; }
+#vistaSemana .ns-principal .paso-veces .veces { border-radius: 0; }
+@media (max-width: 760px) { #vistaSemana .ns-principal .paso-veces button { height: auto; min-height: 40px; } }
+/* v260: en fuerza el número de series va en la cabecera del ejercicio (veces-cab). Allí el −/+ es compacto y, en el móvil, pasa a una
+   segunda línea bajo el nombre para no estrecharlo (solo mientras el formulario está abierto, que es cuando se ve) */
+.veces-cab .paso-veces { flex: none; display: flex; align-items: stretch; }
+.veces-cab .paso-veces .veces { width: 2.4em; border-radius: 0; }
+.veces-cab .paso-veces button { width: 28px; font-size: 16px; }
+@media (max-width: 760px) {
+  .bloque-cab:has(> .veces-cab) { flex-wrap: wrap; }
+  .bloque-cab > .veces-cab { order: 5; flex: 1 1 100%; justify-content: flex-start; margin: 4px 0 0; }
+  .veces-cab .paso-veces button { width: 34px; min-height: 40px; }
+  .veces-cab .paso-veces .veces { width: 2.4em; }
+}
+/* v260 (ajuste táctil): en el móvil cada botón −/+ del número de series tiene una zona táctil de 44 × 44 px; el símbolo sigue siendo
+   del mismo tamaño y la casilla del número se estrecha un poco para que todo quepa a 320 px */
+@media (max-width: 760px) {
+  #vistaSemana .bloque .paso-veces button, .veces-cab .paso-veces button, .ns-fila .veces-l .paso-veces button {
+    width: 44px; min-width: 44px; height: 44px; min-height: 44px; font-size: 18px; line-height: 1; padding: 0;
+  }
+  #vistaSemana .bloque .paso-veces { height: auto; }
+  #vistaSemana .bloque .paso-veces .veces { width: 2.1em; min-height: 44px; height: 44px; padding-left: 0; padding-right: 0; box-sizing: border-box; }
+}
+/* v260 (ajuste táctil): con botones de 44 px, en pantallas estrechas el número de series de carrera, natación y movilidad pasa a su
+   propia línea encima de distancia/tiempo/reps, para que esas casillas no se estrechen (en fuerza ya va en la cabecera del ejercicio) */
+@media (max-width: 400px) {
+  #vistaSemana .ns-principal:not(.fila-fuerza) { flex-wrap: wrap; row-gap: 6px; }
+  #vistaSemana .ns-principal:not(.fila-fuerza) > .veces-izq { flex: 1 1 100%; flex-direction: row; justify-content: flex-start; gap: 8px; margin-right: 0; }
+}

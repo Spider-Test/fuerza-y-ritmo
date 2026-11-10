@@ -1700,7 +1700,9 @@ const dias = DIAS.map((_, i) => {
   dia.empezarEl.addEventListener("click", () => empezarEntreno(dia));
   ed.addEventListener("focus", () => col.classList.add("escribiendo"));
   ed.addEventListener("blur", () => col.classList.remove("escribiendo"));
-  col.querySelector(".add-ej").addEventListener("click", () => enQueEntreno(dia, "Añadir ejercicio", g => abrirSelector(dia, null, g)));
+  // v253: el «+ Ejercicio» general del día añade un ejercicio SUELTO (sin entreno, grupo ""), aunque el día ya tenga entrenos;
+  // para meterlo en un entreno está el «+ Ejercicio» de dentro de ese entreno (o se arrastra/mueve después)
+  col.querySelector(".add-ej").addEventListener("click", () => abrirSelector(dia, null, ""));
   col.querySelector(".add-bloque").addEventListener("click", () => enQueEntreno(dia, "Añadir bloque", g => abrirBloque(dia, g)));
   col.querySelector(".add-entreno").addEventListener("click", () => elegirNuevoEntreno(dia));
   col.querySelector(".add-parte-btn").addEventListener("click", () => enQueEntreno(dia, "Nueva parte", g => nuevaParte(dia, g)));
@@ -2026,7 +2028,7 @@ function renombrarParteLocal(fecha, grupo, viejo, n) {
 function enQueEntreno(dia, titulo, hacer) {
   const gs = [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].map(x => x.dataset.grupo || "");
   if (gs.length <= 1) { hacer(gs[0] || ""); return; }
-  abrirMenu(titulo, "¿En qué entreno?", gs.map(x => ({ texto: x || "Entreno 1", accion: () => hacer(x) })));
+  abrirMenu(titulo, "¿En qué entreno?", gs.map(x => ({ texto: x || (gs.some(Boolean) ? "Ejercicios sueltos" : "Entreno 1"), accion: () => hacer(x) })));   // v253: mismo nombre que su caja
 }
 // Pasar un ejercicio o bloque a otro entreno del mismo día, a la parte y el sitio donde se ha soltado
 function moverEntreEntrenos(dia, origen, clave, espera, destino, destParte, orden) {
@@ -2996,6 +2998,11 @@ function pintarDiaSinAncla(dia) {
   const conAsa = grupos.filter(g => g.nombre).length > 1 && grupos.length > 1;
   const varios = grupos.length > 1;   // varios entrenos el mismo día: cada uno en su caja, con su cabecera y sus botones
   dia.col.classList.toggle("varios-entrenos", varios);
+  // v253: si el día tiene algún entreno con nombre, lo que no tiene entreno (grupo "") se presenta como «Ejercicios sueltos»
+  // y el «+ Ejercicio» general del día lo dice («+ Ejercicio suelto»): no se mete en ningún entreno
+  const hayNombrados = grupos.some(x => x.nombre);
+  { const b = dia.col.querySelector(".dia-cuerpo-in > .add-fila > .add-ej:not(.add-bloque):not(.add-entreno):not(.add-parte-btn)");
+    if (b) { b.textContent = hayNombrados ? "+ Ejercicio suelto" : "+ Ejercicio"; b.setAttribute("aria-label", hayNombrados ? "Añadir un ejercicio suelto al día, sin meterlo en ningún entreno" : "Añadir un ejercicio al día"); } }
   grupos.forEach(g => {
     const caja = document.createElement("div");
     caja.className = "grupo";
@@ -3006,7 +3013,8 @@ function pintarDiaSinAncla(dia) {
       cab.innerHTML = true   // cualquier entreno con cabecera se puede plegar (también si es el único del día)
         ? '<button type="button" class="g-nombre g-toggle"><span class="flecha-dia" aria-hidden="true">▸</span><span class="gn-txt"></span><span class="g-res"></span></button><span class="g-prog"></span><button type="button" class="menu-btn">⋯</button>'
         : '<span class="g-nombre"><span class="gn-txt"></span></span><span class="g-prog"></span><button type="button" class="menu-btn">⋯</button>';
-      cab.querySelector(".gn-txt").textContent = g.nombre || "Entreno 1";
+      cab.querySelector(".gn-txt").textContent = g.nombre || (hayNombrados ? "Ejercicios sueltos" : "Entreno 1");
+      if (!g.nombre && hayNombrados) caja.classList.add("grupo-sueltos");   // v253
       const deG = delDia.filter(s => (s.grupo || "") === g.nombre);
       {   // plegar o desplegar el entreno tocando su nombre
         // Varios entrenos en el día: cada uno se pliega o despliega tocando su nombre (se recuerda en este dispositivo)
@@ -3287,7 +3295,7 @@ function pintarDiaSinAncla(dia) {
     });
     const pie = pieTotal(delDia.filter(s => (s.grupo || "") === g.nombre));
     if (pie) caja.appendChild(pie);
-    if (varios) {
+    if (varios || g.nombre) {   // v253: también con un solo entreno con nombre (el «+ Ejercicio» del día ya no entra en él)
       // Añadir directamente a este entreno
       const add = document.createElement("div");
       add.className = "add-fila add-grupo";
@@ -9072,7 +9080,7 @@ function empezarEntreno(dia, grupo) {
     if (grupos.length > 1) {
       abrirMenu("Elige un entrenamiento", "Los completados se pueden abrir para revisar lo registrado.", grupos.map(g => {
         const filas = seriesDelDia(dia.id).filter(s => (s.grupo || "") === g), hechas = filas.filter(hecha).length;
-        return { texto: (hechas === filas.length ? "✓ " : "▶ ") + (g || "Entreno 1") +
+        return { texto: (hechas === filas.length ? "✓ " : "▶ ") + (g || (grupos.some(Boolean) ? "Ejercicios sueltos" : "Entreno 1")) +
           (hechas === filas.length ? " · Completado" : hechas ? " · Seguir (" + hechas + "/" + filas.length + ")" : " · Empezar"),
           accion: () => empezarEntreno(dia, g) };
       }));
@@ -9275,7 +9283,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v252" + (BETA ? " beta" : "");
+const VERSION_APP = "v253" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

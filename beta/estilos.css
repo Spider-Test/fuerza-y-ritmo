@@ -2394,3 +2394,23 @@ dialog#dlgAviso { margin: auto; }
 /* v252: el nombre del entrenamiento destaca algo más que partes (15 px) y ejercicios (15 px); mismo color, tipo y mayúsculas */
 #vistaSemana .grupo-cab .g-toggle .gn-txt { font-size: 19px; line-height: 1.2; letter-spacing: 0.05em; }
 @media (max-width: 760px) { #vistaSemana .grupo-cab .g-toggle .gn-txt { font-size: 18px; line-height: 1.2; } }
+
+/* v253: el encabezado de cada entrenamiento es una sección propia: fondo verde suave (opaco, también cuando queda fijo
+   arriba en el móvil), acento verde a la izquierda y el nombre destacado. Progreso y controles siguen en su sitio
+   (a la derecha en PC; en la segunda línea en el móvil). Los «Ejercicios sueltos» (sin entreno) usan un tono neutro. */
+#vistaSemana .dia .grupo > .grupo-cab {   /* .dia: misma especificidad que «.grupo:not(.g-plegado) > .grupo-cab» del móvil, y va después */
+  background: color-mix(in srgb, var(--accent) 10%, var(--card)) !important;
+  border-left: 4px solid var(--accent);
+  border-radius: 10px !important;
+  padding: 8px 10px 8px 8px;
+  box-sizing: border-box;
+}
+#vistaSemana .dia .grupo > .grupo-cab .g-prog { color: var(--fg); opacity: 0.8; font-weight: 600; }
+#vistaSemana .dia .grupo.grupo-sueltos > .grupo-cab { background: var(--card) !important; border-left-color: var(--line); }
+#vistaSemana .dia .grupo.grupo-sueltos > .grupo-cab .gn-txt { color: var(--muted); }
+@media (max-width: 760px) {
+  #vistaSemana .grupo:not(.g-plegado):not(:has(.parte-caja:not(.p-plegada))) > .grupo-cab {
+    background: color-mix(in srgb, var(--accent) 10%, var(--card)) !important; border-radius: 10px !important;
+  }
+  #vistaSemana .grupo.grupo-sueltos:not(.g-plegado):not(:has(.parte-caja:not(.p-plegada))) > .grupo-cab { background: var(--card) !important; }
+}

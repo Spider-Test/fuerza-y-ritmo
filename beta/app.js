@@ -115,6 +115,18 @@ function actualizarVisibilidadUsuarios() {
     if (lista) lista.textContent = "";
     if (n) n.textContent = "";
   }
+  // INC-AJUSTES-002 (v248): el panel administrativo de Sugerencias sigue la misma regla. El ENVÍO de sugerencias (#sugPie, #sugAyuda, #dlgSug) es otra función y no depende de esto.
+  const sug = document.getElementById("bloqueSug");
+  if (sug) {
+    sug.inert = !permitido;
+    if (!permitido) {
+      sug.hidden = true;
+      const l = document.getElementById("listaSug"), c = sug.querySelector(".sec-n");
+      if (l) l.textContent = "";
+      if (c) c.textContent = "";
+      try { sugerencias = []; } catch { /* aún no inicializada: no hay nada que vaciar */ }
+    }
+  }
 }
 let db = leer("datos-v2") || { entrenos: leer("entrenos-v1") || {} };
 Object.keys(TABLAS).forEach(t => { db[t] = Object.assign(Object.create(null), db[t] || {}); });
@@ -8920,7 +8932,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v247" + (BETA ? " beta" : "");
+const VERSION_APP = "v248" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";
@@ -8961,7 +8973,7 @@ async function enviarSugerencias() {
 }
 // Para el administrador: lista en Plan con leídas y no leídas
 async function cargarSugerencias() {
-  if (!(perfil && perfil.es_admin)) return;
+  if (!esAdminAprobado()) return;
   try {
     const r = await api("/rest/v1/sugerencias?select=id,email,tipo,texto,version,agente,creado,leida&borrada=is.false&order=creado.desc&limit=200");
     if (r.ok) sugerencias = await r.json();
@@ -8969,9 +8981,8 @@ async function cargarSugerencias() {
   pintarSugerencias();
 }
 function pintarSugerencias() {
-  const admin = !!(perfil && perfil.es_admin);
-  $("bloqueSug").hidden = !admin;
-  if (!admin) return;
+  actualizarVisibilidadUsuarios();   // oculta (hidden + inert) y vacía el panel si no es administrador aprobado; aplicarGrupoPlan lo repite
+  if (!esAdminAprobado()) return;
   const noLeidas = sugerencias.filter(s => !s.leida).length;
   contadorSec("sugerencias", noLeidas ? noLeidas + " sin leer" : sugerencias.length);
   const cont = $("listaSug");

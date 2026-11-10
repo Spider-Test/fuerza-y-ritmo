@@ -2875,8 +2875,7 @@ let arrastreActivo = false;   // mientras se arrastra con ≡, la sincronizació
 function pintarBloques(forzar) {
   if (arrastreActivo || (!forzar && escribiendoSerie())) { repintarLuego = true; return; }
   repintarLuego = false;
-  dias.forEach(pintarDia);
-  pintarProgresoSemana();
+  dias.forEach(pintarDia);   // v256: sin barra verde de progreso semanal (el resumen semanal y cada día siguen mostrando su progreso)
 }
 // Último ejercicio o bloque tocado (para mantenerlo quieto en pantalla al repintar)
 let ultimoTocado = null;
@@ -8944,13 +8943,6 @@ function pintarCabDia(dia) {
     (variasSesiones ? "✓ Día completado · Ver entrenamientos" : "✓ Completado · Ver entrenamiento") :
     variasSesiones ? "▶ Elegir entrenamiento" : h ? "▶ Seguir entreno (" + h + "/" + del.length + ")" : "▶ Empezar entreno";
 }
-function pintarProgresoSemana() {
-  const ini = iso(lunesVista()), fin = iso(sumarDias(lunesVista(), 7));
-  const del = seriesVivas().filter(s => s.fecha >= ini && s.fecha < fin), h = del.filter(hecha).length;
-  $("semBarra").hidden = !del.length || !!diaAbierto;
-  $("semBarra").firstElementChild.style.width = del.length ? (h / del.length * 100).toFixed(1) + "%" : "0";
-  $("semBarra").title = h + " de " + del.length + " series hechas esta semana";
-}
 
 // ---------- Deshacer, deslizar y récords ----------
 let deshacerPend = null, timerAviso = null;
@@ -9298,7 +9290,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v255" + (BETA ? " beta" : "");
+const VERSION_APP = "v256" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

@@ -2502,3 +2502,13 @@ dialog#dlgAviso { margin: auto; }
   font-family: var(--display); font-weight: 700; font-size: 17px; letter-spacing: 0.03em; text-transform: uppercase;
   color: var(--entreno); background: var(--card); border: 1px solid color-mix(in srgb, var(--entreno) 45%, var(--line)); border-radius: 6px; padding: 6px 8px;
 }
+
+/* v259: nombre de la parte editable tocando su texto, igual que el del entreno (la flecha y el espacio libre siguen plegando) */
+#vistaSemana .parte-cab .p-toggle .p-nombre.gn-editable { flex: 0 1 auto; cursor: text; text-decoration: underline dotted transparent; text-underline-offset: 4px; }
+@media (hover: hover) { #vistaSemana .parte-cab .p-toggle .p-nombre.gn-editable:hover { text-decoration-color: currentColor; } }
+#vistaSemana .parte-cab.gn-editando > .p-toggle { display: none !important; }
+#vistaSemana .parte-cab > .gn-edit {
+  flex: 1 1 auto; min-width: 0; width: 100%; box-sizing: border-box; margin: 2px 0;
+  font-family: var(--display); font-weight: 700; font-size: 16px; letter-spacing: 0.03em; text-transform: uppercase;
+  color: var(--pc, var(--fg)); background: var(--card); border: 1px solid color-mix(in srgb, var(--pc, var(--fg)) 45%, var(--line)); border-radius: 6px; padding: 6px 8px;
+}

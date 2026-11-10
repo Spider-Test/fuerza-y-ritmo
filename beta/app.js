@@ -1942,6 +1942,15 @@ function cabeceraParte(dia, grupo, p, color, nNombradas, partes, seriesItem) {
   cab.dataset.parte = p.nombre;
   cab.innerHTML = '<button type="button" class="p-toggle"><span class="flecha-dia" aria-hidden="true">▸</span><span class="p-nombre"></span></button><span class="g-prog"></span><button type="button" class="menu-btn">⋯</button>';
   cab.querySelector(".p-nombre").textContent = p.nombre;
+  {   // v259: tocar el TEXTO del nombre lo edita ahí mismo; la flecha y el resto de la cabecera siguen plegando
+    const txt = cab.querySelector(".p-nombre"), tg = cab.querySelector(".p-toggle");
+    const editar = () => editarNombreEnLinea(cab, p.nombre, "Nombre de la parte", v => renombrarParte(dia, grupo, p.nombre, v));
+    txt.classList.add("gn-editable");
+    txt.title = "Toca el nombre para cambiarlo";
+    txt.addEventListener("click", e => { e.stopPropagation(); e.preventDefault(); editar(); });
+    tg.setAttribute("aria-keyshortcuts", "F2");
+    tg.addEventListener("keydown", e => { if (e.key === "F2") { e.preventDefault(); editar(); } });
+  }
   const ss = p.ids.flatMap(seriesItem);
   cab.querySelector(".g-prog").textContent = ss.length ? ss.filter(hecha).length + "/" + ss.length : p.ids.length ? "" : "vacía";
   cab.querySelector(".menu-btn").setAttribute("aria-label", "Opciones de la parte " + p.nombre);
@@ -1957,7 +1966,7 @@ function cabeceraParte(dia, grupo, p, color, nNombradas, partes, seriesItem) {
     };
     const plegada = !!(cab.parentElement && cab.parentElement.classList.contains("p-plegada"));   // desplegada, «＋ Añadir» ya está a la vista en la propia parte
     abrirMenu(p.nombre, ss.length ? ss.length + (ss.length === 1 ? " serie" : " series") : "Parte vacía", [
-      { texto: "Cambiar nombre de la parte…", accion: () => cambiarNombreParte(dia, grupo, p.nombre) },
+      // v259: el nombre de la parte se cambia tocando su texto (o F2 con la cabecera enfocada), no desde este menú
       plegada && { texto: "+ Ejercicio en esta parte", accion: () => abrirSelector(dia, null, grupo, p.nombre) },
       ...(() => { const otros = [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].map(x => x.dataset.grupo || "").filter(x => x !== grupo);
         return otros.length ? [{ texto: "Mover la parte a otro entreno…", accion: () => abrirMenu("¿A qué entreno?", "La parte «" + p.nombre + "» pasa entera, con sus ejercicios y bloques", otros.map(x => ({ texto: x || "Entreno 1", accion: () => moverParteAEntreno(dia, grupo, p.nombre, x, ss) }))) }] : []; })(),
@@ -2357,28 +2366,30 @@ function renombrarEntreno(dia, grupo, nombre) {
   guardarSesiones(); guardarVacios(); escribir("grupos-plegados-v1", gruposPlegados); persistir(); pintarDia(dia);
   setEstado("Entrenamiento renombrado: " + nombre);
 }
-// v258: edición directa del nombre del entreno en su cabecera
-function editarNombreEnLinea(dia, grupo, cab) {
+// v258/v259: edición directa de un nombre en su cabecera (entreno o parte). Intro o salir del campo guarda; Esc cancela; vacío o igual
+// no cambia nada. El campo sustituye al nombre en la misma fila; guardar() hace las validaciones (duplicados, cambios en el día…)
+function editarNombreEnLinea(cab, valor, etiqueta, guardar) {
   if (cab.querySelector(".gn-edit")) return;
   const inp = document.createElement("input");
-  inp.className = "gn-edit"; inp.value = grupo; inp.placeholder = grupo || "Nombre del entrenamiento";
+  inp.className = "gn-edit"; inp.value = valor; inp.placeholder = valor || etiqueta;
   inp.autocomplete = "off"; inp.enterKeyHint = "done"; inp.spellcheck = false;
-  inp.setAttribute("aria-label", "Nombre del entrenamiento: Intro guarda, Esc cancela");
+  inp.setAttribute("aria-label", etiqueta + ": Intro guarda, Esc cancela");
   cab.classList.add("gn-editando");
   cab.prepend(inp);
   inp.focus(); inp.select();
   let hecho = false;
-  const terminar = guardar => {
+  const terminar = ok => {
     if (hecho) return;
     hecho = true;
     const v = inp.value.trim();
     cab.classList.remove("gn-editando");
     inp.remove();
-    if (guardar && v && v !== grupo) renombrarEntreno(dia, grupo, v);
+    if (ok && v && v !== valor) guardar(v);
   };
   inp.addEventListener("keydown", e => {
+    e.stopPropagation();
     if (e.key === "Enter") { e.preventDefault(); terminar(true); }
-    else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); terminar(false); }
+    else if (e.key === "Escape") { e.preventDefault(); terminar(false); }
   });
   inp.addEventListener("blur", () => terminar(true));
   ["click", "pointerdown"].forEach(t => inp.addEventListener(t, e => e.stopPropagation()));
@@ -2389,13 +2400,31 @@ async function cambiarNombreParte(dia, grupo, parte) {
   try { comprobarSesion(ctx); } catch { return; }
   if (!nombre || nombre === parte) return;
   if (dia.id !== fecha) { setEstado("El día ha cambiado. Abre la parte de nuevo.",true); return; }
+  renombrarParte(dia, grupo, parte, nombre);
+}
+// v259: cambia el nombre de una parte conservando sus series, su orden, su plegado (también el de sus letras) y su posición respecto a
+// los ejercicios sueltos. Lo usan la edición directa y cambiarNombreParte
+function renombrarParte(dia, grupo, parte, nombre) {
+  const fecha = dia.id;
+  nombre = (nombre || "").trim();
+  if (!nombre || nombre === parte) return;
   const nombres = nombresPartes(fecha,grupo).concat((enEspera[fecha] || []).filter(id => (esperaGrupo[fecha+"|"+id] || "") === grupo).map(id => esperaParte[fecha+"|"+id] || ""));
   if (!nombres.includes(parte)) { setEstado("La parte ha cambiado. Abre su menú de nuevo.",true); return; }
   if (nombres.some(p => p !== parte && norm(p) === norm(nombre))) { setEstado("Ya existe esa parte en este entrenamiento. Elige otro nombre.",true); return; }
+  const k = fecha + "|" + grupo, eraVacia = (partesVacias[k] || []).includes(parte);
   seriesDelDia(fecha).filter(s => (s.grupo || "") === grupo && (s.seccion || "") === parte).forEach(s => cambiar("series",{ ...s,seccion:nombre },true));
   renombrarParteLocal(fecha,grupo,parte,nombre);
+  // v259: una parte con series no pasa a la lista de partes vacías por cambiarle el nombre (renombrarParteLocal la añadía)
+  if (!eraVacia && partesVacias[k]) { partesVacias[k] = partesVacias[k].filter(x => x !== nombre); if (!partesVacias[k].length) delete partesVacias[k]; }
+  // v259: las anclas que apuntan a ejercicios de esta parte («ejercicio§parte») siguen apuntando a ellos con el nombre nuevo
+  const cambiaClave = c => typeof c === "string" && c.endsWith("§" + parte) ? c.slice(0, -parte.length) + nombre : c;
+  if (posPartes[k]) Object.keys(posPartes[k]).forEach(x => { posPartes[k][x] = cambiaClave(posPartes[k][x]); });
+  Object.keys(esperaAntes).forEach(e => { if (e.startsWith(fecha + "|") && (esperaGrupo[e] || "") === grupo) esperaAntes[e] = cambiaClave(esperaAntes[e]); });
+  escribir("espera-antes-v1", esperaAntes); guardarSesiones();
   const a = "p|"+fecha+"|"+grupo+"|"+parte, b = "p|"+fecha+"|"+grupo+"|"+nombre;
   if (Object.hasOwn(gruposPlegados,a)) { gruposPlegados[b]=gruposPlegados[a]; delete gruposPlegados[a]; }
+  const la = "l|"+fecha+"|"+grupo+"|"+parte+"|";   // plegado de sus grupos de letras (A, B…)
+  Object.keys(gruposPlegados).forEach(x => { if (x.startsWith(la)) { gruposPlegados["l|"+fecha+"|"+grupo+"|"+nombre+"|"+x.slice(la.length)] = gruposPlegados[x]; delete gruposPlegados[x]; } });
   escribir("grupos-plegados-v1",gruposPlegados); persistir(); pintarDia(dia);
   setEstado("Parte renombrada: " + nombre);
 }
@@ -2404,7 +2433,7 @@ function menuGrupo(dia, grupo) {
   const series = seriesDelDia(dia.id).filter(s => (s.grupo || "") === grupo);
   const nGrupos = gruposDelDia(dia.id).length;   // v249: cuentan también los entrenos vacíos
   abrirMenu(grupo || "Entrenamiento", resumenItems(itemsDe(series)), [
-    { texto: "Cambiar nombre del entrenamiento…", accion: () => cambiarNombreEntreno(dia, grupo) },
+    // v259: el nombre se cambia tocando su texto en la cabecera (o F2 con la cabecera enfocada), no desde este menú
     // v258: sin «▶ Iniciar solo este entrenamiento»: lo cubren la franja «▶ Empezar/Seguir este entrenamiento» (varios entrenos) y el
     // botón inferior del día (uno solo)
     { texto: "📅 Mover a otro día…", accion: () => elegirDiaDestino(lunesDe(deIso(dia.id)), "¿A qué día muevo «" + (grupo || "Entreno 1") + "»?", f => moverADia(dia, grupo, f)) },
@@ -3086,7 +3115,11 @@ function pintarDiaSinAncla(dia) {
         const txt = cab.querySelector(".gn-txt");
         txt.classList.add("gn-editable");
         txt.title = "Toca el nombre para cambiarlo";
-        txt.addEventListener("click", e => { e.stopPropagation(); e.preventDefault(); editarNombreEnLinea(dia, g.nombre, cab); });
+        const editar = () => editarNombreEnLinea(cab, g.nombre, "Nombre del entrenamiento", v => renombrarEntreno(dia, g.nombre, v));
+        txt.addEventListener("click", e => { e.stopPropagation(); e.preventDefault(); editar(); });
+        const tg = cab.querySelector(".g-toggle");
+        tg.setAttribute("aria-keyshortcuts", "F2");
+        tg.addEventListener("keydown", e => { if (e.key === "F2") { e.preventDefault(); editar(); } });
       }
       if (conAsa) cab.appendChild(asaArrastre(caja, () => [...cont.querySelectorAll(":scope > .grupo")], n => fijarOrden("g", dia.id, n.map(x => x.dataset.grupo || ""), n.map(x => seriesDeGrupo(dia.id, x.dataset.grupo || "")), "Sesión movida"), "el entreno " + (g.nombre || (hayNombrados ? "Ejercicios sueltos" : "Entreno 1"))));
       caja.appendChild(cab);
@@ -9341,7 +9374,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v258" + (BETA ? " beta" : "");
+const VERSION_APP = "v259" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

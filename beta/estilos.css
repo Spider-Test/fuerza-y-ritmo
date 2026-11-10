@@ -2395,22 +2395,76 @@ dialog#dlgAviso { margin: auto; }
 #vistaSemana .grupo-cab .g-toggle .gn-txt { font-size: 19px; line-height: 1.2; letter-spacing: 0.05em; }
 @media (max-width: 760px) { #vistaSemana .grupo-cab .g-toggle .gn-txt { font-size: 18px; line-height: 1.2; } }
 
-/* v253: el encabezado de cada entrenamiento es una sección propia: fondo verde suave (opaco, también cuando queda fijo
-   arriba en el móvil), acento verde a la izquierda y el nombre destacado. Progreso y controles siguen en su sitio
-   (a la derecha en PC; en la segunda línea en el móvil). Los «Ejercicios sueltos» (sin entreno) usan un tono neutro. */
+/* v254 (sustituye el bloque v253): el entrenamiento es una jerarquía distinta de sus partes. Las partes usan azul, verde, ámbar,
+   violeta y cian (--p0…--p4) y el acento es verde; el entreno usa un azul noche/grafito (--entreno) que no está en esa paleta,
+   sobre fondo neutro muy suave, con un acento fino a la izquierda. Encabezado compacto: nombre a la izquierda (puede ocupar dos
+   líneas en el móvil) y progreso, ⋯ y ≡ en la misma fila, a la derecha, sin banda alta. «Ejercicios sueltos»: tono neutro. */
+:root { --entreno: #26394d; }
+@media (prefers-color-scheme: dark) { :root { --entreno: #c3cfdc; } }
 #vistaSemana .dia .grupo > .grupo-cab {   /* .dia: misma especificidad que «.grupo:not(.g-plegado) > .grupo-cab» del móvil, y va después */
-  background: color-mix(in srgb, var(--accent) 10%, var(--card)) !important;
-  border-left: 4px solid var(--accent);
-  border-radius: 10px !important;
-  padding: 8px 10px 8px 8px;
+  background: color-mix(in srgb, var(--entreno) 6%, var(--card)) !important;
+  border-left: 3px solid color-mix(in srgb, var(--entreno) 75%, var(--card));
+  border-radius: 8px !important;
+  padding: 4px 6px 4px 6px;
   box-sizing: border-box;
 }
-#vistaSemana .dia .grupo > .grupo-cab .g-prog { color: var(--fg); opacity: 0.8; font-weight: 600; }
+#vistaSemana .dia .grupo > .grupo-cab .g-nombre { color: var(--entreno); }
+#vistaSemana .dia .grupo > .grupo-cab .g-prog { color: var(--fg); opacity: 0.75; font-weight: 600; }
 #vistaSemana .dia .grupo.grupo-sueltos > .grupo-cab { background: var(--card) !important; border-left-color: var(--line); }
-#vistaSemana .dia .grupo.grupo-sueltos > .grupo-cab .gn-txt { color: var(--muted); }
+#vistaSemana .dia .grupo.grupo-sueltos > .grupo-cab .g-nombre { color: var(--muted); }
 @media (max-width: 760px) {
   #vistaSemana .grupo:not(.g-plegado):not(:has(.parte-caja:not(.p-plegada))) > .grupo-cab {
-    background: color-mix(in srgb, var(--accent) 10%, var(--card)) !important; border-radius: 10px !important;
+    background: color-mix(in srgb, var(--entreno) 6%, var(--card)) !important; border-radius: 8px !important;
   }
   #vistaSemana .grupo.grupo-sueltos:not(.g-plegado):not(:has(.parte-caja:not(.p-plegada))) > .grupo-cab { background: var(--card) !important; }
+  /* Una sola fila: nombre (1fr, hasta dos o tres líneas) · progreso · ⋯ · ≡ (si lo hay) */
+  #vistaSemana .dia .grupo > .grupo-cab {
+    grid-template-columns: minmax(0, 1fr); grid-auto-flow: column; grid-auto-columns: auto;
+    gap: 2px 4px; padding: 2px 4px 2px 6px; align-items: center;
+  }
+  #vistaSemana .dia .grupo-cab .g-toggle { grid-column: 1; width: auto; min-height: 40px; padding-top: 4px; padding-bottom: 4px; }
+  #vistaSemana .dia .grupo-cab .g-toggle .gn-txt {   /* hasta dos líneas; si no cabe, «…» (el nombre completo sigue en title/aria y en ⋯ → Cambiar nombre) */
+    white-space: normal; text-overflow: clip; overflow-wrap: anywhere; letter-spacing: 0.03em;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+  }
+  #vistaSemana .dia .grupo-cab .g-prog { justify-self: end; }
+  #vistaSemana .dia .grupo-cab .menu-btn { min-width: 36px; height: 40px; }
+}
+
+/* v254: controles para añadir. Dentro de cada entreno, una sola acción compacta «+ Añadir» (abre un menú: ejercicio, bloque o
+   parte para ese entreno), alineada a la izquierda. En el día con entrenos, «+ Ejercicio suelto» y «+ Entreno», siempre a la vista */
+.add-fila > .add-ej[hidden] { display: none !important; }
+#vistaSemana .grupo > .add-grupo { display: flex; justify-content: flex-start; margin: 4px 0 6px; }
+#vistaSemana .grupo > .add-grupo > .add-en-grupo {
+  flex: none; width: auto; min-height: 36px; margin: 0; padding: 6px 14px; font-size: 14px; font-weight: 650;
+  color: var(--entreno); border: 1px solid color-mix(in srgb, var(--entreno) 30%, var(--line)); border-radius: 18px;
+  background: color-mix(in srgb, var(--entreno) 4%, var(--card));
+}
+#vistaSemana .dia-cuerpo-in > .add-fila.add-dia-general { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+#vistaSemana:not(.solo-dia) .dia-cuerpo-in > .add-fila.add-dia-general { flex-direction: row; }
+@media (max-width: 760px) {
+  #vistaSemana .grupo > .add-grupo > .add-en-grupo { min-height: 40px; font-size: 15px; }
+}
+
+/* v254: barra para cambiar de semana. Rango de fechas como elemento principal, entre sus flechas; «Hoy» y calendario agrupados a
+   la derecha. En el móvil todo cabe en una fila (también en 320 px y con rangos largos), con zonas táctiles de 44 px de alto */
+#navSemana .semana-info { min-width: 0; }
+#navSemana #rango { white-space: nowrap; }
+#navSemana #hoyBtn { margin-left: 4px; }
+@media (max-width: 760px) {
+  #navSemana { display: flex; justify-content: flex-start; gap: 6px; box-sizing: border-box; min-width: 0; }
+  #navSemana .nav-btn { height: 44px; }
+  #navSemana .nav-btn.flecha { width: 40px; min-width: 40px; }
+  #navSemana .semana-info { flex: 1 1 0; min-width: 0; text-align: center; }
+  #navSemana #rango { font-size: 17px; line-height: 1.2; }
+  #navSemana #relativa { font-size: 11px; letter-spacing: 0.05em; white-space: normal; line-height: 1.2; }
+  #navSemana #hoyBtn { padding: 0 12px; margin-left: 2px; }
+  #navSemana #calBtn { width: 44px; min-width: 44px; padding: 0; }
+}
+@media (max-width: 374px) {
+  #navSemana { gap: 4px; }
+  #navSemana .nav-btn.flecha { width: 36px; min-width: 36px; }
+  #navSemana #rango { font-size: 15px; }
+  #navSemana #hoyBtn { padding: 0 9px; font-size: 15px; }
+  #navSemana #calBtn { width: 40px; min-width: 40px; font-size: 17px; }
 }

@@ -1924,6 +1924,8 @@ function menuDia(dia) {
     (series.length || aTexto(html).trim()) && { texto: "Copiar día", accion: () => copiar(titulo, html, series, "dia") },
     hayItemsCopiados() && { texto: "📋 Pegar «" + porta.nombre + "» en este día", accion: () => pegar(dia) },
     { texto: "Añadir plantilla…", accion: () => elegirPlantilla("Añadir plantilla al " + titulo, p => aplicarPlantilla(dia, p)) },
+    // v254: con entrenos con nombre el día ya no muestra «+ Bloque»; el bloque SIN entreno sigue disponible aquí, con su destino explícito
+    dia.col.querySelector(".dia-cuerpo-in > .add-fila.add-dia-general") && { texto: "+ Bloque suelto (sin entreno)…", accion: () => abrirBloque(dia, "") },
     series.filter(s => !s.bloque_id).length > 1 && { texto: "Seleccionar series para agrupar en bloque", accion: () => empezarSelSeries(dia) },
     series.length && { texto: "Guardar en una lista de entrenamientos…", accion: () => guardarEnLista(series[0].grupo || "Entrenamiento", series) },
     series.length && { texto: "Guardar ejercicios como plantilla…", accion: () => guardarPlantilla(series[0].grupo || "Entrenamiento", series) },
@@ -2987,7 +2989,7 @@ function pintarDiaSinAncla(dia) {
     const g = grupo(gn), antes = esperaAntes[dia.id + "|" + id], i = antes ? g.ids.indexOf(antes) : -1;
     if (i >= 0) g.ids.splice(i, 0, id); else g.ids.push(id);
   });
-  plegarAdd(dia.col.querySelector(".dia-cuerpo-in > .add-fila"), !grupos.length && !Object.keys(bloquesVacios).some(k => k.startsWith(dia.id + "|")));
+  const diaVacio = !grupos.length && !Object.keys(bloquesVacios).some(k => k.startsWith(dia.id + "|"));
   Object.keys(bloquesVacios).forEach(k => {
     if (!k.startsWith(dia.id + "|")) return;
     const bv = bloquesVacios[k], g = grupo(bv.g || "");
@@ -3001,8 +3003,17 @@ function pintarDiaSinAncla(dia) {
   // v253: si el día tiene algún entreno con nombre, lo que no tiene entreno (grupo "") se presenta como «Ejercicios sueltos»
   // y el «+ Ejercicio» general del día lo dice («+ Ejercicio suelto»): no se mete en ningún entreno
   const hayNombrados = grupos.some(x => x.nombre);
-  { const b = dia.col.querySelector(".dia-cuerpo-in > .add-fila > .add-ej:not(.add-bloque):not(.add-entreno):not(.add-parte-btn)");
-    if (b) { b.textContent = hayNombrados ? "+ Ejercicio suelto" : "+ Ejercicio"; b.setAttribute("aria-label", hayNombrados ? "Añadir un ejercicio suelto al día, sin meterlo en ningún entreno" : "Añadir un ejercicio al día"); } }
+  { const fila = dia.col.querySelector(".dia-cuerpo-in > .add-fila");
+    const b = fila && fila.querySelector(":scope > .add-ej:not(.add-bloque):not(.add-entreno):not(.add-parte-btn)");
+    if (b) { b.textContent = hayNombrados ? "+ Ejercicio suelto" : "+ Ejercicio"; b.setAttribute("aria-label", hayNombrados ? "Añadir un ejercicio suelto al día, sin meterlo en ningún entreno" : "Añadir un ejercicio al día"); }
+    // v254: con entrenos con nombre, «+ Bloque» y «+ Parte» están en el «+ Añadir» de cada entreno: el día solo muestra, siempre a la
+    // vista y sin otro «＋ Añadir» plegable, «+ Ejercicio suelto» y «+ Entreno» (el bloque suelto queda en el menú ⋯ del día).
+    // Sin entrenos con nombre, como antes: los cuatro botones, plegados en «＋ Añadir» si el día ya tiene algo
+    if (fila) {
+      fila.querySelectorAll(":scope > .add-bloque, :scope > .add-parte-btn").forEach(x => { x.hidden = hayNombrados; });
+      fila.classList.toggle("add-dia-general", hayNombrados);
+      plegarAdd(fila, hayNombrados || diaVacio);
+    } }
   grupos.forEach(g => {
     const caja = document.createElement("div");
     caja.className = "grupo";
@@ -3014,6 +3025,7 @@ function pintarDiaSinAncla(dia) {
         ? '<button type="button" class="g-nombre g-toggle"><span class="flecha-dia" aria-hidden="true">▸</span><span class="gn-txt"></span><span class="g-res"></span></button><span class="g-prog"></span><button type="button" class="menu-btn">⋯</button>'
         : '<span class="g-nombre"><span class="gn-txt"></span></span><span class="g-prog"></span><button type="button" class="menu-btn">⋯</button>';
       cab.querySelector(".gn-txt").textContent = g.nombre || (hayNombrados ? "Ejercicios sueltos" : "Entreno 1");
+      if (g.nombre) cab.querySelector(".g-toggle").title = g.nombre;   // v254: en el móvil el nombre se limita a dos líneas
       if (!g.nombre && hayNombrados) caja.classList.add("grupo-sueltos");   // v253
       const deG = delDia.filter(s => (s.grupo || "") === g.nombre);
       {   // plegar o desplegar el entreno tocando su nombre
@@ -3295,17 +3307,20 @@ function pintarDiaSinAncla(dia) {
     });
     const pie = pieTotal(delDia.filter(s => (s.grupo || "") === g.nombre));
     if (pie) caja.appendChild(pie);
-    if (varios || g.nombre) {   // v253: también con un solo entreno con nombre (el «+ Ejercicio» del día ya no entra en él)
-      // Añadir directamente a este entreno
+    if (g.nombre) {   // v253: también con un solo entreno con nombre (el «+ Ejercicio» del día ya no entra en él)
+      // v254: una sola acción compacta «+ Añadir» que pregunta qué añadir (ejercicio, bloque o parte) a ESTE entreno. Los «Ejercicios
+      // sueltos» no la llevan: para ellos está el «+ Ejercicio suelto» del día
       const add = document.createElement("div");
       add.className = "add-fila add-grupo";
-      add.innerHTML = '<button type="button" class="add-ej">+ Ejercicio</button><button type="button" class="add-ej">+ Bloque</button><button type="button" class="add-ej">+ Parte</button>';
-      add.children[2].addEventListener("click", () => nuevaParte(dia, g.nombre));
-      add.children[0].setAttribute("aria-label", "Añadir un ejercicio a " + (g.nombre || "Entreno 1"));
-      add.children[1].setAttribute("aria-label", "Añadir un bloque a " + (g.nombre || "Entreno 1"));
-      add.children[0].addEventListener("click", () => abrirSelector(dia, null, g.nombre));
-      add.children[1].addEventListener("click", () => abrirBloque(dia, g.nombre));
-      plegarAdd(add, !g.ids.length);
+      add.innerHTML = '<button type="button" class="add-ej add-en-grupo">+ Añadir</button>';
+      const b = add.firstElementChild;
+      b.setAttribute("aria-label", "Añadir al entreno " + g.nombre + ": ejercicio, bloque o parte");
+      b.setAttribute("aria-haspopup", "dialog");
+      b.addEventListener("click", () => abrirMenu("Añadir a «" + g.nombre + "»", "", [
+        { texto: "+ Ejercicio", accion: () => abrirSelector(dia, null, g.nombre) },
+        { texto: "+ Bloque", accion: () => abrirBloque(dia, g.nombre) },
+        { texto: "+ Parte", accion: () => nuevaParte(dia, g.nombre) }
+      ]));
       caja.appendChild(add);
     }
     cont.appendChild(caja);
@@ -9283,7 +9298,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v253" + (BETA ? " beta" : "");
+const VERSION_APP = "v254" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

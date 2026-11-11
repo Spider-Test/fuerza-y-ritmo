@@ -1,4 +1,4 @@
-// OFICIAL (candidata v263 = oficial v262 publicada + mejoras de uso en el móvil; base: beta v260 validada): conectada EXCLUSIVAMENTE al proyecto de PRODUCCIÓN.
+// OFICIAL (candidata v264 = oficial v263 publicada + mejoras de uso en el móvil; base: beta v260 validada): conectada EXCLUSIVAMENTE al proyecto de PRODUCCIÓN.
 const SUPA = "https://qtdvehlewuuljolistlw.supabase.co";
 const CLAVE = "sb_publishable_1W_oC99R9By_5iGixwbEqw_rogdHvoQ";   // clave pública (la misma de la oficial v238); los datos los protegen las reglas de las tablas
 // Barrera de arranque de la OFICIAL (inversa de la de la beta): solo funciona contra producción y fuera de /beta/. Si alguien copia estos
@@ -9768,7 +9768,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v263" + (BETA ? " beta" : "");
+const VERSION_APP = "v264" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

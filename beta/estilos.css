@@ -2763,3 +2763,21 @@ dialog#dlgAviso { margin: auto; }
 /* v272: repeticiones de cada ejercicio en el editor de bloque (solo series pendientes) */
 .eb-reps { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 14px; font-weight: 600; color: var(--muted); }
 .eb-reps input { width: 76px; min-height: 44px; text-align: center; font-size: 18px; font-weight: 700; color: var(--fg); }
+
+/* v274: selector Ejercicios | Calentamientos y editor de calentamientos guardados */
+.ej-sel { margin: 0 0 10px; }
+.cal-acciones { display: flex; gap: 8px; flex-wrap: wrap; }
+.cal-items { display: flex; flex-direction: column; gap: 10px; }
+.cal-item { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; }
+.cal-item-cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.cal-item-n { overflow-wrap: anywhere; }
+.cal-item-bs { display: inline-flex; gap: 6px; }
+.cal-fila { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cal-n { flex: none; width: 18px; text-align: center; color: var(--muted); font-weight: 700; }
+.cal-fila input { flex: 1 1 64px; min-width: 56px; min-height: 44px; text-align: center; }
+.cal-fila .c-nota { flex: 2 1 120px; text-align: left; }
+.cal-fila .c-desc { flex: 1 1 72px; }
+.cal-fila button { flex: none; min-width: 44px; min-height: 44px; }
+.cal-item > .add-ej { min-height: 44px; margin: 0; }
+#calCuerpo > .add-ej { min-height: 44px; margin: 0; }
+#calCuerpo > .d-botones { position: sticky; bottom: 0; z-index: 1; margin: 0 -16px -18px; padding: 10px 16px; background: var(--card); border-top: 1px solid var(--line); }

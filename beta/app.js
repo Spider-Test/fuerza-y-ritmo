@@ -2066,17 +2066,23 @@ async function guardarPlantilla(nombreSugerido, series) {
 // ningún campo nuevo y las versiones anteriores lo tratan como una plantilla más (con las series ya marcadas). Se aplica como COPIA: series nuevas (otros id) al
 // principio del entreno, con la marca de calentamiento (fuera de récords y estadísticas); editarlas no toca la plantilla y borrar la plantilla no toca las copias.
 const esPlantillaCalentamiento = p => { const it = (p && p.items) || []; return it.length > 0 && it.every(x => !x.bloque && Array.isArray(x.series) && x.series.length > 0 && x.series.every(v => !!v.calentamiento)); };
-const seriesCalentamientoDe = (fecha, grupo) => seriesDelDia(fecha).filter(s => (s.grupo || "") === grupo && esSerieCalentamiento(s)).sort((a, b) => a.orden - b.orden);
-async function guardarCalentamiento(dia, grupo) {
-  const todas = seriesCalentamientoDe(dia.id, grupo), warm = todas.filter(s => !s.bloque_id);
-  if (!warm.length) { setEstado("Este entreno no tiene calentamiento suelto que guardar", true); return; }
-  const nombre = await pedirNombre("Guardar calentamiento", "Calentamiento" + (grupo ? " · " + grupo : ""), "Se guarda una copia ordenada con sus ejercicios, repeticiones, tiempo, distancia, peso, descansos y notas. Si ya tienes un calentamiento guardado con este nombre, se reemplaza.");
+// v274: «Guardar calentamiento…» está en el menú ⋯ de cada PARTE cuyo nombre contiene «calentamiento» (o «warm-up»): guarda solo lo de esa parte; si hay varias, cada una por separado
+async function guardarCalentamientoParte(dia, grupo, parte) {
+  const todas = seriesDelDia(dia.id).filter(s => (s.grupo || "") === grupo && (s.seccion || "") === parte).sort((a, b) => a.orden - b.orden);
+  const warm = todas.filter(s => !s.bloque_id), deBloque = todas.filter(s => s.bloque_id);
+  if (!warm.length) { avisoImportante("No se puede guardar", deBloque.length ? "Esta parte solo tiene bloques y el calentamiento guardado no admite bloques. Añade ejercicios sueltos a la parte para guardarla." : "Esta parte no tiene ejercicios con series que guardar."); return; }
+  if (deBloque.length) {
+    const nB = new Set(deBloque.map(x => x.bloque_id)).size, nEj = new Set(warm.map(x => x.ejercicio_id)).size;
+    const ok = await confirmar("Esta parte incluye bloques", "El calentamiento guardado no admite bloques. Se guardarán las " + warm.length + (warm.length === 1 ? " serie suelta" : " series sueltas") + " (" + nEj + (nEj === 1 ? " ejercicio" : " ejercicios") + ") y NO se guardarán " + nB + (nB === 1 ? " bloque" : " bloques") + " con " + deBloque.length + (deBloque.length === 1 ? " serie" : " series") + ". La parte no cambia.", "Guardar sin los bloques");
+    if (!ok) return;
+  }
+  const nombre = await pedirNombre("Guardar calentamiento", parte + (grupo ? " · " + grupo : ""), "Se guarda una copia ordenada de esta parte con sus ejercicios, repeticiones, tiempo, distancia, peso, descansos y notas. Si ya tienes un calentamiento guardado con este nombre, se reemplaza.");
   if (!nombre) return;
   const existe = vivos("plantillas").find(p => norm(p.nombre) === norm(nombre));
   if (existe && !esPlantillaCalentamiento(existe)) { setEstado("Ya hay una plantilla normal con ese nombre; elige otro para el calentamiento", true); return; }
   const items = itemsDe(warm).map(it => ({ ejercicio_id: it.ejercicio_id, seccion: "Calentamiento", series: it.series.map(v => ({ ...v, calentamiento: true })) }));
   cambiar("plantillas", { id: existe ? existe.id : nuevoId(), nombre, items, borrado: false });
-  setEstado("Calentamiento «" + nombre + "» guardado (" + contarSeries(items) + " series)" + (todas.length > warm.length ? " · las " + (todas.length - warm.length) + " de bloques no se incluyen" : ""));
+  setEstado("Calentamiento «" + nombre + "» guardado (" + contarSeries(items) + " series)" + (deBloque.length ? " · sin los bloques de la parte" : ""));
 }
 function elegirCalentamientoGuardado(dia, grupo) {
   const ps = vivos("plantillas").filter(esPlantillaCalentamiento).sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
@@ -2105,6 +2111,119 @@ function aplicarCalentamiento(dia, grupo, p) {
   guardarSesiones(); persistir(); pintarDia(dia);
   avisoDeshacer("Calentamiento «" + p.nombre + "» añadido (" + creadas.length + (creadas.length === 1 ? " serie" : " series") + ")", creadas.map(x => ["series", { ...x, borrado: true }]));
 }
+// ---------- v274: pestaña Ejercicios › Calentamientos (ver, editar, renombrar y eliminar los calentamientos guardados) ----------
+// Misma fuente que Entrenos › Plantillas (db.plantillas): no hay duplicados; aquí solo se muestran las que son calentamiento (esPlantillaCalentamiento). Editar o eliminar una
+// plantilla NO toca las copias ya añadidas a los entrenos (son series propias con otros id).
+let ejVista = "ejercicios", ce = null;
+function mostrarEjVista(v) {
+  ejVista = v;
+  $("ejSel").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.ejv === v)));
+  $("ejPanelEj").hidden = v !== "ejercicios"; $("ejPanelCal").hidden = v !== "calentamientos";
+  if (v === "calentamientos") pintarCalentamientos();
+}
+$("ejSel").addEventListener("click", ev => { const b = ev.target.closest("button[data-ejv]"); if (b) mostrarEjVista(b.dataset.ejv); });
+$("filtroCal").addEventListener("input", () => pintarCalentamientos());
+function pintarCalentamientos() {
+  const lp = $("listaCalent"), q = norm($("filtroCal").value.trim());
+  lp.textContent = "";
+  const todas = vivos("plantillas").filter(esPlantillaCalentamiento).sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+  const ps = q ? todas.filter(p => norm(p.nombre).includes(q) || norm(nombresItems(p.items || [])).includes(q)) : todas;
+  if (!ps.length) { const v = document.createElement("p"); v.className = "vacio-lista"; v.textContent = todas.length ? "Ningún calentamiento tiene «" + $("filtroCal").value.trim() + "» en su nombre ni en sus ejercicios." : "Aún no tienes calentamientos guardados. Guárdalos desde ⋯ de una parte «Calentamiento» → «Guardar calentamiento…»."; lp.appendChild(v); return; }
+  ps.forEach(p => lp.appendChild(tarjeta(p.nombre, [resumenItems(p.items || []), nombresItems(p.items || [])], () => abrirCalentamiento(p.id))));
+}
+const CAL_CAMPOS = { fuerza: ["reps", "peso", "tiempo"], movilidad: ["reps", "tiempo"], carrera: ["distancia", "tiempo"], natacion: ["distancia", "tiempo"] };
+function abrirCalentamiento(id) {
+  const p = db.plantillas[id];
+  if (!p || p.borrado || !esPlantillaCalentamiento(p)) return;
+  ce = { id, items: copiaJson(p.items || []) };
+  pintarCalentamientoDlg();
+  $("dlgCalent").showModal();
+}
+function pintarCalentamientoDlg() {
+  const p = db.plantillas[ce.id], cuerpo = $("calCuerpo");
+  $("calTit").textContent = p.nombre;
+  cuerpo.textContent = "";
+  const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt !== undefined) x.textContent = txt; return x; };
+  const boton = (txt, cls, fn, aria) => { const b = el("button", cls, txt); b.type = "button"; if (aria) b.setAttribute("aria-label", aria); b.addEventListener("click", fn); return b; };
+  const fila0 = el("div", "cal-acciones");
+  fila0.append(boton("Cambiar nombre…", "nav-btn", async () => {
+    const n = await pedirNombre("Nombre del calentamiento", p.nombre, "Solo cambia el nombre de la plantilla guardada; las copias ya añadidas a tus entrenos no cambian.");
+    if (!n || n === p.nombre) return;
+    const otra = vivos("plantillas").find(x => x.id !== p.id && norm(x.nombre) === norm(n));
+    if (otra) { setEstado("Ya hay una plantilla con ese nombre; elige otro", true); return; }
+    cambiar("plantillas", { ...db.plantillas[ce.id], nombre: n }); pintarCalentamientoDlg(); pintarCalentamientos();
+  }), boton("Eliminar…", "nav-btn peligro-op", async () => {
+    const ok = await confirmar("¿Eliminar este calentamiento?", "Se elimina «" + p.nombre + "» de tus plantillas (también de Entrenos › Plantillas). Las copias que ya añadiste a tus entrenos no cambian ni se borran.", "Eliminar");
+    if (!ok) return;
+    const antes = { ...db.plantillas[ce.id] };
+    cambiar("plantillas", { ...antes, borrado: true }); $("dlgCalent").close(); pintarCalentamientos(); pintarPlan();
+    avisoDeshacer("Calentamiento «" + p.nombre + "» eliminado (las copias en tus entrenos siguen)", [["plantillas", antes]]);
+  }));
+  cuerpo.appendChild(fila0);
+  cuerpo.appendChild(el("p", "eb-nota", "Edita ejercicios y valores y pulsa «Guardar cambios». Las copias ya añadidas a tus entrenos no cambian. Todas las series se guardan como calentamiento (fuera de récords y estadísticas)."));
+  const lista = el("div", "cal-items");
+  ce.items.forEach((it, i) => {
+    const tipo = tipoDe(it.ejercicio_id), campos = CAL_CAMPOS[tipo] || ["reps", "tiempo"];
+    const caja = el("section", "cal-item");
+    const cab = el("div", "cal-item-cab");
+    cab.appendChild(el("strong", "cal-item-n", nombreEj(it.ejercicio_id) || "Ejercicio eliminado"));
+    const bs = el("span", "cal-item-bs");
+    const subir = boton("↑", "nav-btn eb-paso", () => { leerCalentamientoCampos(); [ce.items[i - 1], ce.items[i]] = [ce.items[i], ce.items[i - 1]]; pintarCalentamientoDlg(); }, "Subir " + nombreEj(it.ejercicio_id)); subir.disabled = i === 0;
+    const bajar = boton("↓", "nav-btn eb-paso", () => { leerCalentamientoCampos(); [ce.items[i + 1], ce.items[i]] = [ce.items[i], ce.items[i + 1]]; pintarCalentamientoDlg(); }, "Bajar " + nombreEj(it.ejercicio_id)); bajar.disabled = i === ce.items.length - 1;
+    const quitar = boton("Quitar", "nav-btn", () => { leerCalentamientoCampos(); ce.items.splice(i, 1); pintarCalentamientoDlg(); }, "Quitar " + nombreEj(it.ejercicio_id) + " del calentamiento"); quitar.disabled = ce.items.length <= 1;
+    bs.append(subir, bajar, quitar); cab.appendChild(bs); caja.appendChild(cab);
+    it.series.forEach((v, j) => {
+      const fila = el("div", "cal-fila"); fila.appendChild(el("span", "cal-n", String(j + 1)));
+      const campo = (cls, ph, val, aria, leer) => { const inp = document.createElement("input"); inp.className = cls; inp.placeholder = ph; inp.value = val; inp.autocomplete = "off"; inp.setAttribute("aria-label", aria + " de la serie " + (j + 1) + " de " + nombreEj(it.ejercicio_id)); inp.dataset.i = i; inp.dataset.j = j; inp.dataset.c = cls; return inp; };
+      const tiempoTxt = t => n0(t) > 0 ? ((tipo === "carrera" || tipo === "natacion") ? fmtTiempo(t) : (n0(t) < 60 ? String(n0(t)) : fmtTiempo(t))) : "";
+      if (campos.includes("reps")) fila.appendChild(campo("c-reps", v.max_reps ? "máx" : "reps", n0(v.reps) > 0 ? String(n0(v.reps)) : "", "Repeticiones"));
+      if (campos.includes("distancia")) fila.appendChild(campo("c-dist", enKm() ? "km" : "m", distCampo(v.distancia), "Distancia"));
+      if (campos.includes("peso")) fila.appendChild(campo("c-peso", "kg", n0(v.peso) > 0 ? num(v.peso) : "", "Peso en kg"));
+      if (campos.includes("tiempo")) fila.appendChild(campo("c-tiempo", (tipo === "carrera" || tipo === "natacion") ? "tiempo" : "seg", tiempoTxt(v.tiempo), "Tiempo"));
+      fila.appendChild(campo("c-desc", "desc.", recTexto(v), "Descanso"));
+      fila.appendChild(campo("c-nota", "nota", v.nota || "", "Nota"));
+      const q = boton("✕", "nav-btn", () => { leerCalentamientoCampos(); it.series.splice(j, 1); pintarCalentamientoDlg(); }, "Quitar la serie " + (j + 1) + " de " + nombreEj(it.ejercicio_id)); q.disabled = it.series.length <= 1;
+      fila.appendChild(q); caja.appendChild(fila);
+    });
+    caja.appendChild(boton("+ Serie", "add-ej", () => { leerCalentamientoCampos(); it.series.push({ ...copiaJson(it.series[it.series.length - 1]) }); pintarCalentamientoDlg(); }));
+    lista.appendChild(caja);
+  });
+  cuerpo.appendChild(lista);
+  cuerpo.appendChild(boton("+ Añadir ejercicio", "add-ej", () => { leerCalentamientoCampos(); abrirSelector(null, id => { if (!ce) return; const t = tipoDe(id); ce.items.push({ ejercicio_id: id, seccion: "Calentamiento", series: [t === "carrera" || t === "natacion" ? { tiempo: 300, calentamiento: true } : { reps: 10, calentamiento: true }] }); pintarCalentamientoDlg(); }, "", ""); }));
+  cuerpo.appendChild(el("p", "aviso eb-err", ""));
+  const bt = el("div", "d-botones");
+  bt.append(boton("Cancelar", "nav-btn", () => $("dlgCalent").close()), boton("Guardar cambios", "anadir", () => guardarCalentamientoEditado()));
+  cuerpo.appendChild(bt);
+}
+// Vuelca lo escrito en los campos al borrador (antes de repintar) y devuelve el primer error de formato, o ""
+function leerCalentamientoCampos() {
+  let err = "";
+  $("calCuerpo").querySelectorAll("input[data-c]").forEach(inp => {
+    const it = ce.items[+inp.dataset.i], v = it && it.series[+inp.dataset.j]; if (!v) return;
+    const c = inp.dataset.c, t = inp.value.trim(), tipo = tipoDe(it.ejercicio_id), nom = nombreEj(it.ejercicio_id) + " serie " + (+inp.dataset.j + 1);
+    if (c === "c-reps") { if (/^\s*(m[aá]x|amrap|fallo)/i.test(t)) { v.reps = 0; v.max_reps = true; } else if (!t) { v.reps = 0; } else if (/^\d+$/.test(t) && +t > 0 && +t <= 999) { v.reps = +t; v.max_reps = false; } else if (!err) err = nom + ": repeticiones no válidas"; }
+    else if (c === "c-dist") { v.distancia = leerDist(t); if (t && !(v.distancia > 0) && !err) err = nom + ": distancia no válida"; }
+    else if (c === "c-peso") { const x = parseFloat(t.replace(",", ".")); if (!t) v.peso = 0; else if (x >= 0) v.peso = x; else if (!err) err = nom + ": peso no válido"; }
+    else if (c === "c-tiempo") { const x = (tipo === "carrera" || tipo === "natacion") ? leerTiempo(t) : leerSegs(t); if (!t) v.tiempo = 0; else if (!isNaN(x) && x >= 0) v.tiempo = x; else if (!err) err = nom + ": tiempo no válido"; }
+    else if (c === "c-desc") { const r = leerRecuperacion(t); if (!t || /^\s*0\s*$/.test(t)) { v.descanso = 0; v.rec_dist = 0; } else if (r) { v.descanso = r.descanso; v.rec_dist = r.rec_dist; } else if (!err) err = nom + ": descanso no válido (prueba 30, 1,30 o 300 m)"; }
+    else if (c === "c-nota") v.nota = t.slice(0, 300);
+  });
+  return err;
+}
+function guardarCalentamientoEditado() {
+  const err = leerCalentamientoCampos(), msg = document.querySelector("#calCuerpo .eb-err");
+  const p = db.plantillas[ce.id];
+  if (!p || p.borrado) { $("dlgCalent").close(); setEstado("Este calentamiento ya no existe", true); return; }
+  let falta = "";
+  ce.items.forEach(it => it.series.forEach((v, j) => { if (!falta && !(n0(v.reps) > 0 || v.max_reps || n0(v.tiempo) > 0 || n0(v.distancia) > 0)) falta = nombreEj(it.ejercicio_id) + " serie " + (j + 1) + ": pon repeticiones, tiempo o distancia"; }));
+  if (err || falta) { msg.textContent = err || falta; return; }
+  const items = ce.items.map(it => ({ ...it, seccion: "Calentamiento", series: it.series.map(v => ({ ...v, calentamiento: true })) }));
+  const antes = { ...p };
+  cambiar("plantillas", { ...p, items });
+  $("dlgCalent").close(); pintarCalentamientos(); pintarPlan();
+  avisoDeshacer("Calentamiento «" + p.nombre + "» actualizado · las copias ya añadidas no cambian", [["plantillas", antes]]);
+}
+$("dlgCalent").addEventListener("close", () => { ce = null; });
 function aplicarPlantilla(dia, p) {
   pegarItems(dia.id, p.items, p.nombre);
   persistir();
@@ -2221,6 +2340,7 @@ function cabeceraParte(dia, grupo, p, color, nNombradas, partes, seriesItem) {
     abrirMenu(p.nombre, ss.length ? ss.length + (ss.length === 1 ? " serie" : " series") : "Parte vacía", [
       // v262: el nombre de la parte vuelve a cambiarse aquí, con una acción deliberada (antes, v259, tocando su texto en la cabecera)
       { texto: "Cambiar nombre", accion: () => cambiarNombreParte(dia, grupo, p.nombre) },
+      esNombreCalentamiento(p.nombre) && ss.length > 0 && { texto: "Guardar calentamiento…", accion: () => guardarCalentamientoParte(dia, grupo, p.nombre) },   // v274
       // v262: sin «+ Ejercicio en esta parte» en este menú; se añade con los botones visibles de la propia parte
       ...(() => { const otros = [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].map(x => x.dataset.grupo || "").filter(x => x !== grupo);
         return otros.length ? [{ texto: "Mover la parte a otro entreno…", accion: () => abrirMenu("¿A qué entreno?", "La parte «" + p.nombre + "» pasa entera, con sus ejercicios y bloques", otros.map(x => ({ texto: x || "Entreno 1", accion: () => moverParteAEntreno(dia, grupo, p.nombre, x, ss) }))) }] : []; })(),
@@ -2688,7 +2808,6 @@ function menuGrupo(dia, grupo) {
     series.length && { texto: "Copiar entreno", accion: () => copiar(grupo || "Entreno 1", "", series, "entreno") },
     series.length && { texto: "Guardar en una lista de entrenamientos…", accion: () => guardarEnLista(grupo || "Entrenamiento", series) },
     { texto: "Añadir calentamiento guardado…", accion: () => elegirCalentamientoGuardado(dia, grupo) },   // v273
-    series.some(s => !s.bloque_id && esSerieCalentamiento(s)) && { texto: "Guardar calentamiento…", accion: () => guardarCalentamiento(dia, grupo) },   // v273
     { texto: "Guardar como plantilla…", accion: () => guardarPlantilla(grupo, series) },
     { texto: "Compartir con un amigo…", accion: () => compartir(grupo, itemsDe(series, true)) },
     { texto: "Quitar este entreno del día", peligro: true, confirmar: series.length ? "Pulsa otra vez: se borran " + series.length + " series" : "Pulsa otra vez para quitarlo", accion: () => {
@@ -7503,7 +7622,7 @@ function pintarTodo() {
   pintarBloques(false);
   pintarBanda();
   pintarResumen();
-  if (!$("vistaEjercicios").hidden) pintarCatalogo();
+  if (!$("vistaEjercicios").hidden) { pintarCatalogo(); if (ejVista === "calentamientos") pintarCalentamientos(); }
   if (!$("vistaPlan").hidden) pintarPlan();
   if (!$("vistaMarcas").hidden) pintarMarcas();
   if (!$("vistaListas").hidden) pintarListas();
@@ -10181,7 +10300,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v273" + (BETA ? " beta" : "");
+const VERSION_APP = "v274" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

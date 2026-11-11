@@ -2173,17 +2173,24 @@ function pintarCalentamientoDlg() {
     const quitar = boton("Quitar", "nav-btn", () => { leerCalentamientoCampos(); ce.items.splice(i, 1); pintarCalentamientoDlg(); }, "Quitar " + nombreEj(it.ejercicio_id) + " del calentamiento"); quitar.disabled = ce.items.length <= 1;
     bs.append(subir, bajar, quitar); cab.appendChild(bs); caja.appendChild(cab);
     it.series.forEach((v, j) => {
-      const fila = el("div", "cal-fila"); fila.appendChild(el("span", "cal-n", String(j + 1)));
-      const campo = (cls, ph, val, aria, leer) => { const inp = document.createElement("input"); inp.className = cls; inp.placeholder = ph; inp.value = val; inp.autocomplete = "off"; inp.setAttribute("aria-label", aria + " de la serie " + (j + 1) + " de " + nombreEj(it.ejercicio_id)); inp.dataset.i = i; inp.dataset.j = j; inp.dataset.c = cls; return inp; };
-      const tiempoTxt = t => n0(t) > 0 ? ((tipo === "carrera" || tipo === "natacion") ? fmtTiempo(t) : (n0(t) < 60 ? String(n0(t)) : fmtTiempo(t))) : "";
-      if (campos.includes("reps")) fila.appendChild(campo("c-reps", v.max_reps ? "máx" : "reps", n0(v.reps) > 0 ? String(n0(v.reps)) : "", "Repeticiones"));
-      if (campos.includes("distancia")) fila.appendChild(campo("c-dist", enKm() ? "km" : "m", distCampo(v.distancia), "Distancia"));
-      if (campos.includes("peso")) fila.appendChild(campo("c-peso", "kg", n0(v.peso) > 0 ? num(v.peso) : "", "Peso en kg"));
-      if (campos.includes("tiempo")) fila.appendChild(campo("c-tiempo", (tipo === "carrera" || tipo === "natacion") ? "tiempo" : "seg", tiempoTxt(v.tiempo), "Tiempo"));
-      fila.appendChild(campo("c-desc", "desc.", recTexto(v), "Descanso"));
-      fila.appendChild(campo("c-nota", "nota", v.nota || "", "Nota"));
-      const q = boton("✕", "nav-btn", () => { leerCalentamientoCampos(); it.series.splice(j, 1); pintarCalentamientoDlg(); }, "Quitar la serie " + (j + 1) + " de " + nombreEj(it.ejercicio_id)); q.disabled = it.series.length <= 1;
-      fila.appendChild(q); caja.appendChild(fila);
+      // v275: cada valor lleva su etiqueta visible (no solo un placeholder) y los campos van en una cuadrícula adaptable dentro de la tarjeta
+      const fila = el("div", "cal-fila"), cabF = el("div", "cal-fila-cab"), grid = el("div", "cal-campos");
+      cabF.appendChild(el("span", "cal-n", "Serie " + (j + 1)));
+      const campo = (cls, etiqueta, ph, val, aria, ancho) => {
+        const lab = el("label", "cal-campo" + (ancho ? " cal-ancho" : "")), inp = document.createElement("input");
+        inp.className = cls; inp.placeholder = ph; inp.value = val; inp.autocomplete = "off"; inp.setAttribute("aria-label", aria + " de la serie " + (j + 1) + " de " + nombreEj(it.ejercicio_id)); inp.dataset.i = i; inp.dataset.j = j; inp.dataset.c = cls;
+        lab.append(el("span", "cal-et", etiqueta), inp); grid.appendChild(lab); return inp;
+      };
+      const porDist = tipo === "carrera" || tipo === "natacion";
+      const tiempoTxt = t => n0(t) > 0 ? (porDist ? fmtTiempo(t) : (n0(t) < 60 ? String(n0(t)) : fmtTiempo(t))) : "";
+      if (campos.includes("reps")) campo("c-reps", "Reps", v.max_reps ? "máx" : "", n0(v.reps) > 0 ? String(n0(v.reps)) : "", "Repeticiones");
+      if (campos.includes("distancia")) campo("c-dist", "Distancia (" + (enKm() ? "km" : "m") + ")", "", distCampo(v.distancia), "Distancia");
+      if (campos.includes("peso")) campo("c-peso", "kg", "", n0(v.peso) > 0 ? num(v.peso) : "", "Peso en kg");
+      if (campos.includes("tiempo")) campo("c-tiempo", porDist ? "Tiempo (m:ss)" : "Tiempo (s)", porDist ? "3:40" : "45", tiempoTxt(v.tiempo), "Tiempo");
+      campo("c-desc", "Descanso (s)", "90 o 1:30", recTexto(v), "Descanso");
+      campo("c-nota", "Nota", "", v.nota || "", "Nota", true);
+      const q = boton("✕", "nav-btn cal-quitar", () => { leerCalentamientoCampos(); it.series.splice(j, 1); pintarCalentamientoDlg(); }, "Quitar la serie " + (j + 1) + " de " + nombreEj(it.ejercicio_id)); q.disabled = it.series.length <= 1;
+      cabF.appendChild(q); fila.append(cabF, grid); caja.appendChild(fila);
     });
     caja.appendChild(boton("+ Serie", "add-ej", () => { leerCalentamientoCampos(); it.series.push({ ...copiaJson(it.series[it.series.length - 1]) }); pintarCalentamientoDlg(); }));
     lista.appendChild(caja);
@@ -10300,7 +10307,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v274" + (BETA ? " beta" : "");
+const VERSION_APP = "v275" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

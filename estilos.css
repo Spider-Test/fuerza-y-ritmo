@@ -2491,26 +2491,21 @@ dialog#dlgAviso { margin: auto; }
    «grupo-iniciar» desactivado, con aspecto de tarjeta verde grande). Texto atenuado con contraste suficiente en claro y oscuro */
 .grupo-aviso-vacio { margin: 4px 0 6px; padding: 2px 8px; font-size: 13px; line-height: 1.35; font-weight: 500; color: var(--muted); border-left: 2px solid var(--line); }
 
-/* v258: nombre del entreno editable tocando su texto. El texto ya no ocupa todo el ancho: la flecha y el espacio libre de la
-   cabecera siguen plegando/desplegando. Mientras se edita, el campo sustituye al nombre en la misma fila */
-#vistaSemana .grupo-cab .g-toggle .gn-txt.gn-editable { flex: 0 1 auto; cursor: text; text-decoration: underline dotted transparent; text-underline-offset: 4px; }
-@media (hover: hover) { #vistaSemana .grupo-cab .g-toggle .gn-txt.gn-editable:hover { text-decoration-color: currentColor; } }
+/* v262 (sustituye los bloques v258/v259 de edición en línea): el nombre ya no se edita tocándolo; se cambia desde ⋯ → «Cambiar nombre».
+   Zonas táctiles separadas en la cabecera del entreno y de la parte: [▸ nombre] solo pliega/despliega · progreso (no interactivo,
+   hace de separación) · ⋯ menú · ≡ asa. En el móvil ⋯ y ≡ tienen 40 × 44 px y separación entre ellos para no tocar uno por otro;
+   a ≤ 374 px la separación y el nombre del entreno se ajustan un poco para que el nombre no se parta a mitad de palabra */
 #vistaSemana .grupo-cab .g-toggle .flecha-dia { flex: none; min-width: 20px; }
-#vistaSemana .grupo-cab.gn-editando > .g-toggle { display: none !important; }
-#vistaSemana .grupo-cab > .gn-edit {
-  flex: 1 1 auto; min-width: 0; width: 100%; box-sizing: border-box; grid-column: 1; margin: 2px 0;
-  font-family: var(--display); font-weight: 700; font-size: 17px; letter-spacing: 0.03em; text-transform: uppercase;
-  color: var(--entreno); background: var(--card); border: 1px solid color-mix(in srgb, var(--entreno) 45%, var(--line)); border-radius: 6px; padding: 6px 8px;
+@media (max-width: 760px) {
+  #vistaSemana .dia .grupo > .grupo-cab { column-gap: 6px; }
+  #vistaSemana .dia .grupo-cab .menu-btn, #vistaSemana .dia .grupo-cab .asa { width: 40px; min-width: 40px; height: 44px; }
+  #vistaSemana .parte-cab { gap: 6px; }
+  #vistaSemana .parte-cab .menu-btn, #vistaSemana .parte-cab .asa { width: 40px; min-width: 40px; height: 44px; }
 }
-
-/* v259: nombre de la parte editable tocando su texto, igual que el del entreno (la flecha y el espacio libre siguen plegando) */
-#vistaSemana .parte-cab .p-toggle .p-nombre.gn-editable { flex: 0 1 auto; cursor: text; text-decoration: underline dotted transparent; text-underline-offset: 4px; }
-@media (hover: hover) { #vistaSemana .parte-cab .p-toggle .p-nombre.gn-editable:hover { text-decoration-color: currentColor; } }
-#vistaSemana .parte-cab.gn-editando > .p-toggle { display: none !important; }
-#vistaSemana .parte-cab > .gn-edit {
-  flex: 1 1 auto; min-width: 0; width: 100%; box-sizing: border-box; margin: 2px 0;
-  font-family: var(--display); font-weight: 700; font-size: 16px; letter-spacing: 0.03em; text-transform: uppercase;
-  color: var(--pc, var(--fg)); background: var(--card); border: 1px solid color-mix(in srgb, var(--pc, var(--fg)) 45%, var(--line)); border-radius: 6px; padding: 6px 8px;
+@media (max-width: 374px) {
+  #vistaSemana .dia .grupo > .grupo-cab { column-gap: 4px; }
+  #vistaSemana .parte-cab { gap: 4px; }
+  #vistaSemana .dia .grupo-cab .g-toggle .gn-txt { font-size: 16px; }
 }
 
 /* v260 (MEJ-SEM-002): − y + junto al número de series (mismo patrón que los de reps y peso, más compacto) */
@@ -2547,4 +2542,104 @@ dialog#dlgAviso { margin: auto; }
 @media (max-width: 400px) {
   #vistaSemana .ns-principal:not(.fila-fuerza) { flex-wrap: wrap; row-gap: 6px; }
   #vistaSemana .ns-principal:not(.fila-fuerza) > .veces-izq { flex: 1 1 100%; flex-direction: row; justify-content: flex-start; gap: 8px; margin-right: 0; }
+}
+
+/* v262: cabecera del día ampliado en el móvil, en dos filas equilibradas.
+   Fila 1: «‹ Semana» (regreso) y el título del día, alineados a la izquierda. Fila 2: ‹ Hoy › centrados, con zonas táctiles de 44 px.
+   La columna de «Hoy» se reserva aunque esté oculto (día de hoy), así las flechas no cambian de sitio. No cambia qué hace cada botón,
+   ni el calendario, ni el escritorio (> 760 px). Sustituye en el móvil la fila única de «Navegación del día compacta» y su variante ≤ 360 px */
+@media (max-width: 760px) {
+  #vistaSemana .dia-nav:not([hidden]),
+  #vistaSemana .dia-nav:not([hidden]):has(#diaHoy[hidden]) {
+    grid-template-columns: minmax(max-content, 1fr) 44px 72px 44px minmax(0, 1fr);
+    grid-template-areas: "semana titulo titulo titulo titulo" ". anterior hoy siguiente .";
+    column-gap: 10px; row-gap: 4px; padding: 4px 0 8px; align-items: center;
+    box-shadow: inset 0 -1px var(--line);
+  }
+  #vistaSemana #volverSemana {
+    justify-self: start; width: auto; min-width: 0; min-height: 44px; height: 44px; padding: 0 8px 0 2px;
+    font-size: 14px; font-weight: 600; white-space: nowrap; border: 0; background: transparent;
+  }
+  #vistaSemana .dia-nav-t {
+    padding: 0; font-family: var(--display); font-size: 18px; font-weight: 700; line-height: 1.2;
+    text-transform: uppercase; letter-spacing: 0.04em; text-align: left; white-space: normal; overflow-wrap: anywhere;
+  }
+  #vistaSemana #diaAnt, #vistaSemana #diaSig {
+    width: 44px; min-width: 44px; height: 44px; min-height: 44px;
+    border: 1px solid var(--line); background: var(--card); font-size: 22px;
+  }
+  #vistaSemana #diaHoy { width: 72px; min-width: 72px; height: 44px; min-height: 44px; font-size: 14px; }
+}
+
+/* v262: pie de la app en el móvil. Jerarquía: estado de sincronización (informativo, discreto) arriba; «Enviar sugerencia» como acción
+   principal del pie a todo el ancho; «Cambiar contraseña» y «Cerrar sesión» (cuenta) en dos columnas iguales. Todas las acciones con
+   zona táctil de 44 px y alineadas en la misma rejilla; margen inferior para que no quede pegado a la barra de pestañas (el cuerpo ya
+   reserva su altura). Colores con variables del tema: claro y oscuro. El escritorio no cambia */
+@media (max-width: 760px) {
+  #app > .pie {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas: "estado estado" "sug sug" "clave salir";
+    gap: 8px; align-items: stretch; margin-bottom: 12px; padding-top: 12px;
+  }
+  #app > .pie > #estado { grid-area: estado; min-height: 20px; font-size: 13px; line-height: 1.35; text-align: center; overflow-wrap: anywhere; }
+  #app > .pie > #estado:empty { display: none; }
+  #app > .pie > #sugPie { grid-area: sug; }
+  #app > .pie > #claveBtn { grid-area: clave; }
+  #app > .pie > #salirBtn { grid-area: salir; }
+  #app > .pie > .enlace {
+    box-sizing: border-box; width: 100%; min-height: 44px; margin: 0; padding: 8px 10px;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--card);
+    font-size: 15px; font-weight: 600; line-height: 1.2; text-align: center; white-space: normal;
+  }
+  #app > .pie > #claveBtn, #app > .pie > #salirBtn { color: var(--fg); font-weight: 500; }
+}
+
+/* v262: series de distancia importadas (carrera con descanso, pulso, cadencia, desnivel…) en el móvil. Antes el número, el texto, ✕ y ≡
+   iban en una fila centrada verticalmente y el texto quedaba estrecho y partido en 5-6 líneas sin saber a qué serie pertenecía.
+   Ahora cada serie es una ficha: separador entre series; número, ✕ y ≡ alineados con la primera línea; ✕ y ≡ apilados en una sola
+   columna de 44 px (el texto gana ese ancho); la línea principal (distancia · tiempo · ritmo) destaca y los detalles van debajo.
+   Solo presentación: mismos datos y mismas acciones (tocar para editar, ✕ borrar, ≡ arrastrar o flechas, deslizar, selección).
+   Las series de una línea y el escritorio no cambian */
+@media (max-width: 760px) {
+  .series li.fila-dist {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) 44px;
+    grid-template-areas: "n sv borrar" "n sv asa" "n pr .";
+    align-items: start; column-gap: 8px; row-gap: 0; padding: 8px 0; min-height: 0;
+  }
+  .series li.fila-dist + li.fila-dist { border-top: 1px solid var(--line); }
+  .series li.fila-dist > :first-child { grid-area: n; margin-top: 1px; }
+  .series li.fila-dist > .sv { grid-area: sv; row-gap: 2px; line-height: 1.3; }
+  .series li.fila-dist > .sv > .sv-p { flex-basis: 100%; font-weight: 600; }
+  .series li.fila-dist > .sv > .desc { flex-basis: 100%; }
+  .series li.fila-dist > .pr { grid-area: pr; justify-self: start; margin-top: 4px; }
+  .series li.fila-dist > .borrar { grid-area: borrar; width: 44px; height: 40px; margin: -8px 0 0; }
+  .series li.fila-dist > .asa { grid-area: asa; width: 44px; height: 40px; margin: 0; }
+  body.sel-series .series li.fila-dist[data-sid] {
+    grid-template-columns: auto auto minmax(0, 1fr) 44px;
+    grid-template-areas: "sel n sv borrar" "sel n sv asa" "sel n pr .";
+  }
+  body.sel-series .series li.fila-dist[data-sid]::before { grid-area: sel; margin-top: 1px; }
+}
+
+/* v262 (INC-SEM-004): ficha en borrador para crear un ejercicio desde el buscador */
+.ne-form { display: flex; flex-direction: column; gap: 10px; }
+.ne-form #neNombre { font-size: 17px; font-weight: 600; }
+.ne-form .tabs.seg { flex-wrap: wrap; }
+.ne-usar { display: flex; flex-direction: column; gap: 4px; }
+.ne-usar .opcion { min-height: 44px; }
+.ne-form #neNotas { resize: vertical; }
+#dlgNuevoEj .d-botones .anadir:disabled { opacity: 0.45; }
+.md-chips .chip.magnitud { min-height: 36px; }
+.chip.magnitud[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--card); }
+.chip.magnitud[aria-pressed="true"]::before { content: "✓ "; }
+.chip.magnitud:disabled { opacity: 0.7; cursor: default; }
+@media (max-width: 760px) { .md-chips .chip.magnitud { min-height: 44px; } }
+
+/* v262 (MEJ-MEDIDA-001): distancia en fuerza (pasos de granjero…): campo de metros delante de las reps/tiempo */
+.bloque.con-dist .fila-fuerza .paso:has(.in-d) { flex: 0.9 1 0; }
+.bloque.con-dist .fila-fuerza .in-d { min-width: 0; }
+/* En el móvil la distancia va en su propia línea (a todo el ancho) y debajo tiempo/reps y carga, para que nada quede estrecho */
+@media (max-width: 760px) {
+  .bloque.con-dist .fila-fuerza { flex-wrap: wrap; row-gap: 6px; }
+  .bloque.con-dist .fila-fuerza .paso:has(.in-d) { flex: 1 1 100%; }
 }

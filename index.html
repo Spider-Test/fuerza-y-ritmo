@@ -27,7 +27,7 @@
   window.addEventListener("pageshow", actualizar);
 })();
 </script>
-<link rel="stylesheet" href="estilos.css?v=v261">
+<link rel="stylesheet" href="estilos.css?v=v262">
 </head>
 <body>
 
@@ -255,6 +255,35 @@
   <div id="listaEj"></div>
 </dialog>
 
+<!-- v262 (INC-SEM-004): ficha en borrador para crear un ejercicio desde el buscador. No se crea nada hasta «Guardar y añadir» -->
+<dialog id="dlgNuevoEj" aria-labelledby="neTit">
+  <div class="d-form ne-form">
+    <h3 id="neTit">Nuevo ejercicio</h3>
+    <input id="neNombre" aria-label="Nombre del ejercicio" autocomplete="off" enterkeyhint="done">
+    <p id="neConflicto" class="aviso-estim" role="status" hidden></p>
+    <div id="neUsar" class="ne-usar" hidden></div>
+    <div class="tabs seg" id="neTipo" role="group" aria-label="Tipo de ejercicio">
+      <button type="button" data-tipo="fuerza" aria-pressed="false">Fuerza</button>
+      <button type="button" data-tipo="carrera" aria-pressed="false">Carrera</button>
+      <button type="button" data-tipo="natacion" aria-pressed="false">Natación</button>
+      <button type="button" data-tipo="movilidad" aria-pressed="false">Movilidad</button>
+    </div>
+    <div id="neMagSec" hidden>
+      <p class="menu-det">Qué se puede medir</p>
+      <div class="md-chips" id="neMag" role="group" aria-label="Magnitudes que admite el ejercicio"></div>
+    </div>
+    <label class="permiso" id="neLadoL"><input type="checkbox" id="neLado"> Se hace por lado (izquierda y derecha)</label>
+    <input id="neVideo" type="url" inputmode="url" placeholder="Enlace del vídeo de la técnica (opcional)" aria-label="Enlace del vídeo" autocomplete="off">
+    <textarea id="neNotas" rows="2" placeholder="Notas de técnica (opcional): agarre, tempo, respiración…" aria-label="Notas de técnica"></textarea>
+    <label class="permiso" id="neComunL" hidden><input type="checkbox" id="neComun"> En el catálogo común (lo ven todos los usuarios aprobados)</label>
+    <p id="neDonde" class="menu-det"></p>
+    <div class="d-botones">
+      <button type="button" class="nav-btn" id="neCancelar">Cancelar</button>
+      <button type="button" class="anadir" id="neGuardar">Guardar y añadir</button>
+    </div>
+  </div>
+</dialog>
+
 <dialog id="detalle" aria-label="Ejercicio">
   <form method="dialog" class="d-cab">
     <input id="detNombre" aria-label="Nombre del ejercicio" autocomplete="off">
@@ -271,6 +300,11 @@
         <button type="button" data-tipo="natacion" aria-pressed="false">Natación</button>
         <button type="button" data-tipo="movilidad" aria-pressed="false">Movilidad</button>
       </div>
+    </section>
+    <section id="detMagSec" hidden>
+      <h3>Qué se puede medir</h3>
+      <div class="md-chips" id="detMag" role="group" aria-label="Magnitudes que admite el ejercicio"></div>
+      <p class="menu-det nota" id="detMagNota"></p>
     </section>
     <section id="detZonasSec">
       <h3>Zonas que trabaja</h3>
@@ -942,6 +976,6 @@
 <div class="toast" id="toast" role="status" hidden><span id="toastTxt"></span><button type="button" id="toastBtn">Deshacer</button></div>
 <div class="fiesta" id="fiesta" aria-hidden="true"></div>
 
-<script src="app.js?v=v261"></script>
+<script src="app.js?v=v262"></script>
 </body>
 </html>

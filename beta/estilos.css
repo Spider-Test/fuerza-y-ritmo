@@ -2723,11 +2723,3 @@ dialog#dlgAviso { margin: auto; }
    botones no caben a su lado (anchos estrechos), pasan a una segunda línea alineados a la derecha, en vez de recortar nada */
 .plan-sec[data-sec="mesociclos"] .sec-cab { flex-wrap: wrap; column-gap: 4px; row-gap: 2px; }
 .plan-sec[data-sec="mesociclos"] .sec-cab > .sec-toggle { flex: 0 0 auto; gap: 6px; }
-/* v265 (ajuste visual): «+ Nuevo» de Mesociclos como acción secundaria, menos llamativa que el título de la sección. Solo #nuevoMeso dentro de la cabecera de
-   Mesociclos; mismo tamaño, posición, área táctil y comportamiento (no se toca nada de «Seleccionar» ni de otros botones «+ Nuevo»). Fondo verde muy suave,
-   texto verde pleno (sin opacidad) y borde sutil, con los colores existentes; modo oscuro por los mismos tokens (--accent, --accent-soft). */
-.sec-cab .sec-botones #nuevoMeso {
-  background: color-mix(in srgb, var(--accent-soft) 55%, var(--card));
-  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
-  color: color-mix(in srgb, var(--accent) 72%, var(--fg));   /* verde algo más profundo que --accent para >= 4,5:1 sobre el fondo suave */
-}

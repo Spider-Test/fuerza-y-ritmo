@@ -27,7 +27,7 @@
   window.addEventListener("pageshow", actualizar);
 })();
 </script>
-<link rel="stylesheet" href="estilos.css?v=v262">
+<link rel="stylesheet" href="estilos.css?v=v263">
 </head>
 <body>
 
@@ -84,11 +84,15 @@
       <button type="button" class="nav-btn cal-btn" id="calBtn" aria-label="Calendario: ir a otra fecha" title="Calendario">📅</button>
     </nav>
     <nav class="dia-nav" id="diaNav" aria-label="Día" hidden>
-      <button type="button" class="nav-btn volver" id="volverSemana">‹ Semana</button>
-      <span class="dia-nav-t" id="diaNavTit"></span>
-      <button type="button" class="nav-btn flecha" id="diaAnt" aria-label="Día anterior">‹</button>
-      <button type="button" class="nav-btn flecha" id="diaSig" aria-label="Día siguiente">›</button>
-      <button type="button" class="nav-btn btn-hoy" id="diaHoy" hidden>Hoy</button>
+      <div class="dia-nav-sup">
+        <button type="button" class="nav-btn volver" id="volverSemana">‹ Semana</button>
+        <span class="dia-nav-t" id="diaNavTit"></span>
+      </div>
+      <div class="dia-nav-ctl">
+        <button type="button" class="nav-btn flecha" id="diaAnt" aria-label="Día anterior">‹</button>
+        <button type="button" class="nav-btn flecha" id="diaSig" aria-label="Día siguiente">›</button>
+        <button type="button" class="nav-btn btn-hoy" id="diaHoy" hidden>Hoy</button>
+      </div>
     </nav>
     <p class="meso-banda" id="mesoBanda" hidden></p>
     <div class="sem-resumenes">
@@ -123,6 +127,7 @@
       <input id="filtroEj" type="search" placeholder="Buscar ejercicio" aria-label="Buscar ejercicio" autocomplete="off">
       <button type="button" class="nav-btn" id="nuevoEj">+ Nuevo</button>
     </div>
+    <div class="filtro-clasif" id="filtroClasif" role="group" aria-label="Filtrar por clasificación" hidden></div>
     <div id="catalogo"></div>
   </div>
 
@@ -134,7 +139,7 @@
       <div class="lista-tarjetas" id="listaPlantillas"></div>
     </section>
     <section class="plan-sec" data-sec="mesociclos">
-      <div class="sec-cab"><h3>Mesociclos</h3><button type="button" class="nav-btn" id="nuevoMeso">+ Nuevo</button></div>
+      <div class="sec-cab"><h3>Mesociclos</h3><span class="sec-botones"><button type="button" class="nav-btn" id="selMesoEntrar" hidden>Seleccionar</button><button type="button" class="nav-btn" id="nuevoMeso">+ Nuevo</button></span></div>
       <div class="lista-tarjetas" id="listaMesos"></div>
     </section>
     <section class="plan-sec" data-sec="importar">
@@ -252,6 +257,7 @@
     <button type="button" data-tipo="natacion" class="t-natacion" aria-pressed="false">Natación</button>
     <button type="button" data-tipo="movilidad" class="t-movilidad" aria-pressed="false">Movilidad</button>
   </div>
+  <div class="filtro-clasif" id="selClasif" role="group" aria-label="Filtrar por clasificación" hidden></div>
   <div id="listaEj"></div>
 </dialog>
 
@@ -271,6 +277,10 @@
     <div id="neMagSec" hidden>
       <p class="menu-det">Qué se puede medir</p>
       <div class="md-chips" id="neMag" role="group" aria-label="Magnitudes que admite el ejercicio"></div>
+    </div>
+    <div id="neClasifSec" hidden>
+      <div id="neRegionFila"><p class="menu-det">Región (opcional)</p><div class="md-chips" id="neRegion" role="group" aria-label="Región del cuerpo"></div></div>
+      <div class="md-chips"><button type="button" class="chip chip-op clasif" id="neTecnica" aria-pressed="false">Técnica</button></div>
     </div>
     <label class="permiso" id="neLadoL"><input type="checkbox" id="neLado"> Se hace por lado (izquierda y derecha)</label>
     <input id="neVideo" type="url" inputmode="url" placeholder="Enlace del vídeo de la técnica (opcional)" aria-label="Enlace del vídeo" autocomplete="off">
@@ -305,6 +315,15 @@
       <h3>Qué se puede medir</h3>
       <div class="md-chips" id="detMag" role="group" aria-label="Magnitudes que admite el ejercicio"></div>
       <p class="menu-det nota" id="detMagNota"></p>
+    </section>
+    <section id="detClasifSec" hidden>
+      <h3>Clasificación</h3>
+      <div id="detRegionFila">
+        <p class="menu-det">Región (para encontrarlo; un ejercicio compuesto puede ser Torso y Pierna)</p>
+        <div class="md-chips" id="detRegion" role="group" aria-label="Región del cuerpo"></div>
+      </div>
+      <div class="md-chips"><button type="button" class="chip chip-op clasif" id="detTecnica" aria-pressed="false">Técnica</button></div>
+      <p class="menu-det nota" id="detClasifNota"></p>
     </section>
     <section id="detZonasSec">
       <h3>Zonas que trabaja</h3>
@@ -973,9 +992,15 @@
   <button type="button" id="selPlantCompartir">Compartir</button>
   <button type="button" id="selPlantBorrar" class="peligro-op">Eliminar</button>
 </div>
+<div class="sel-acciones" id="selMesoAcciones" hidden role="group" aria-label="Mesociclos seleccionados">
+  <span class="sel-n" id="selMesoN"></span>
+  <button type="button" id="selMesoTodos">Todos</button>
+  <button type="button" id="selMesoCancelar">Cancelar</button>
+  <button type="button" id="selMesoBorrar" class="peligro-op">Eliminar</button>
+</div>
 <div class="toast" id="toast" role="status" hidden><span id="toastTxt"></span><button type="button" id="toastBtn">Deshacer</button></div>
 <div class="fiesta" id="fiesta" aria-hidden="true"></div>
 
-<script src="app.js?v=v262"></script>
+<script src="app.js?v=v263"></script>
 </body>
 </html>

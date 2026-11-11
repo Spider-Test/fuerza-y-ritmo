@@ -2643,3 +2643,67 @@ dialog#dlgAviso { margin: auto; }
   .bloque.con-dist .fila-fuerza { flex-wrap: wrap; row-gap: 6px; }
   .bloque.con-dist .fila-fuerza .paso:has(.in-d) { flex: 1 1 100%; }
 }
+
+/* v263 (4.ª composición): cabecera del día ampliado en el móvil. Los botones van en dos contenedores (.dia-nav-sup: «‹ Semana» + día y fecha;
+   .dia-nav-ctl: los controles). En escritorio ambos son display: contents y NADA cambia. En el móvil:
+   · Fila superior: rejilla de tres columnas 1fr · auto · 1fr. «‹ Semana» queda anclado a la esquina superior izquierda (columna 1) y el título
+     (día y fecha) ocupa la columna central: las dos columnas laterales son iguales, así que el título queda centrado respecto a TODO el ancho de la
+     tarjeta (y de la pantalla) sin que lo desplacen la posición ni la anchura de «‹ Semana».
+   · Hasta 360 px de ancho (320 px incluido) el título y «‹ Semana» no caben con seguridad en la misma línea: «‹ Semana» queda arriba a la
+     izquierda y el título pasa a una línea propia, centrado y a todo el ancho; nunca se superponen, se recortan ni se alinean junto al enlace.
+   · Fila inferior: solo ‹ Hoy ›, agrupados y centrados (orden visual recompuesto con `order`). Todos de 44 px de alto.
+   Mismos ids y funcionamiento. */
+.dia-nav-sup, .dia-nav-ctl { display: contents; }
+@media (max-width: 760px) {
+  #vistaSemana .dia-nav:not([hidden]) {
+    display: flex; flex-direction: column; align-items: stretch; gap: 0; padding: 2px 0 8px;
+    grid-template-columns: none; grid-template-areas: none; box-shadow: inset 0 -1px var(--line);
+  }
+  #vistaSemana .dia-nav-sup { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; column-gap: 4px; min-width: 0; }
+  #vistaSemana .dia-nav-ctl { display: flex; align-items: center; justify-content: center; gap: 6px; }
+  #vistaSemana #volverSemana { grid-column: 1; grid-row: 1; justify-self: start; width: auto; min-width: 0; height: 44px; min-height: 44px; padding: 0 6px 0 0; font-size: 14px; white-space: nowrap; }
+  #vistaSemana .dia-nav-t { grid-column: 2; grid-row: 1; padding: 0; font-size: 18px; line-height: 1.15; text-align: center; white-space: nowrap; }
+  #vistaSemana #diaAnt, #vistaSemana #diaSig { flex: none; width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
+  #vistaSemana #diaHoy { flex: none; width: 64px; min-width: 64px; height: 44px; min-height: 44px; }
+  #vistaSemana #diaAnt { order: 1; } #vistaSemana #diaHoy { order: 2; } #vistaSemana #diaSig { order: 3; }
+}
+@media (max-width: 360px) {
+  #vistaSemana .dia-nav-sup { grid-template-columns: minmax(0, 1fr); row-gap: 0; }
+  #vistaSemana #volverSemana { grid-column: 1; grid-row: 1; height: 40px; min-height: 40px; }
+  #vistaSemana .dia-nav-t { grid-column: 1; grid-row: 2; justify-self: stretch; white-space: normal; overflow-wrap: anywhere; padding: 0 2px 4px; }
+}
+
+/* v263: pie de la app en el móvil, más discreto (sustituye los botones con borde de v262). Estado de sincronización arriba, pequeño y
+   atenuado; debajo las tres acciones como enlaces de texto centrados, sin borde ni fondo, con zona táctil de 44 px de alto y separación
+   suficiente; se reparten en una o dos líneas según el ancho. «Enviar sugerencia» con el color de acento; las de cuenta, atenuadas.
+   El escritorio no cambia */
+@media (max-width: 760px) {
+  #app > .pie {
+    display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 0 4px;
+    margin-bottom: 8px; padding-top: 6px;
+  }
+  #app > .pie > #estado { flex: 1 1 100%; min-height: 0; margin: 0 0 2px; font-size: 12px; line-height: 1.3; text-align: center; opacity: 0.85; }
+  #app > .pie > .enlace {
+    flex: 0 1 auto; width: auto; min-height: 44px; margin: 0; padding: 0 10px;
+    border: 0; border-radius: 8px; background: none;
+    font-size: 14px; font-weight: 500; line-height: 1.2; text-align: center; white-space: nowrap; color: var(--muted);
+  }
+  #app > .pie > #sugPie { color: var(--accent); font-weight: 600; }
+  #app > .pie > #claveBtn, #app > .pie > #salirBtn { color: var(--muted); font-weight: 500; }
+}
+
+/* v263: «Seleccionar» junto a «+ Nuevo» en Mesociclos, y barra de acciones de la selección de mesociclos (mismo aspecto que la de plantillas) */
+.sec-cab .sec-botones { display: inline-flex; align-items: center; gap: 8px; }
+.sec-cab .sec-botones .nav-btn[hidden] { display: none; }
+#selMesoAcciones .sel-n { padding: 0 8px; }
+
+/* v263: clasificación de ejercicios (Región y Técnica): filtros en Ejercicios y en el buscador, y etiquetas */
+.filtro-clasif { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.filtro-clasif[hidden] { display: none; }
+.chip.clasif { min-height: 36px; font-size: 13px; }
+@media (max-width: 760px) { .chip.clasif { min-height: 40px; padding: 6px 12px; } }
+.chip.clasif[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--card); }
+.chip.clasif[aria-pressed="true"]::before { content: "✓ "; }
+.chip.clasif:disabled { opacity: 0.7; cursor: default; }
+.clasif-tag { display: inline-block; margin-left: 6px; padding: 0 6px; border: 1px solid var(--line); border-radius: 5px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); vertical-align: 2px; white-space: nowrap; }
+.clasif-tag.clasif-tecnica { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }

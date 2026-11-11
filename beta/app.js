@@ -7425,6 +7425,9 @@ function aplicarMeso(m, rehacer) {
     if (pid) (hay[pid] = hay[pid] || []).push({ w, d: (deIso(f).getDay() + 6) % 7 });
   });
   let total = 0;
+  // v276 (INC-SEM-003, orden): las sesiones se recogen primero y se añaden en el orden previsto del plan (semana, día y orden en que las plantillas están asignadas a ese día);
+  // antes se añadían por plantilla en el orden interno de la base de datos, y varias plantillas del mismo día salían en otro orden
+  const tareas = [];
   Object.keys(db.plantillas).forEach(pid => {
     const p = db.plantillas[pid];
     if (p.borrado) return;
@@ -7439,10 +7442,14 @@ function aplicarMeso(m, rehacer) {
       for (let k = 0; k < dias.length - Math.min(dias.length, enSemana.length); k++) faltan.push({ w, d: libres[k] !== undefined ? libres[k] : dias[k] });
     }
     faltan.slice(sesiones.length).forEach(({ w, d }) => {
-      const items = esDescarga(m, w) ? descargarItems(p.items || [], m.descarga, w * n0(m.progresion)) : p.items || [];
-      pegarItems(iso(sumarDias(lunes, w * 7 + d)), items, p.nombre, m.id, esDescarga(m, w) ? 0 : w * n0(m.progresion));
-      total += contarSeries(items);
+      const lista = (((m.dias || {})["s" + (w + 1)] || m.dias || {})[d] || []);
+      tareas.push({ w, d, pos: Math.max(0, lista.indexOf(pid)), p });
     });
+  });
+  tareas.sort((a, b) => a.w - b.w || a.d - b.d || a.pos - b.pos).forEach(({ w, d, p }) => {
+    const items = esDescarga(m, w) ? descargarItems(p.items || [], m.descarga, w * n0(m.progresion)) : p.items || [];
+    pegarItems(iso(sumarDias(lunes, w * 7 + d)), items, p.nombre, m.id, esDescarga(m, w) ? 0 : w * n0(m.progresion));
+    total += contarSeries(items);
   });
   return total;
 }
@@ -10307,7 +10314,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v275" + (BETA ? " beta" : "");
+const VERSION_APP = "v276" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";
@@ -11027,7 +11034,8 @@ $("selPlantEntrar").addEventListener("click", () => { selPlant = new Set(); pint
 $("selPlantCancelar").addEventListener("click", salirSeleccion);
 // Añadir todas a un día de la semana (cada una como su propia sesión)
 $("selPlantDia").addEventListener("click", () => {
-  const ps = plantillasSel();
+  // v276: los entrenos quedan en el orden en que se SELECCIONARON (selPlant es un Set: conserva el orden de inserción), no en orden alfabético
+  const ps = [...selPlant].map(id => db.plantillas[id]).filter(p => p && !p.borrado);
   abrirMenu("Añadir " + ps.length + " plantillas", ps.map(p => p.nombre).join(", "), dias.map(d => ({ texto: NOMBRES[d.i] + " " + fmt(deIso(d.id)), accion: () => {
     ps.forEach(p => pegarItems(d.id, p.items || [], p.nombre));
     persistir();

@@ -2463,24 +2463,28 @@ function moverEntreEntrenos(dia, origen, clave, espera, destino, destParte, orde
   avisoDeshacer("Movido al entreno «" + (destino || "Entreno 1") + "»", antes.length ? antes : null);
 }
 // Pasar una parte entera (con sus ejercicios, bloques y bloques vacíos) a otro entreno del día
-function moverParteAEntreno(dia, origen, parte, destino, seriesParte, etiqueta, abrirDestino) {
-  // v279: NO se fusionan partes. Si el entreno destino ya tiene una parte con el mismo nombre (mismo criterio que «Cambiar nombre»: norm(), incluidos los
-  // ejercicios en espera), se cancela sin tocar nada: ni series, ni estructura, ni orden, ni plegados
+// v279/v280: ¿el entreno destino ya tiene una parte con el mismo nombre? Mismo criterio que «Cambiar nombre»: norm() (sin mayúsculas ni acentos), contando partes con
+// series, partes vacías y ejercicios en espera. Lo usan el traslado (menú y arrastre) y la indicación del destino mientras se arrastra
+function parteDuplicadaEnEntreno(dia, destino, parte) {
   const nomDestino = nombresPartes(dia.id, destino).concat((enEspera[dia.id] || []).filter(id => (esperaGrupo[dia.id + "|" + id] || "") === destino).map(id => esperaParte[dia.id + "|" + id] || ""));
-  if (nomDestino.some(p => norm(p) === norm(parte))) {
+  return nomDestino.some(p => norm(p) === norm(parte));
+}
+function moverParteAEntreno(dia, origen, parte, destino, seriesParte, etiqueta, abrirDestino) {
+  // v279: NO se fusionan partes. Si el entreno destino ya tiene una parte con el mismo nombre se cancela sin tocar nada: ni series, ni estructura, ni orden, ni plegados
+  if (parteDuplicadaEnEntreno(dia, destino, parte)) {
     const m = "Ese entrenamiento ya tiene una parte con este nombre. Renómbrala o elige otro destino.";
     setEstado(m, true); avisoDeshacer(m, null);
     return false;
   }
   const antes = seriesParte.map(sr => ["series", { ...sr }]);
   // v279: «Deshacer» también devuelve la estructura (partes vacías, esperas, bloques vacíos, orden y posición de partes), no solo las series
-  const estr = JSON.stringify({ eg: esperaGrupo, bv: bloquesVacios, pv: partesVacias, op: ordenPartes, pp: posPartes, og: ordenGrupos });
+  const estr = JSON.stringify({ eg: esperaGrupo, bv: bloquesVacios, pv: partesVacias, op: ordenPartes, pp: posPartes, og: ordenGrupos, sv: sesionesVacias });
   const ordenG0 = [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].map(x => x.dataset.grupo || "");   // orden actual de los entrenos del día: no debe cambiar al sacar la parte del origen
   // v279: la parte pasa al FINAL de las partes del entreno destino y no cambia el orden de los entrenos: sus series se renumeran (misma secuencia relativa) detrás de las del destino
   const enDestino = seriesDelDia(dia.id).filter(x => !seriesParte.includes(x) && (x.grupo || "") === destino);
   const ordenBase = enDestino.length ? Math.max(...enDestino.map(x => n0(x.orden))) : null;
   const ordenNuevo = new Map(seriesParte.slice().sort((a, b) => n0(a.orden) - n0(b.orden)).map((sr, k) => [sr, ordenBase === null ? sr.orden : ordenBase + 1 + k]));
-  antes.push(["fn", () => { const e = JSON.parse(estr); esperaGrupo = e.eg; bloquesVacios = e.bv; partesVacias = e.pv; ordenPartes = e.op; posPartes = e.pp; ordenGrupos = e.og; guardarSesiones(); guardarVacios(); }]);
+  antes.push(["fn", () => { const e = JSON.parse(estr); esperaGrupo = e.eg; bloquesVacios = e.bv; partesVacias = e.pv; ordenPartes = e.op; posPartes = e.pp; ordenGrupos = e.og; sesionesVacias = e.sv; guardarSesiones(); guardarVacios(); }]);
   seriesParte.forEach(sr => {
     let extra = {};
     if (!sr.bloque_id) {
@@ -2497,6 +2501,8 @@ function moverParteAEntreno(dia, origen, parte, destino, seriesParte, etiqueta, 
   if (!seriesParte.length && !(partesVacias[kd] || []).includes(parte)) (partesVacias[kd] = partesVacias[kd] || []).push(parte);
   if (ordenPartes[ko]) { const r = ordenPartes[ko].filter(x => x !== parte); if (r.length) ordenPartes[ko] = r; else delete ordenPartes[ko]; }   // v249: ya no pertenece al orden del entreno de origen
   if (posPartes[ko] && Object.hasOwn(posPartes[ko], parte)) { delete posPartes[ko][parte]; if (!Object.keys(posPartes[ko]).length) delete posPartes[ko]; }   // v250: ni su posición (en el destino va al final, como antes)
+  // v280: si la parte era lo único del entreno de origen, el entreno NO desaparece: queda como entreno vacío (se puede borrar desde su ⋯)
+  if (origen && !seriesDelDia(dia.id).some(x => (x.grupo || "") === origen && !seriesParte.includes(x)) && !(sesionesVacias[dia.id] || []).includes(origen)) (sesionesVacias[dia.id] = sesionesVacias[dia.id] || []).push(origen);
   if (ordenG0.length > 1) ordenGrupos[dia.id] = ordenG0;   // v279: el origen pierde sus series más antiguas y, sin esto, su entreno saltaba de sitio
   if (abrirDestino) { gruposPlegados[dia.id + "|" + destino] = 0; escribir("grupos-plegados-v1", gruposPlegados); }   // el entreno destino se despliega para ver el resultado
   guardarSesiones(); guardarVacios(); persistir();
@@ -3569,13 +3575,27 @@ function pintarDiaSinAncla(dia) {
         dest.appendChild(cabP);
         caja.appendChild(dest);
         // v249: asa para arrastrar la parte entera (con o sin ejercicios) dentro de su entreno; usa el orden persistente de cab.ordenarPartes
-        // v279: la misma asa mueve la parte a OTRO entreno del día (no a «Ejercicios sueltos», que no es un entreno): se arrastra hasta la cabecera del entreno destino (queda resaltada) y se añade al final de sus partes
-        const zonasEntreno = { lista: () => [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].filter(x => (x.dataset.grupo || "") !== g.nombre && !x.classList.contains("grupo-sueltos")).map(x => x.querySelector(":scope > .grupo-cab")).filter(Boolean),
+        // v280: la misma asa mueve la parte a OTRO entreno del día: TODA la tarjeta del entreno destino es zona de soltado (cabecera, cuerpo y pie; no «Ejercicios sueltos», que no es
+        // un entreno). Responde casi al instante (120 ms), resalta la tarjeta y una indicación fija avisa de que la parte se añadirá al final de sus partes (o de que no se puede
+        // porque ya tiene una con ese nombre). El asa se muestra aunque sea la única parte si existe otro entreno destino: se calcula con los datos del día, no con el DOM aún a medio pintar
+        const hayDestinoParte = grupos.some(x => x.nombre && x.nombre !== g.nombre);
+        const zonasEntreno = { espera: 120,
+          lista: () => [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].filter(x => (x.dataset.grupo || "") !== g.nombre && !x.classList.contains("grupo-sueltos")),
+          alCambiar: z => {
+            const b = $("bannerDestino");
+            document.querySelectorAll(".grupo.zona-invalida").forEach(x => x.classList.remove("zona-invalida"));
+            if (!z) { b.hidden = true; return; }
+            const destino = z.dataset.grupo || "", etq = (z.querySelector(".gn-txt") || {}).textContent || destino, dup = parteDuplicadaEnEntreno(dia, destino, p.nombre);
+            z.classList.toggle("zona-invalida", dup);
+            b.classList.toggle("invalido", dup);
+            b.textContent = dup ? "«" + etq + "» ya tiene una parte con el nombre «" + p.nombre + "»: no se puede mover aquí" : "Suelta aquí: «" + p.nombre + "» se añadirá al final de las partes de «" + etq + "»";
+            b.hidden = false;
+          },
           alSoltar: z => {
-            const destino = z.closest(".grupo").dataset.grupo || "", etq = (z.querySelector(".gn-txt") || {}).textContent || destino;
+            const destino = z.dataset.grupo || "", etq = (z.querySelector(".gn-txt") || {}).textContent || destino;
             moverParteAEntreno(dia, g.nombre, p.nombre, destino, p.ids.flatMap(seriesItem), etq, true);
           } };
-        if (conNombre.length > 1 || zonasEntreno.lista().length) cabP.appendChild(asaArrastre(dest, () => [...caja.querySelectorAll(":scope > .parte-caja")], n => cabP.ordenarPartes(n.map(x => x.dataset.parte || "")), "parte " + p.nombre, zonasEntreno));
+        if (conNombre.length > 1 || hayDestinoParte) cabP.appendChild(asaArrastre(dest, () => [...caja.querySelectorAll(":scope > .parte-caja")], n => cabP.ordenarPartes(n.map(x => x.dataset.parte || "")), "parte " + p.nombre, zonasEntreno));
         const claveP = "p|" + dia.id + "|" + g.nombre + "|" + p.nombre, tg = cabP.querySelector(".p-toggle");
         const ponerP = pl => { dest.classList.toggle("p-plegada", pl); tg.setAttribute("aria-expanded", String(!pl)); };
         ponerP(gruposPlegados[claveP] !== 0);
@@ -9662,9 +9682,10 @@ function asaArrastre(el, hermanos, alSoltar, nombre, zonas) {
       // ¿El dedo está encima de una zona? Entonces se resalta y los demás no se apartan
       const zc = zl.find(x => { const r = x.getBoundingClientRect(); return dedoY >= r.top && dedoY <= r.bottom; }) || null;
       if (zc !== cand) { cand = zc; candDesde = Date.now(); }
-      const z = cand && Date.now() - candDesde >= 450 ? cand : null;
-      if (cand && !z) { clearTimeout(tZona); tZona = setTimeout(pedir, 470 - (Date.now() - candDesde)); }
-      if (z !== zona) { if (zona) zona.classList.remove("zona-destino"); zona = z; if (zona) zona.classList.add("zona-destino"); el.classList.toggle("sobre-zona", !!zona); }
+      const esperaZona = zonas && zonas.espera !== undefined ? zonas.espera : 450;   // v280: las zonas «entreno entero» (partes) responden casi al instante
+      const z = cand && Date.now() - candDesde >= esperaZona ? cand : null;
+      if (cand && !z) { clearTimeout(tZona); tZona = setTimeout(pedir, esperaZona + 20 - (Date.now() - candDesde)); }
+      if (z !== zona) { if (zona) zona.classList.remove("zona-destino"); zona = z; if (zona) zona.classList.add("zona-destino"); el.classList.toggle("sobre-zona", !!zona); if (zonas && zonas.alCambiar) zonas.alCambiar(zona); }
       lista.forEach((x, k) => {
         if (k === idx) return;
         if (zona) { x.style.transform = ""; return; }
@@ -9689,6 +9710,7 @@ function asaArrastre(el, hermanos, alSoltar, nombre, zonas) {
       lista.forEach(x => { x.style.transform = ""; x.classList.remove("apartandose"); });
       el.classList.remove("arrastrando", "sobre-zona");
       if (zona) zona.classList.remove("zona-destino");
+      if (zonas && zonas.alCambiar) zonas.alCambiar(null);   // v280: oculta la indicación del destino (también al cancelar)
       if (ev.type !== "pointercancel" && zona) { el.style.transform = ""; zonas.alSoltar(zona); return; }
       if (ev.type === "pointercancel" || destino === idx) { if (repintarLuego) pintarBloques(true); return; }
       const nuevo = lista.slice();
@@ -10344,7 +10366,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v279" + (BETA ? " beta" : "");
+const VERSION_APP = "v280" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

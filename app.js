@@ -9787,7 +9787,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v265" + (BETA ? " beta" : "");
+const VERSION_APP = "v266" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";
@@ -10665,6 +10665,9 @@ if (window.visualViewport) {
       document.body.appendChild(sonda);
     }
     const alto = sonda.getBoundingClientRect().height;
+    // v266: con el teclado visible el visual viewport se acorta mucho más de lo que explica el zoom (barras del navegador: ~100 px como mucho). Entonces no se
+    // mueve la barra aunque el foco ya no esté en un campo (antes quedaba una traslación obsoleta que la dejaba flotando a media pantalla)
+    if (alto / vv.scale - vv.height > 150) { if (ultimo) { VARS.forEach(p => raiz.style.removeProperty(p)); ultimo = ""; } return; }
     const tx = Math.round(vv.offsetLeft * 100) / 100, ty = Math.round((vv.offsetTop + vv.height - alto) * 100) / 100, s = Math.round(100000 / vv.scale) / 100000;
     const clave = tx + "|" + ty + "|" + s;
     if (clave === ultimo) return;
@@ -10672,20 +10675,31 @@ if (window.visualViewport) {
     raiz.style.setProperty("--vv-tx", tx + "px"); raiz.style.setProperty("--vv-ty", ty + "px"); raiz.style.setProperty("--vv-s", String(s));
   };
   // v246: se aplica dentro del propio evento (sin esperar a requestAnimationFrame) para no añadir un fotograma de retraso al gesto
-  const programar = aplicar;
+  // v266: además, tras cada evento se vuelve a leer el estado real unos instantes después (el teclado, la rotación o volver de segundo plano pueden
+  // dejar el último evento con medidas a medias o no enviar el final) y al volver a la app, rotar o cambiar el tamaño de la ventana.
+  let asentando = [];
+  const asentar = () => { asentando.forEach(clearTimeout); asentando = [200, 700].map(ms => setTimeout(aplicar, ms)); };
+  const programar = () => { aplicar(); asentar(); };
+  const alVolver = () => { if (document.visibilityState === "visible") programar(); };
   const activar = () => {
     vv.addEventListener("resize", programar, { passive: true });
     vv.addEventListener("scroll", programar, { passive: true });
     document.addEventListener("focusin", programar, { passive: true });
     document.addEventListener("focusout", programar, { passive: true });
+    document.addEventListener("visibilitychange", alVolver, { passive: true });
+    window.addEventListener("orientationchange", programar, { passive: true });
+    window.addEventListener("resize", programar, { passive: true });
     aplicar();
   };
   const desactivar = () => {
     vv.removeEventListener("resize", programar); vv.removeEventListener("scroll", programar);
     document.removeEventListener("focusin", programar); document.removeEventListener("focusout", programar);
+    document.removeEventListener("visibilitychange", alVolver);
+    window.removeEventListener("orientationchange", programar); window.removeEventListener("resize", programar);
+    asentando.forEach(clearTimeout); asentando = [];
   };
   window.addEventListener("pagehide", desactivar);
-  window.addEventListener("pageshow", e => { if (e.persisted) activar(); });
+  window.addEventListener("pageshow", () => { desactivar(); activar(); asentar(); });   // v266: también al volver sin que la página se hubiera descartado
   activar();
 }
 

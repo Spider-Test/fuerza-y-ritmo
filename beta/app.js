@@ -7272,7 +7272,11 @@ function pintarPlan() {
 }
 function menuPlantilla(p) {
   abrirMenu(p.nombre, (esPlantillaCalentamiento(p) ? "Calentamiento · " : "") + resumenItems(p.items || []) + ": " + nombresItems(p.items || []), [
-    { texto: "Añadir a un día de esta semana…", accion: () => abrirMenu("¿A qué día?", "", dias.map(d => ({ texto: NOMBRES[d.i] + " " + fmt(deIso(d.id)), accion: () => { aplicarPlantilla(d, p); verPestana("semana"); } }))) },
+    { texto: "Añadir a un día de esta semana…", accion: () => {
+      // v277 (corrección): dias[].id solo se rellena al pintar la pestaña Semana; si se llega aquí antes salía «NaN undefined» y se guardaba con fecha vacía. Se asignan desde la semana visible (misma fórmula que pintarSemana).
+      dias.forEach(d => { d.id = iso(sumarDias(lunesVista(), d.i)); });
+      abrirMenu("¿A qué día?", "", dias.map(d => ({ texto: NOMBRES[d.i] + " " + fmt(deIso(d.id)), accion: () => { aplicarPlantilla(d, p); verPestana("semana"); } })));
+    } },
     { texto: "Compartir con un amigo…", accion: () => compartir(p.nombre, p.items || []) },
     { texto: "Cambiar nombre…", accion: async () => { const n = await pedirNombre("Nombre de la plantilla", p.nombre); if (n) { cambiar("plantillas", { ...p, nombre: n }); pintarPlan(); } } },
     { texto: "Eliminar plantilla", peligro: true, accion: () => { cambiar("plantillas", { ...p, borrado: true }); pintarPlan(); } }
@@ -11039,13 +11043,17 @@ $("selPlantDia").addEventListener("click", () => {
   abrirMenu("Añadir " + ps.length + (ps.length === 1 ? " plantilla" : " plantillas"), ps.map(p => p.nombre).join(", "), [
     // v277: cualquier fecha del calendario (el selector de fecha del navegador), sin tener que avanzar semana a semana
     { texto: "📅 Elegir otra fecha…", accion: () => abrirFechaPlantillas(ps) },
-    ...dias.map(d => ({ texto: NOMBRES[d.i] + " " + fmt(deIso(d.id)), accion: () => {
-      ps.forEach(p => pegarItems(d.id, p.items || [], p.nombre));
-      persistir();
-      salirSeleccion();
-      abrirDia(d.id);
-      setEstado(ps.length + " plantillas añadidas al " + NOMBRES[d.i]);
-    } }))
+    // v277 (corrección): las fechas de la semana visible se calculan aquí (dias[].id solo se rellena al pintar la pestaña Semana; si aún no se ha pintado estaba vacío → «NaN undefined»)
+    ...Array.from({ length: 7 }, (_, i) => {
+      const f = sumarDias(lunesVista(), i), fi = iso(f);
+      return { texto: NOMBRES[i] + " " + fmt(f), accion: () => {
+        ps.forEach(p => pegarItems(fi, p.items || [], p.nombre));
+        persistir();
+        salirSeleccion();
+        abrirDia(fi);
+        setEstado(ps.length + (ps.length === 1 ? " plantilla añadida" : " plantillas añadidas") + " al " + NOMBRES[i]);
+      } };
+    })
   ]);
 });
 // v277: «Añadir a un día» con cualquier fecha. Mismo comportamiento que los días de la semana visible (mismo pegarItems, mismo orden de selección, mismo contenido
@@ -11062,7 +11070,7 @@ function abrirFechaPlantillas(ps) {
 function fpValidar() {
   const f = $("fpFecha").value;
   if (!fechaSerieValida(f)) { $("fpElegida").textContent = f ? "Fecha no válida." : "Elige una fecha: se mostrará aquí antes de añadir."; $("fpAnadir").disabled = true; return; }
-  const hoyIso = iso(new Date()), visible = dias.some(d => d.id === f);
+  const hoyIso = iso(new Date()), visible = iso(lunesDe(deIso(f))) === iso(lunesVista());
   const rel = f === hoyIso ? "hoy" : f < hoyIso ? "fecha pasada" : "fecha futura";
   $("fpElegida").textContent = "Se añadirá el " + fechaLargaPlant(f) + " (" + rel + (visible ? ", en la semana que estás viendo" : ", fuera de la semana que estás viendo: no cambiará la pantalla") + ").";
   const hay = seriesDelDia(f).length;
@@ -11079,8 +11087,8 @@ $("fpAnadir").addEventListener("click", () => {
   ps.forEach(p => pegarItems(f, p.items || [], p.nombre));
   persistir();
   salirSeleccion();
-  const d = dias.find(x => x.id === f);
-  if (d) { abrirDia(f); setEstado(ps.length + " plantillas añadidas al " + fechaLargaPlant(f)); }
+  const visible = iso(lunesDe(deIso(f))) === iso(lunesVista());
+  if (visible) { abrirDia(f); setEstado(ps.length + " plantillas añadidas al " + fechaLargaPlant(f)); }
   else { pintarTodo(); setEstado(ps.length + (ps.length === 1 ? " plantilla añadida" : " plantillas añadidas") + " al " + fechaLargaPlant(f) + " (fuera de la semana visible)"); }
 });
 // Mesociclo: crear uno nuevo repartiéndolas por la semana, o añadirlas a un día de uno existente

@@ -84,7 +84,7 @@ if (BETA) { document.documentElement.classList.add("beta"); document.title = "Fu
 // Cada tabla se sincroniza por cuenta; los cambios locales en conflicto se conservan.
 // El orden importa al subir: primero ejercicios y plantillas, después las series que los usan.
 const TABLAS = {
-  ejercicios: { clave: "id", conflicto: "id", campos: ["id", "user_id", "nombre", "tipo", "video_url", "notas", "rm", "compartido", "zonas", "borrado", "actualizado"] },
+  ejercicios: { clave: "id", conflicto: "id", campos: ["id", "user_id", "nombre", "tipo", "video_url", "notas", "rm", "compartido", "zonas", "medidas", "regiones", "tecnica", "borrado", "actualizado"] },
   personales: { clave: "ejercicio_id", conflicto: "user_id,ejercicio_id", campos: ["ejercicio_id", "rm", "medida", "lado", "actualizado"] },
   ciclos: { clave: "id", conflicto: "id", campos: ["id", "ejercicio_id", "numero", "rm_inicio", "peso_inicial", "incremento", "reps_reset", "importadas", "cerrado", "borrado", "actualizado"] },
   plantillas: { clave: "id", conflicto: "id", campos: ["id", "nombre", "items", "borrado", "actualizado"] },
@@ -95,7 +95,7 @@ const TABLAS = {
   listas: { clave: "id", conflicto: "id", campos: ["id", "nombre", "items", "siguiente", "borrado", "actualizado"], opcional: true },
   carreras: { clave: "id", conflicto: "id", campos: ["id", "nombre", "fecha", "lugar", "distancia", "tiempo", "chip", "pos_general", "total_general", "categoria", "pos_categoria", "total_categoria", "desnivel_pos", "fc_media", "notas", "enlace", "previsto", "borrado", "actualizado"] }
 };
-const DEFECTOS = { medida: "", lado: false, extra: {}, seccion: "", por_lado: false, nota: "", letra_nueva: false, max_tiempo: false, max_reps: false, rango_min: 0, rango_max: 0, fecha: null, lugar: "", categoria: "", enlace: "", fc_hist: [], tipo: "fuerza", hecha: true, grupo: "", meso_id: "", bloque_id: "", ciclo_id: "", importadas: [], cerrado: false, compartido: false, items: [], dias: {}, descarga: {}, zonas: [], calentamiento: false, inicio: null, zona: "", descripcion: "", estado: "activa", nombre: "", video_url: "", notas: "", html: "", texto: "", sensacion: "", borrado: false };
+const DEFECTOS = { medida: "", lado: false, extra: {}, seccion: "", por_lado: false, nota: "", letra_nueva: false, max_tiempo: false, max_reps: false, rango_min: 0, rango_max: 0, fecha: null, lugar: "", categoria: "", enlace: "", fc_hist: [], tipo: "fuerza", hecha: true, grupo: "", meso_id: "", bloque_id: "", ciclo_id: "", importadas: [], cerrado: false, compartido: false, medidas: [], regiones: [], tecnica: false, items: [], dias: {}, descarga: {}, zonas: [], calentamiento: false, inicio: null, zona: "", descripcion: "", estado: "activa", nombre: "", video_url: "", notas: "", html: "", texto: "", sensacion: "", borrado: false };
 let sesion = leer("sesion-v1");                 // {access_token, refresh_token, expires_at, user_id, email}
 let perfil = leer("perfil-v1");                 // {aprobado, es_admin, email}
 let usuarios = perfil?.es_admin && perfil?.aprobado ? (leer("usuarios-v1") || []) : [];        // solo para el administrador (se guarda para no verla vacía al abrir)
@@ -329,6 +329,8 @@ const puedeQuitarDelCatalogo = e => !!e && (!e.compartido || !!(perfil && perfil
 // Crear ejercicios (privados o compartidos) es una capacidad del CATÁLOGO: solo el administrador y quien tenga edita_catalogo.
 // Todos los usuarios aprobados pueden usar los ejercicios existentes y editar los valores de sus series (metros, tiempos, pesos…).
 const puedeCrearEjercicios = () => puedeEditarCatalogo();
+// v266 (beta derivada de la oficial v265): catálogo ÚNICO (el proyecto de pruebas solo admite ejercicios comunes creados por quien edita el catálogo). La oficial permite además ejercicios personales (P2); aquí todo ejercicio nuevo es común.
+const creaComun = () => true;
 class FaltaEjercicio extends Error {
   constructor(nombre) {
     super("«" + nombre + "» no está en el catálogo y tu cuenta no puede crear ejercicios. Elige uno existente o pide al administrador que lo añada.");
@@ -348,6 +350,98 @@ function aplicarPermisosCatalogo() { const b = $("nuevoEj"); if (b) b.hidden = !
 const ejercicioVivo = id => { const e = db.ejercicios[id]; return e && !e.borrado ? e : null; };
 const tipoDe = id => { const e = db.ejercicios[id]; return e && TIPOS[e.tipo] ? e.tipo : "fuerza"; };
 const esDistancia = tipo => tipo === "carrera" || tipo === "natacion";
+// v262 (MEJ-MEDIDA-001, adenda 6): magnitudes que admite la FICHA (qué campos ofrece el formulario al programar y registrar). Son
+// adicionales al tipo, que no cambia. Lista vacía = las de siempre según el tipo: los ejercicios antiguos se comportan exactamente igual
+// y no se les atribuye ninguna capacidad que no conste. Carrera y natación siguen con distancia y tiempo (no se configuran aquí).
+// Es distinto de la «medida de progreso» (personales.medida), que sigue decidiendo los récords de los ejercicios sin medidas propias.
+const MAGNITUDES = { reps: "Repeticiones", tiempo: "Tiempo", carga: "Carga (kg)", distancia: "Distancia" };
+const MAGNITUDES_TIPO = { fuerza: ["reps", "tiempo", "carga", "distancia"], movilidad: ["reps", "tiempo"] };
+const MEDIDAS_BASE = { fuerza: ["reps", "tiempo", "carga"], movilidad: ["reps", "tiempo"] };
+const medidasPropias = id => { const e = db.ejercicios[id], ok = MAGNITUDES_TIPO[tipoDe(id)] || []; return e && Array.isArray(e.medidas) ? ok.filter(m => e.medidas.includes(m)) : []; };
+const medidasDe = id => { const p = medidasPropias(id); return p.length ? p : (MEDIDAS_BASE[tipoDe(id)] || []).slice(); };
+const admite = (id, m) => medidasDe(id).includes(m);
+// Fuerza con distancia (granjero: carga + distancia, con el tiempo opcional): el récord se compara solo con la misma carga y distancia
+const conDistFuerza = s => n0(s.distancia) > 0 && !esDistancia(tipoDe(s.ejercicio_id));
+// ---------- v263: clasificación de ejercicios (Región y Técnica) ----------
+// «Región» (Torso, Pierna, Cuerpo completo, Otros; vacío = «Sin clasificar») y «Técnica» las asigna el usuario EXPRESAMENTE en la ficha: nunca se
+// infieren del nombre (los ejercicios existentes quedan sin clasificar). «Técnica» es una etiqueta o finalidad, no un tipo de medición: no cambia
+// cómo se guardan las series, las medidas, los récords ni las estadísticas (ningún otro código lee estos campos). La región solo se asigna en
+// ejercicios de fuerza. Un compuesto puede ser Torso + Pierna; «Cuerpo completo» y «Otros» son alternativas excluyentes. Necesita P8 en el servidor.
+const REGIONES = { torso: "Torso", pierna: "Pierna", cuerpo_completo: "Cuerpo completo", otros: "Otros" };
+const regionesDe = id => { const e = db.ejercicios[id]; return e && Array.isArray(e.regiones) ? Object.keys(REGIONES).filter(r => e.regiones.includes(r)) : []; };
+const esTecnica = id => !!(db.ejercicios[id] || {}).tecnica;
+function alternarRegion(actuales, r) {
+  if (r === "cuerpo_completo" || r === "otros") return actuales.includes(r) ? [] : [r];
+  const base = actuales.filter(x => x === "torso" || x === "pierna");
+  return ["torso", "pierna"].filter(x => x === r ? !base.includes(r) : base.includes(x));
+}
+const filtroPorDefecto = () => ({ region: "", tecnica: false });
+const leerFiltroClasif = clave => { const f = leer(clave); return f && typeof f === "object" ? { region: ["torso", "pierna", "cuerpo_completo", "otros", "sin"].includes(f.region) ? f.region : "", tecnica: !!f.tecnica } : filtroPorDefecto(); };
+let filtroCat = leerFiltroClasif("filtro-clasif-cat-v1"), filtroSel = leerFiltroClasif("filtro-clasif-sel-v1");
+// Sin soporte del servidor (P8) los filtros están ocultos y NO se aplican (no esconderían ejercicios sin que se vea por qué)
+function coincideClasif(e, f) {
+  if (!clasifOk() || (!f.region && !f.tecnica)) return true;
+  const rg = regionesDe(e.id), okRegion = !f.region || (f.region === "sin" ? tipoDe(e.id) === "fuerza" && !rg.length : rg.includes(f.region));
+  return okRegion && (!f.tecnica || esTecnica(e.id));
+}
+function pintarFiltroClasif(cont, est, clave, alCambiar) {
+  cont.textContent = "";
+  const chip = (texto, pulsado, alPulsar) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip chip-op clasif"; b.textContent = texto;
+    b.setAttribute("aria-pressed", String(pulsado));
+    b.addEventListener("click", () => { alPulsar(); escribir(clave, est); pintarFiltroClasif(cont, est, clave, alCambiar); alCambiar(); });
+    cont.appendChild(b);
+  };
+  [["torso", "Torso"], ["pierna", "Pierna"], ["cuerpo_completo", "Cuerpo completo"], ["otros", "Otros"], ["sin", "Sin clasificar"]]
+    .forEach(([k, t]) => chip(t, est.region === k, () => { est.region = est.region === k ? "" : k; }));
+  chip("Técnica", est.tecnica, () => { est.tecnica = !est.tecnica; });
+}
+function aplicarClasificacionUI() {
+  const ok = clasifOk();
+  $("filtroClasif").hidden = !ok; $("selClasif").hidden = !ok;
+  if (ok) { pintarFiltroClasif($("filtroClasif"), filtroCat, "filtro-clasif-cat-v1", () => pintarCatalogo()); pintarFiltroClasif($("selClasif"), filtroSel, "filtro-clasif-sel-v1", () => pintarSelector()); }
+  try {
+    pintarCatalogo();
+    if ($("selector").open) pintarSelector();
+    if ($("detalle").open) { const e = ejercicioVivo(detalleId); if (e) pintarClasificacionDetalle(e); }
+    if (borradorEj && $("dlgNuevoEj").open) pintarNuevoEj();
+  } catch { /* la app aún no ha terminado de arrancar */ }
+}
+// Etiquetas de una ficha (Técnica y región), solo con soporte del servidor
+function etiquetasClasif(id) {
+  if (!clasifOk()) return [];
+  const t = [];
+  if (esTecnica(id)) t.push(["Técnica", "tecnica"]);
+  const rg = regionesDe(id);
+  if (rg.length) t.push([rg.map(r => REGIONES[r]).join(" + "), "region"]);
+  return t;
+}
+// Series que se comparan por CONDICIÓN y no con el criterio de siempre: las de fuerza con distancia y todas las de un ejercicio con
+// medidas propias (nuevo en v262: no hay historial anterior que cambie). Las demás siguen exactamente igual que antes.
+const porCondicion = s => conDistFuerza(s) || (tipoDe(s.ejercicio_id) === "fuerza" && medidasPropias(s.ejercicio_id).length > 0);
+// Condición de récord (adenda 6 de MEJ-MEDIDA-001): misma carga guardada, mismo «por lado» y, si hay distancia, la misma distancia.
+// Con distancia fija, menos tiempo es mejor (sin tiempo apuntado no se compara); por tiempo, más tiempo; por repeticiones, más reps.
+// No hay ganador entre condiciones distintas (24 kg · 30 m no se compara con 32 kg · 20 m ni con 24 kg · 40 s).
+function condicionSerie(s) {
+  const kg = n0(s.peso), lado = s.por_lado ? 1 : 0, base = (kg > 0 ? num(kg) + " kg" : "sin carga") + (lado ? " · por lado" : "");
+  if (n0(s.distancia) > 0) return n0(s.tiempo) > 0 ? { clave: "d|" + kg + "|" + n0(s.distancia) + "|" + lado, v: n0(s.tiempo), menor: true, cond: base + " · " + fmtDist(s.distancia), valor: fmtSegs(s.tiempo) } : null;
+  if (n0(s.tiempo) > 0 && !(n0(s.reps) > 0)) return { clave: "t|" + kg + "|" + lado, v: n0(s.tiempo), menor: false, cond: base + " · por tiempo", valor: fmtSegs(s.tiempo) };
+  if (n0(s.reps) > 0) return { clave: "r|" + kg + "|" + lado, v: n0(s.reps), menor: false, cond: base + " · repeticiones", valor: n0(s.reps) + " reps" };
+  return null;
+}
+function mejoresPorCondicion(lista) {
+  const cat = {};
+  lista.filter(s => hecha(s) && !s.calentamiento).forEach(s => {
+    const c = condicionSerie(s);
+    if (!c) return;
+    const m = cat[c.clave];
+    if (!m || (c.menor ? c.v < m.v : c.v > m.v)) cat[c.clave] = { ...c, s };
+  });
+  return Object.values(cat).sort((a, b) => a.clave.localeCompare(b.clave, "es", { numeric: true }));
+}
+// 1RM estimado: solo con series de peso que no se comparan por condición (un paseo de 24 kg no es un 1RM de 24 kg)
+const cuentaRm = s => n0(s.peso) > 0 && !porCondicion(s);
 function adivinarTipo(nombre) {
   const n = norm(nombre);
   if (/(movilidad|estiramiento|estirar|stretch|yoga|foam|rulo|apertura de cadera|gato.?camello|rotaciones? de|circunduccion|pigeon|paloma|cobra|90.?90|world.?s greatest)/.test(n)) return "movilidad";
@@ -391,7 +485,7 @@ const medidaDe = id => MEDIDAS[(db.personales[id] || {}).medida] ? db.personales
 const rmPersonal = id => n0((db.personales[id] || {}).rm) || (db.ejercicios[id] && !db.ejercicios[id].compartido ? n0(db.ejercicios[id].rm) : 0);
 function rmReferencia(id) {
   if (rmPersonal(id) > 0) return rmPersonal(id);
-  const p = seriesDe(id).filter(s => n0(s.peso) > 0);
+  const p = seriesDe(id).filter(cuentaRm);   // v262: sin las series por condición
   return p.length ? Math.round(Math.max.apply(null, p.map(rm))) : 0;
 }
 // v251: los kg de un % del RM salen SOLO del 1RM introducido en la ficha; sin él la serie guarda el % y no se inventa un peso con el estimado
@@ -519,6 +613,8 @@ function serieTexto(s) {
   const peso = kg > 0 || n0(s.pct) > 0 ? " (" + (n0(s.pct) > 0 ? num(s.pct) + " %" + (kg > 0 ? " · " : "") : "") + (kg > 0 ? num(kg) + " kg" : "") + ")" : "";
   // Series «al máximo»: la marca se queda y, al registrarla, lo que salió va entre paréntesis: «máx reps (14 · 10 kg)»
   const kgTxt = kg > 0 ? " · " + num(kg) + " kg" : "";
+  // v262: fuerza con distancia (pasos de granjero): «30 m · 45 s (24 kg)»; sin tiempo apuntado, «30 m (24 kg)»
+  if (n0(s.distancia) > 0) return fmtDist(s.distancia) + [n0(s.tiempo) > 0 ? fmtSegs(s.tiempo) : "", n0(s.reps) > 0 ? n0(s.reps) + " reps" : ""].filter(Boolean).map(x => " · " + x).join("") + lado + peso;
   if (s.max_tiempo) return "máx tiempo" + lado + (n0(s.tiempo) > 0 ? " (" + fmtSegs(s.tiempo) + kgTxt + ")" : peso);
   if (s.max_reps || (!s.ciclo_id && !(n0(s.reps) > 0) && !(n0(s.tiempo) > 0))) return "máx reps" + lado + (n0(s.reps) > 0 ? " (" + n0(s.reps) + kgTxt + ")" : peso);
   if (n0(s.tiempo) > 0 && !(n0(s.reps) > 0)) return fmtSegs(s.tiempo) + lado + peso;   // por tiempo: bici, plancha, isométricos…
@@ -550,6 +646,17 @@ const prsEj = id => { const ix = indiceSeries(); return ix.prs[id] || (ix.prs[id
 function prsDe(lista, tipo, medida) {
   const prs = new Set();
   if (tipo === "movilidad") return prs;
+  if (!esDistancia(tipo)) {   // v262: récords por condición (fuerza con distancia o con medidas propias); el resto, como siempre
+    const mejor = {};
+    lista.filter(s => porCondicion(s) && hecha(s) && !s.calentamiento).forEach(s => {
+      const c = condicionSerie(s);
+      if (!c) return;
+      const m = mejor[c.clave];
+      if (m !== undefined && (c.menor ? c.v < m : c.v > m)) prs.add(s.id);
+      mejor[c.clave] = m === undefined ? c.v : c.menor ? Math.min(m, c.v) : Math.max(m, c.v);
+    });
+    lista = lista.filter(s => !porCondicion(s));
+  }
   // Peso corporal: récord = más repeticiones (o más tiempo aguantado), sin mirar el lastre
   if (medida === "reps" || medida === "tiempo") {
     const campo = medida === "reps" ? "reps" : "tiempo";
@@ -591,7 +698,8 @@ function porSesion(lista) {
   return Object.keys(ses).sort().map(f => ({ fecha: f, series: ses[f] }));
 }
 function estadisticas(id) {
-  const tipo = tipoDe(id), lista = seriesDe(id);
+  const tipo = tipoDe(id);
+  let lista = seriesDe(id);
   if (!lista.length) return { tipo, lista, sesiones: [], resumen: "Sin series todavía", ultima: "" };
   const sesiones = porSesion(lista);
   const ult = sesiones[sesiones.length - 1];
@@ -612,6 +720,15 @@ function estadisticas(id) {
     st.resumen = st.sesiones.length + (st.sesiones.length === 1 ? " sesión" : " sesiones") + (st.tiempoTotal > 0 ? " · " + fmtSegs(st.tiempoTotal) + " en total" : "");
     return st;
   }
+  // v262: las series por condición tienen sus propios récords (st.condiciones); el resumen de siempre usa solo las demás
+  st.condiciones = mejoresPorCondicion(lista.filter(porCondicion));
+  st.normal = lista.filter(s => !porCondicion(s));
+  if (!st.normal.length) {
+    const c = st.condiciones[st.condiciones.length - 1];
+    st.resumen = st.condiciones.length ? "Mejor marca: " + c.valor + " (" + c.cond + ")" + (st.condiciones.length > 1 ? " · " + st.condiciones.length + " condiciones" : "") : st.sesiones.length + (st.sesiones.length === 1 ? " sesión" : " sesiones");
+    return st;
+  }
+  lista = st.normal;
   const med = tipo === "fuerza" && lista[0] ? medidaDe(lista[0].ejercicio_id) : "peso";
   if (med === "reps" || med === "tiempo") {
     const campo = med === "reps" ? "reps" : "tiempo", m = Math.max.apply(null, lista.map(x => n0(x[campo])).concat(0));
@@ -744,13 +861,40 @@ async function api(ruta, opciones = {}, reintento = false) {
   if (r.status === 401 && !reintento) { await refrescar(true); comprobarSesion(ctx); return api(ruta, opciones, true); }
   return r;
 }
+// Columnas OPCIONALES de ejercicios, que llegan con migraciones posteriores: «medidas» (P6, v262) y «regiones» y «tecnica» (P8, v263, clasificación).
+// Si el servidor aún no las tiene (o se revierten), se detecta en la primera lectura o escritura y, en esta sesión, se sincroniza sin ellas: la
+// app sigue funcionando como antes. Se vuelve a intentar en cada carga de la app. P6 y P8 son independientes (pueden estar una sí y otra no).
+let columnaMedidas = true;
+const columnasFaltan = new Set();
+const COLUMNAS_EJ_OPCIONALES = ["medidas", "regiones", "tecnica"];
+const camposDe = t => t === "ejercicios" && columnasFaltan.size ? TABLAS[t].campos.filter(c => !columnasFaltan.has(c)) : TABLAS[t].campos;
+// v263: la clasificación (Región y Técnica) solo se muestra cuando el servidor la soporta. «soporte-p8» recuerda, en este dispositivo, que la
+// última lectura de ejercicios con esas columnas funcionó (así se ve también sin conexión); se pone a false en cuanto el servidor las rechaza.
+let soporteClasif = leerGeneral("soporte-p8") === true;
+const clasifOk = () => soporteClasif && !columnasFaltan.has("regiones") && !columnasFaltan.has("tecnica");
+function ponerSoporteClasif(v) {
+  if (soporteClasif === v) return;
+  soporteClasif = v;
+  try { localStorage.setItem(PREFIJO + "soporte-p8", JSON.stringify(v)); } catch { /* sin almacenamiento: solo esta sesión */ }
+  if (typeof aplicarClasificacionUI === "function") aplicarClasificacionUI();
+}
+async function faltaColumnaOpcional(r) {
+  if (r.ok || r.status !== 400) return false;
+  const txt = await r.clone().text().catch(() => "");
+  const col = COLUMNAS_EJ_OPCIONALES.find(c => !columnasFaltan.has(c) && new RegExp("\\b" + c + "\\b").test(txt));
+  if (!col) return false;
+  columnasFaltan.add(col);
+  if (col === "medidas") columnaMedidas = false;
+  else ponerSoporteClasif(false);
+  return true;
+}
 // Aislamiento adicional en el cliente; la autorización sigue siendo responsabilidad de RLS.
 function filtroPropietario(tabla) {
   const uid = encodeURIComponent(sesion.user_id);
   return tabla === "ejercicios" ? "&and=(or(user_id.eq." + uid + ",compartido.eq.true))" : "&user_id=eq." + uid;
 }
 async function leerTablaCompleta(tabla, desde = "") {
-  const campos = [...new Set([...TABLAS[tabla].campos, "user_id", "servidor_ts"])];
+  const campos = [...new Set([...camposDe(tabla), "user_id", "servidor_ts"])];
   const orden = "servidor_ts.asc," + TABLAS[tabla].clave + ".asc";
   const ruta = "/rest/v1/" + tabla + "?select=" + campos.join(",") + "&order=" + orden + filtroPropietario(tabla) + desde;
   const filas = [], tamano = 500;
@@ -760,7 +904,9 @@ async function leerTablaCompleta(tabla, desde = "") {
   // Una página corta tampoco implica final: puede haber un límite menor en Supabase.
   for (;;) {
     const r = await api(ruta + siguiente + "&limit=" + tamano);
+    if (!r.ok && tabla === "ejercicios" && await faltaColumnaOpcional(r)) return leerTablaCompleta(tabla, desde);   // servidor sin P6 o sin P8
     if (!r.ok) return { respuesta: r, filas: [] };
+    if (tabla === "ejercicios" && !columnasFaltan.has("regiones") && !columnasFaltan.has("tecnica")) ponerSoporteClasif(true);   // v263: el servidor devolvió las columnas de P8
     const pagina = await r.json();
     if (!Array.isArray(pagina)) throw new Error("Respuesta de sincronización no válida");
     if (!pagina.length) return { respuesta: r, filas };
@@ -954,7 +1100,7 @@ function mezclar(tabla, f) {
   const local = db[tabla][k];
   const tr = Date.parse(f.actualizado), tl = local ? Date.parse(local.actualizado) : 0;
   // Misma marca y sin cambios locales: solo se copia si el servidor trae algún campo distinto (p. ej. una columna nueva)
-  const igual = () => TABLAS[tabla].campos.every(c => c === "actualizado" || JSON.stringify(local[c] ?? null) === JSON.stringify(f[c] ?? null));
+  const igual = () => camposDe(tabla).every(c => c === "actualizado" || JSON.stringify(local[c] ?? null) === JSON.stringify(f[c] ?? null));
   if (local?.sucio) {
     if (tr > tl) {
       // Conservar ambas versiones para resolver el conflicto; no sobrescribir una edición pendiente.
@@ -967,7 +1113,8 @@ function mezclar(tabla, f) {
   }
   if (local && tr === tl && igual()) return false;
   const fila = {};
-  TABLAS[tabla].campos.forEach(c => { fila[c] = f[c]; });
+  camposDe(tabla).forEach(c => { fila[c] = f[c]; });
+  if (tabla === "ejercicios" && local) columnasFaltan.forEach(c => { if (local[c] !== undefined) fila[c] = local[c]; });   // sin P6/P8, se conservan en local
   fila.actualizado = new Date(tr).toISOString();
   fila.sucio = false;
   db[tabla][k] = fila;
@@ -1190,7 +1337,9 @@ async function subirEjercicios(filas) {
   for (const f of filas) {
     try {
       const { id, user_id, ...cambios } = f;
-      const u = await api("/rest/v1/ejercicios?id=eq." + encodeURIComponent(id), { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify(cambios) });
+      const patch = () => api("/rest/v1/ejercicios?id=eq." + encodeURIComponent(id), { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify(cambios) });
+      let u = await patch();
+      for (let k = 0; k < 3 && !u.ok && await faltaColumnaOpcional(u); k++) { columnasFaltan.forEach(c => { delete cambios[c]; delete f[c]; }); u = await patch(); }   // servidor sin P6 o sin P8
       if (!u.ok) throw await errorGuardado("ejercicios", u);
       const actualizadas = await u.json().catch(() => null);
       if (!Array.isArray(actualizadas)) throw new Error("Respuesta no válida al actualizar un ejercicio.");
@@ -1201,7 +1350,9 @@ async function subirEjercicios(filas) {
           continue;
         }
         if (user_id !== sesion.user_id || !puedeCrearEjercicios()) throw new Error("Tu cuenta no puede modificar este ejercicio.");
-        const i = await api("/rest/v1/ejercicios", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify(f) });
+        const alta = () => api("/rest/v1/ejercicios", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify(f) });
+        let i = await alta();
+        for (let k = 0; k < 3 && !i.ok && await faltaColumnaOpcional(i); k++) { columnasFaltan.forEach(c => { delete f[c]; }); i = await alta(); }   // servidor sin P6 o sin P8
         if (!i.ok) throw await errorGuardado("ejercicios", i);
       }
       const v = db.ejercicios[id];
@@ -1410,7 +1561,7 @@ async function sincronizar() {
         if (t === "series" && mostrarFechasPendientes()) {
           throw new Error("Hay series con una fecha o marca de edición incorrecta. Pulsa Revisar fechas pendientes para corregirlas; los datos se conservan.");
         }
-        const filas = pend.map(v => { const f = {}; TABLAS[t].campos.forEach(c => { f[c] = v[c] ?? (c in DEFECTOS ? DEFECTOS[c] : 0); }); f.user_id = t === "ejercicios" ? (v.user_id || sesion.user_id) : sesion.user_id; return f; });   // los ejercicios del catálogo conservan a su dueño
+        const filas = pend.map(v => { const f = {}; camposDe(t).forEach(c => { f[c] = v[c] ?? (c in DEFECTOS ? DEFECTOS[c] : 0); }); f.user_id = t === "ejercicios" ? (v.user_id || sesion.user_id) : sesion.user_id; return f; });   // los ejercicios del catálogo conservan a su dueño
         if (t === "ejercicios") { fallosEjercicios = await subirEjercicios(filas); guardarLocal(); continue; }
         const w = await api("/rest/v1/" + t + "?on_conflict=" + TABLAS[t].conflicto, {
           method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify(filas)
@@ -1924,8 +2075,7 @@ function menuDia(dia) {
     (series.length || aTexto(html).trim()) && { texto: "Copiar día", accion: () => copiar(titulo, html, series, "dia") },
     hayItemsCopiados() && { texto: "📋 Pegar «" + porta.nombre + "» en este día", accion: () => pegar(dia) },
     { texto: "Añadir plantilla…", accion: () => elegirPlantilla("Añadir plantilla al " + titulo, p => aplicarPlantilla(dia, p)) },
-    // v254: con entrenos con nombre el día ya no muestra «+ Bloque»; el bloque SIN entreno sigue disponible aquí, con su destino explícito
-    dia.col.querySelector(".dia-cuerpo-in > .add-fila.add-dia-general") && { texto: "+ Bloque suelto (sin entreno)…", accion: () => abrirBloque(dia, "") },
+    // v263: sin «+ Bloque suelto (sin entreno)…» en este menú (los bloques se crean dentro de un entrenamiento: «＋ Añadir» › «+ Bloque»)
     series.filter(s => !s.bloque_id).length > 1 && { texto: "Seleccionar series para agrupar en bloque", accion: () => empezarSelSeries(dia) },
     series.length && { texto: "Guardar en una lista de entrenamientos…", accion: () => guardarEnLista(series[0].grupo || "Entrenamiento", series) },
     series.length && { texto: "Guardar ejercicios como plantilla…", accion: () => guardarPlantilla(series[0].grupo || "Entrenamiento", series) },
@@ -1942,37 +2092,21 @@ function cabeceraParte(dia, grupo, p, color, nNombradas, partes, seriesItem) {
   cab.dataset.parte = p.nombre;
   cab.innerHTML = '<button type="button" class="p-toggle"><span class="flecha-dia" aria-hidden="true">▸</span><span class="p-nombre"></span></button><span class="g-prog"></span><button type="button" class="menu-btn">⋯</button>';
   cab.querySelector(".p-nombre").textContent = p.nombre;
-  {   // v259: tocar el TEXTO del nombre lo edita ahí mismo; la flecha y el resto de la cabecera siguen plegando
-    const txt = cab.querySelector(".p-nombre"), tg = cab.querySelector(".p-toggle");
-    const editar = () => editarNombreEnLinea(cab, p.nombre, "Nombre de la parte", v => renombrarParte(dia, grupo, p.nombre, v));
-    txt.classList.add("gn-editable");
-    txt.title = "Toca el nombre para cambiarlo";
-    txt.addEventListener("click", e => { e.stopPropagation(); e.preventDefault(); editar(); });
-    tg.setAttribute("aria-keyshortcuts", "F2");
-    tg.addEventListener("keydown", e => { if (e.key === "F2") { e.preventDefault(); editar(); } });
-  }
+  // v262: tocar la flecha o el nombre solo pliega/despliega la parte; el nombre se cambia desde ⋯ → «Cambiar nombre» (evita renombrados accidentales)
+  cab.querySelector(".p-toggle").title = p.nombre;
   const ss = p.ids.flatMap(seriesItem);
   cab.querySelector(".g-prog").textContent = ss.length ? ss.filter(hecha).length + "/" + ss.length : p.ids.length ? "" : "vacía";
   cab.querySelector(".menu-btn").setAttribute("aria-label", "Opciones de la parte " + p.nombre);
   cab.querySelector(".menu-btn").addEventListener("click", () => {
-    const nombresVis = partes.filter(x => x.nombre).map(x => x.nombre), k = nombresVis.indexOf(p.nombre);
-    const mover = paso => {
-      // Mismo orden persistente que el arrastre con el asa: se intercambia con la parte con nombre anterior o siguiente
-      const j = k + paso;
-      if (k < 0 || j < 0 || j >= nombresVis.length) return;
-      const n = nombresVis.slice();
-      [n[k], n[j]] = [n[j], n[k]];
-      cab.ordenarPartes(n);
-    };
+    // v263: sin «Subir parte» / «Bajar parte» en este menú; las partes se reordenan con el asa ≡ (cab.ordenarPartes, sin cambios)
     const plegada = !!(cab.parentElement && cab.parentElement.classList.contains("p-plegada"));   // desplegada, «＋ Añadir» ya está a la vista en la propia parte
     abrirMenu(p.nombre, ss.length ? ss.length + (ss.length === 1 ? " serie" : " series") : "Parte vacía", [
-      // v259: el nombre de la parte se cambia tocando su texto (o F2 con la cabecera enfocada), no desde este menú
-      plegada && { texto: "+ Ejercicio en esta parte", accion: () => abrirSelector(dia, null, grupo, p.nombre) },
+      // v262: el nombre de la parte vuelve a cambiarse aquí, con una acción deliberada (antes, v259, tocando su texto en la cabecera)
+      { texto: "Cambiar nombre", accion: () => cambiarNombreParte(dia, grupo, p.nombre) },
+      // v262: sin «+ Ejercicio en esta parte» en este menú; se añade con los botones visibles de la propia parte
       ...(() => { const otros = [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].map(x => x.dataset.grupo || "").filter(x => x !== grupo);
         return otros.length ? [{ texto: "Mover la parte a otro entreno…", accion: () => abrirMenu("¿A qué entreno?", "La parte «" + p.nombre + "» pasa entera, con sus ejercicios y bloques", otros.map(x => ({ texto: x || "Entreno 1", accion: () => moverParteAEntreno(dia, grupo, p.nombre, x, ss) }))) }] : []; })(),
       plegada && { texto: "+ Bloque en esta parte", accion: () => abrirBloque(dia, grupo, p.nombre) },
-      k > 0 && { texto: "Subir parte", accion: () => mover(-1) },
-      k >= 0 && k < nombresVis.length - 1 && { texto: "Bajar parte", accion: () => mover(1) },
       { texto: "Quitar la parte (sus ejercicios quedan sin parte)", accion: () => {
         ss.forEach(x => cambiar("series", { ...x, seccion: "" }, true));
         renombrarParteLocal(dia.id, grupo, p.nombre, "");
@@ -1987,7 +2121,7 @@ function cabeceraParte(dia, grupo, p, color, nNombradas, partes, seriesItem) {
       } }
     ]);
   });
-  // Aplica un orden de partes (nombres) de forma persistente: lo usan el asa de arrastre y «Subir/Bajar parte»
+  // Aplica un orden de partes (nombres) de forma persistente: lo usa el asa de arrastre ≡ (v263: ya sin «Subir/Bajar parte» en el menú ⋯)
   cab.ordenarPartes = nombres => {
     const nuevo = aplicarOrdenExplicito(partes, nombres, x => x.nombre);
     const kp = dia.id + "|" + grupo, vacias = partesVacias[kp] || [];
@@ -2342,7 +2476,7 @@ async function cambiarNombreEntreno(dia, grupo) {
   if (dia.id !== fecha) { setEstado("El entrenamiento ha cambiado. Abre su menú de nuevo.", true); return; }
   renombrarEntreno(dia, grupo, nombre);
 }
-// v258: aplica el cambio de nombre (lo usan el diálogo del menú y la edición directa en el título)
+// v258: aplica el cambio de nombre (lo usan los diálogos de ⋯ del entreno y del día)
 function renombrarEntreno(dia, grupo, nombre) {
   const fecha = dia.id;
   if (!nombre || nombre === grupo) return;
@@ -2366,34 +2500,7 @@ function renombrarEntreno(dia, grupo, nombre) {
   guardarSesiones(); guardarVacios(); escribir("grupos-plegados-v1", gruposPlegados); persistir(); pintarDia(dia);
   setEstado("Entrenamiento renombrado: " + nombre);
 }
-// v258/v259: edición directa de un nombre en su cabecera (entreno o parte). Intro o salir del campo guarda; Esc cancela; vacío o igual
-// no cambia nada. El campo sustituye al nombre en la misma fila; guardar() hace las validaciones (duplicados, cambios en el día…)
-function editarNombreEnLinea(cab, valor, etiqueta, guardar) {
-  if (cab.querySelector(".gn-edit")) return;
-  const inp = document.createElement("input");
-  inp.className = "gn-edit"; inp.value = valor; inp.placeholder = valor || etiqueta;
-  inp.autocomplete = "off"; inp.enterKeyHint = "done"; inp.spellcheck = false;
-  inp.setAttribute("aria-label", etiqueta + ": Intro guarda, Esc cancela");
-  cab.classList.add("gn-editando");
-  cab.prepend(inp);
-  inp.focus(); inp.select();
-  let hecho = false;
-  const terminar = ok => {
-    if (hecho) return;
-    hecho = true;
-    const v = inp.value.trim();
-    cab.classList.remove("gn-editando");
-    inp.remove();
-    if (ok && v && v !== valor) guardar(v);
-  };
-  inp.addEventListener("keydown", e => {
-    e.stopPropagation();
-    if (e.key === "Enter") { e.preventDefault(); terminar(true); }
-    else if (e.key === "Escape") { e.preventDefault(); terminar(false); }
-  });
-  inp.addEventListener("blur", () => terminar(true));
-  ["click", "pointerdown"].forEach(t => inp.addEventListener(t, e => e.stopPropagation()));
-}
+// v262: retirada la edición directa del nombre en la cabecera (editarNombreEnLinea, v258/v259): el nombre se cambia desde ⋯ → «Cambiar nombre»
 async function cambiarNombreParte(dia, grupo, parte) {
   const fecha = dia.id, ctx = contextoSesion();
   const nombre = await pedirNombre("Nombre de la parte", parte, "Se conservarán todos los ejercicios y series de esta parte.");
@@ -2403,7 +2510,7 @@ async function cambiarNombreParte(dia, grupo, parte) {
   renombrarParte(dia, grupo, parte, nombre);
 }
 // v259: cambia el nombre de una parte conservando sus series, su orden, su plegado (también el de sus letras) y su posición respecto a
-// los ejercicios sueltos. Lo usan la edición directa y cambiarNombreParte
+// los ejercicios sueltos. Lo usa cambiarNombreParte (⋯ de la parte → «Cambiar nombre»)
 function renombrarParte(dia, grupo, parte, nombre) {
   const fecha = dia.id;
   nombre = (nombre || "").trim();
@@ -2433,7 +2540,9 @@ function menuGrupo(dia, grupo) {
   const series = seriesDelDia(dia.id).filter(s => (s.grupo || "") === grupo);
   const nGrupos = gruposDelDia(dia.id).length;   // v249: cuentan también los entrenos vacíos
   abrirMenu(grupo || "Entrenamiento", resumenItems(itemsDe(series)), [
-    // v259: el nombre se cambia tocando su texto en la cabecera (o F2 con la cabecera enfocada), no desde este menú
+    // v262: el nombre vuelve a cambiarse desde este menú, con una acción deliberada (antes, v258/v259, tocando su texto en la cabecera).
+    // «Ejercicios sueltos» (sin nombre, con otros entrenos con nombre en el día) no es un entreno: no se renombra
+    (grupo || !gruposDelDia(dia.id).some(Boolean)) && { texto: "Cambiar nombre", accion: () => cambiarNombreEntreno(dia, grupo) },
     // v258: sin «▶ Iniciar solo este entrenamiento»: lo cubren la franja «▶ Empezar/Seguir este entrenamiento» (varios entrenos) y el
     // botón inferior del día (uno solo)
     { texto: "📅 Mover a otro día…", accion: () => elegirDiaDestino(lunesDe(deIso(dia.id)), "¿A qué día muevo «" + (grupo || "Entreno 1") + "»?", f => moverADia(dia, grupo, f)) },
@@ -2519,7 +2628,7 @@ function filtrarSerieCompartida(v, tipo, op, est, donde) {
     if (v.max_reps && n0(s.reps)) { s.reps = 0; oculto = true; }
     if (v.max_tiempo && n0(s.tiempo)) { s.tiempo = 0; oculto = true; }
     if ((n0(v.rango_min) > 0 || n0(v.rango_max) > 0) && n0(s.reps)) { s.reps = 0; oculto = true; }
-    if (esDistancia(tipo) && n0(s.distancia) > 0 && n0(s.tiempo)) { s.tiempo = 0; oculto = true; }
+    if (n0(s.distancia) > 0 && n0(s.tiempo)) { s.tiempo = 0; oculto = true; }   // v262: también en fuerza con distancia (granjero): el tiempo de la distancia es un resultado
     if (oculto) est.resultadosOcultos++;
   }
   const nota = String(v.nota || "").trim();
@@ -2807,8 +2916,26 @@ async function abrirMisCompartidos() {
   } catch { setEstado("No se han podido cargar tus enlaces. Necesitas conexión y que la beta tenga aplicada la migración de seguridad.", true); return; }
   const orden = { activo: 0, caducado: 1, revocado: 2 };
   filas.sort((a, b) => (orden[a.estado] - orden[b.estado]) || (new Date(b.creado) - new Date(a.creado)));
+  // v263: «Quitar de la lista» solo se ofrece si el servidor lo admite (migración P7: mis_compartidos devuelve la columna «retirable»)
+  const revocados = filas.filter(f => f.estado === "revocado" && f.retirable === true);
   abrirMenu("Mis enlaces compartidos", filas.length ? "Toca uno para copiar su código o revocarlo. Revocar impide que se abra de nuevo; lo que alguien ya haya guardado en su cuenta no se borra." : "Todavía no has compartido nada.",
-    filas.length ? filas.map(f => ({ texto: etiquetaEnlace(f), accion: () => detalleEnlace(f) })) : [{ texto: "Cerrar", accion: () => {} }]);
+    (filas.length ? filas.map(f => ({ texto: etiquetaEnlace(f), accion: () => detalleEnlace(f) })) : [{ texto: "Cerrar", accion: () => {} }])
+      .concat(revocados.length ? [{ texto: "Quitar de la lista los enlaces revocados (" + revocados.length + ")…", accion: () => retirarEnlacesRevocados(null, revocados.length) }] : []));
+}
+// v263: quita de «Mis enlaces compartidos» enlaces YA revocados (uno, si se da el código; o todos). El servidor solo marca el registro como
+// retirado (no borra filas): el enlace sigue revocado y su código no se puede reutilizar; el entrenamiento original y lo que otros ya
+// importaron no se tocan. Solo actúa sobre enlaces revocados y propios (lo impone la función del servidor, no este cliente).
+async function retirarEnlacesRevocados(codigo, cuantos) {
+  const uno = codigo !== null;
+  if (!await confirmar(uno ? "¿Quitar este enlace de la lista?" : "¿Quitar de la lista " + cuantos + (cuantos === 1 ? " enlace revocado?" : " enlaces revocados?"),
+      "Solo desaparece de esta lista. El enlace seguirá revocado (nadie podrá abrirlo), y no se borra ningún entrenamiento ni lo que otras personas ya hayan guardado en su cuenta. Los enlaces activos y caducados no se tocan.", "Quitar de la lista")) return;
+  let n = -1;
+  try {
+    const r = await api("/rest/v1/rpc/retirar_compartidos_revocados", { method: "POST", body: JSON.stringify(uno ? { p_codigo: codigo } : {}) });
+    if (r.ok) { const v = await r.json(); n = Number.isInteger(v) ? v : -1; }
+  } catch { setEstado("Necesitas conexión para quitar enlaces de la lista.", true); return; }
+  setEstado(n > 0 ? (n === 1 ? "Enlace quitado de la lista" : n + " enlaces quitados de la lista") : n === 0 ? "No había nada que quitar (ya estaba fuera de la lista o no es revocado)." : "No se ha podido quitar de la lista. Inténtalo de nuevo.", n < 0);
+  abrirMisCompartidos();
 }
 function detalleEnlace(f) {
   const enlace = URL_APP + "#c=" + f.codigo, activo = f.estado === "activo";
@@ -2823,6 +2950,7 @@ function detalleEnlace(f) {
       setEstado(ok ? "Enlace revocado" : "No se ha podido revocar (ya estaba revocado o no es tuyo).", !ok);
       abrirMisCompartidos();
     } },
+    f.estado === "revocado" && f.retirable === true && { texto: "Quitar de la lista…", accion: () => retirarEnlacesRevocados(f.codigo, 1) },
     { texto: "Volver a la lista", accion: () => abrirMisCompartidos() }
   ]);
 }
@@ -3109,18 +3237,8 @@ function pintarDiaSinAncla(dia) {
       cab.querySelector(".g-prog").textContent = deG.filter(hecha).length + "/" + deG.length;
       cab.querySelector(".menu-btn").setAttribute("aria-label", "Opciones del entreno " + (g.nombre || "1"));
       cab.querySelector(".menu-btn").addEventListener("click", () => menuGrupo(dia, g.nombre));
-      // v258: tocar el TEXTO del nombre lo edita ahí mismo (Intro o salir del campo guarda; Esc o dejarlo igual/vacío cancela).
-      // La flecha y el resto de la cabecera siguen plegando/desplegando. «Ejercicios sueltos» no se edita así (no es un entreno)
-      if (g.nombre || !hayNombrados) {
-        const txt = cab.querySelector(".gn-txt");
-        txt.classList.add("gn-editable");
-        txt.title = "Toca el nombre para cambiarlo";
-        const editar = () => editarNombreEnLinea(cab, g.nombre, "Nombre del entrenamiento", v => renombrarEntreno(dia, g.nombre, v));
-        txt.addEventListener("click", e => { e.stopPropagation(); e.preventDefault(); editar(); });
-        const tg = cab.querySelector(".g-toggle");
-        tg.setAttribute("aria-keyshortcuts", "F2");
-        tg.addEventListener("keydown", e => { if (e.key === "F2") { e.preventDefault(); editar(); } });
-      }
+      // v262: tocar la flecha o el nombre solo pliega/despliega; el nombre se cambia desde ⋯ → «Cambiar nombre» (sustituye la edición
+      // al tocar el texto de v258, que provocaba renombrados accidentales)
       if (conAsa) cab.appendChild(asaArrastre(caja, () => [...cont.querySelectorAll(":scope > .grupo")], n => fijarOrden("g", dia.id, n.map(x => x.dataset.grupo || ""), n.map(x => seriesDeGrupo(dia.id, x.dataset.grupo || "")), "Sesión movida"), "el entreno " + (g.nombre || (hayNombrados ? "Ejercicios sueltos" : "Entreno 1"))));
       caja.appendChild(cab);
     }
@@ -3175,7 +3293,7 @@ function pintarDiaSinAncla(dia) {
         const cabP = cabeceraParte(dia, g.nombre, p, color, conNombre.length, partes, seriesItem);
         dest.appendChild(cabP);
         caja.appendChild(dest);
-        // v249: asa para arrastrar la parte entera (con o sin ejercicios) dentro de su entreno; usa el mismo orden persistente que «Subir/Bajar parte»
+        // v249: asa para arrastrar la parte entera (con o sin ejercicios) dentro de su entreno; usa el orden persistente de cab.ordenarPartes
         if (conNombre.length > 1) cabP.appendChild(asaArrastre(dest, () => [...caja.querySelectorAll(":scope > .parte-caja")], n => cabP.ordenarPartes(n.map(x => x.dataset.parte || "")), "parte " + p.nombre));
         const claveP = "p|" + dia.id + "|" + g.nombre + "|" + p.nombre, tg = cabP.querySelector(".p-toggle");
         const ponerP = pl => { dest.classList.toggle("p-plegada", pl); tg.setAttribute("aria-expanded", String(!pl)); };
@@ -3600,8 +3718,9 @@ function bloque(dia, id, series, grupo, parte, copia) {
   }
   // Guardado automático: al editar series que ya existen, si sales del formulario con algo cambiado, se guarda solo (como pulsar OK)
   let foto = null;
-  const valoresForm = () => [fa.value, fb.value, fc.value, vecesEl.value, otroEj.value, ...[...formEl.querySelectorAll("input[type=checkbox]")].map(x => x.checked), ...[...formEl.querySelectorAll(".filas-extra input")].map(x => x.value)].join("|");
-  const hayDatoForm = () => mov || dist ? !!(fa.value.trim() || fb.value.trim()) : !!(fb.value.trim() || (b.querySelector(".es-max") || {}).checked || (b.querySelector(".es-bilbo") || {}).checked);
+  const fdEl = () => b.querySelector(".in-d");   // v262: distancia en fuerza (solo si la ficha la admite)
+  const valoresForm = () => [fa.value, fb.value, fc.value, (fdEl() || {}).value || "", vecesEl.value, otroEj.value, ...[...formEl.querySelectorAll("input[type=checkbox]")].map(x => x.checked), ...[...formEl.querySelectorAll(".filas-extra input")].map(x => x.value)].join("|");
+  const hayDatoForm = () => mov || dist ? !!(fa.value.trim() || fb.value.trim()) : !!(fb.value.trim() || ((fdEl() || {}).value || "").trim() || (b.querySelector(".es-max") || {}).checked || (b.querySelector(".es-bilbo") || {}).checked);
   function tomarFoto() { foto = valoresForm(); }
   const dentroForm = el => !!el && (formEl.contains(el) || !!(el.closest && el.closest(".veces-cab") && b.contains(el)));
   // Tocar un botón del formulario (kg/%, Reps ▾, −/+…) le quita el foco al campo en Safari y el móvil: no es salir
@@ -3693,6 +3812,27 @@ function bloque(dia, id, series, grupo, parte, copia) {
       row.querySelector(".r-reps").value = fb.value; row.querySelector(".r-kg").value = fa.value;
     })));
   }
+  // v262 (MEJ-MEDIDA-001): fuerza con distancia (pasos de granjero, trineo…): campo de metros delante de las reps/tiempo si la ficha
+  // admite distancia o si alguna serie de esta tarjeta ya la tiene (nunca se ocultan datos guardados). Con medidas propias en la ficha,
+  // se ocultan los campos que no admite (sin carga: sin kg; sin repeticiones: el campo pasa a tiempo; sin reps ni tiempo: solo distancia)
+  const propiasF = medidasPropias(id);
+  if (opsF && tipo === "fuerza" && (admite(id, "distancia") || series.some(conDistFuerza))) {
+    const t = document.createElement("template");
+    t.innerHTML = paso('<input class="in-d" inputmode="decimal" placeholder="distancia (' + (enKm() ? "km" : "m") + ')" aria-label="Distancia en ' + UD() + '" autocomplete="off" enterkeyhint="next">');
+    fb.closest(".paso").before(t.content.firstElementChild);
+    b.classList.add("con-dist");
+  }
+  if (opsF && propiasF.length) {
+    if (!propiasF.includes("carga")) b.classList.add("sin-peso"); else b.classList.remove("sin-peso");   // la ficha manda sobre la medida de progreso
+    if (!propiasF.includes("reps") && propiasF.includes("tiempo") && !series.length) ponerPorT(true);
+    if (!propiasF.includes("reps") && !propiasF.includes("tiempo") && !series.some(x => n0(x.reps) > 0 || n0(x.tiempo) > 0)) { b.classList.add("solo-dist"); fb.closest(".paso").hidden = true; if (medidaBtn) medidaBtn.hidden = true; }
+  }
+  if (mov && propiasF.length) {
+    const sinR = !propiasF.includes("reps") && !series.some(x => n0(x.reps) > 0), sinT = !propiasF.includes("tiempo") && !series.some(x => n0(x.tiempo) > 0);
+    if (sinR) fa.closest(".paso").hidden = true;
+    if (sinT) fb.closest(".paso").hidden = true;
+    if (sinR || sinT) { const o = b.querySelector(".ns-principal .por"); if (o) o.hidden = true; }
+  }
   if (opsF && filaDesc) {
     filaDesc.classList.add("desc-en-ops"); opsF.appendChild(filaDesc);
     // Descanso con su icono delante y un ejemplo corto que se lee entero
@@ -3734,7 +3874,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
   b.querySelectorAll(".paso:not(.paso-veces)").forEach(p => {
     const inp = p.querySelector("input");
     p.querySelectorAll("button").forEach(x => x.addEventListener("click", () => {
-      const clase = mov ? (inp === fa ? "reps" : "s") : !dist && inp === fb && enTiempo() ? "s" : inp === fa ? (dist ? (porTiempo ? "t" : "m") : (enPct ? "pct" : "kg")) : (dist ? (porTiempo ? "m" : "t") : "reps");
+      const clase = inp.classList.contains("in-d") ? "dm" : mov ? (inp === fa ? "reps" : "s") : !dist && inp === fb && enTiempo() ? "s" : inp === fa ? (dist ? (porTiempo ? "t" : "m") : (enPct ? "pct" : "kg")) : (dist ? (porTiempo ? "m" : "t") : "reps");
       ajustarCampo(inp, clase, x.classList.contains("mas") ? 1 : -1);
       pintarCalc();
     }));
@@ -3789,14 +3929,15 @@ function bloque(dia, id, series, grupo, parte, copia) {
     }
     else if (mov) { fa.value = n0(s.reps) || ""; fb.value = n0(s.tiempo) > 0 ? (n0(s.tiempo) < 60 ? String(n0(s.tiempo)) : fmtTiempo(s.tiempo)) : ""; b.querySelector(".por-lado").checked = !!s.por_lado || ladoDe(id); }
     else {
-      const t = (n0(s.tiempo) > 0 || !!s.max_tiempo) && !(n0(s.reps) > 0);
+      const t = ((n0(s.tiempo) > 0 || !!s.max_tiempo) && !(n0(s.reps) > 0)) || (!(n0(s.reps) > 0) && !admite(id, "reps") && admite(id, "tiempo"));
       ponerPorT(t);
+      if (fdEl()) fdEl().value = distCampo(s.distancia);   // v262
       if (n0(s.pct) > 0 && !s.ciclo_id) { ponerModo(true); fa.value = num(s.pct); }
       else { ponerModo(false); const kg = pesoMostrado(s); fa.value = kg > 0 ? num(kg) : ""; }
       fb.value = t ? segTxt(s.tiempo) : n0(s.reps) || "";
       if (!t && esRango(s) && !hecha(s)) { fb.value = modoForm === "editar" ? "" : rangoTxt(s); if (modoForm === "editar") setTimeout(() => { fb.placeholder = rangoTxt(s) + ": ¿cuántas?"; }, 0); }
       if (b.querySelector(".por-lado")) b.querySelector(".por-lado").checked = !!s.por_lado || ladoDe(id);
-      const esMax = !(n0(s.reps) > 0) && !(n0(s.tiempo) > 0) && !s.ciclo_id;
+      const esMax = !(n0(s.reps) > 0) && !(n0(s.tiempo) > 0) && !(n0(s.distancia) > 0) && !s.ciclo_id;
       // Completar una serie «máx» pendiente: se apunta lo que salió (reps o segundos)
       if (esMax && modoForm === "editar") { ponerMax(false); fb.placeholder = t ? "¿cuántos segundos?" : "¿cuántas reps?"; }
       else ponerMax(esMax);
@@ -3859,6 +4000,9 @@ function bloque(dia, id, series, grupo, parte, copia) {
     if (dist && textoDesnivel(s)) { const d = document.createElement("span"); d.className = "desnivel" + (conDesnivel(s) ? " fuerte" : ""); d.textContent = textoDesnivel(s); li.querySelector(".sv").appendChild(d); }
     if (!dist && usaBarra(id) && textoDiscos(pesoMostrado(s))) { const d = document.createElement("span"); d.className = "discos"; d.textContent = textoDiscos(pesoMostrado(s)); li.querySelector(".sv").appendChild(d); }
     if (planificada && tipo === "carrera") { const o = objetivoSerie(s); if (o) { const ob = document.createElement("span"); ob.className = "objetivo"; ob.textContent = textoObjetivo(o); li.querySelector(".sv").appendChild(ob); } }
+    // v262: serie de distancia con líneas de detalle (descanso, pulso, desnivel, objetivo): en el móvil se presenta como ficha (solo CSS;
+    // mismos datos y mismas acciones de editar, borrar y reordenar)
+    if (dist && li.querySelector(".sv").children.length > 1) li.classList.add("fila-dist");
     li.querySelector(".sv").setAttribute("aria-label", (planificada ? "Completar" : "Editar") + " serie " + numero + ": " + serieTexto(s));
     li.querySelector(".sv").addEventListener("click", () => {
       if (li.dataset.deslizado) return;
@@ -3919,7 +4063,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
   const claveBor = dia.id + "|" + (grupo || "") + "|" + idK + "|" + (parte || "");
   const guardarBor = () => {
     if (modoForm === "editar" || formEl.hidden) { delete borradores[claveBor]; return; }
-    borradores[claveBor] = { a: fa.value, b: fb.value, c: fc.value, v: vecesEl.value, modo: modoForm, t: enTiempo(), max: enMax(), lado: !!(b.querySelector(".por-lado") || {}).checked };
+    borradores[claveBor] = { a: fa.value, b: fb.value, c: fc.value, d: (fdEl() || {}).value || "", v: vecesEl.value, modo: modoForm, t: enTiempo(), max: enMax(), lado: !!(b.querySelector(".por-lado") || {}).checked };
   };
   const bor = borradores[claveBor];
   if (bor) {
@@ -3927,6 +4071,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
     ponerPorT(!!bor.t);
     ponerMax(!!bor.max);
     fa.value = bor.a; fb.value = bor.b; fc.value = bor.c; vecesEl.value = bor.v;
+    if (fdEl() && bor.d) fdEl().value = bor.d;
     if (b.querySelector(".por-lado")) b.querySelector(".por-lado").checked = bor.lado;
     b.classList.add("con-borrador");
     foto = "";   // lo que quedó escrito se guardará al salir
@@ -3940,7 +4085,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
     if (!series.length) { quitarEspera(dia.id, idK); avisoDeshacer((ej.nombre || "Ejercicio") + " quitado", null); }
     pintarBloques(true);
   });   // ejercicio recién añadido: al salir, si has escrito algo, se crean sus series
-  [fa, fb, fc, vecesEl].forEach(x => x.addEventListener("input", guardarBor));
+  [fa, fb, fc, vecesEl, fdEl()].filter(Boolean).forEach(x => x.addEventListener("input", guardarBor));
   formEl.addEventListener("change", guardarBor);
   [fa, fb, fc].forEach((inp, k, todos) => {
     inp.addEventListener("focus", () => inp.select());
@@ -3971,7 +4116,13 @@ function bloque(dia, id, series, grupo, parte, copia) {
       v.por_lado = !!(b.querySelector(".por-lado") || {}).checked || ladoDe(id);
       v.rango_min = 0; v.rango_max = 0;
       if (!(x >= 0) || (enPct && !(x > 0))) { fa.focus(); return null; }   // v251: en % sin 1RM se guarda el % (sin kg)
-      if (enTiempo()) {
+      // v262: distancia en fuerza. Con metros, las reps o el tiempo son opcionales (el tiempo se apunta al hacerla, si se mide)
+      const fd = fdEl();
+      if (fd) { v.distancia = leerDist(fd.value); if (fd.value.trim() && !(v.distancia > 0)) { fd.focus(); return null; } }
+      const soloDist = v.distancia > 0 && !fb.value.trim() && !enMax();
+      if (b.classList.contains("solo-dist") && !(v.distancia > 0)) { fd.focus(); return null; }
+      if (soloDist) { v.reps = 0; v.tiempo = 0; v.ciclo_id = ""; }
+      else if (enTiempo()) {
         v.reps = 0; v.ciclo_id = "";
         if (enMax() || /^\s*m[aá]x/i.test(fb.value)) { v.tiempo = 0; v.max_tiempo = true; }   // aguantar el máximo
         else { v.tiempo = leerSegs(fb.value); if (!(v.tiempo > 0)) { fb.focus(); return null; } }
@@ -4639,6 +4790,10 @@ $("blqCrear").addEventListener("click", () => {
 let diaSelector = null, alElegirSel = null;
 // Tipo de entrenamiento elegido en el buscador ("" = todos): solo se ven y se crean ejercicios de ese tipo
 let tipoSel = leer("tipo-sel-v1") || "";
+function aplicarClasificacionSelector() {   // v263: filtros de clasificación del buscador (ocultos sin P8)
+  $("selClasif").hidden = !clasifOk();
+  if (clasifOk()) pintarFiltroClasif($("selClasif"), filtroSel, "filtro-clasif-sel-v1", () => pintarSelector());
+}
 function pintarFiltroTipo() {
   $("selTipo").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.tipo === tipoSel)));
 }
@@ -4674,6 +4829,7 @@ function abrirSelector(dia, alElegir, grupoDestino, parteDestino) {
   const tiposDia = dia ? [...new Set(seriesDelDia(dia.id).map(s => s.ejercicio_id).concat((enEspera[dia.id] || []).map(ejDeClave)).map(tipoDe))] : [];
   if (tiposDia.length === 1) tipoSel = tiposDia[0];
   pintarFiltroTipo();
+  aplicarClasificacionSelector();
   $("buscarEj").value = "";
   pintarSelector();
   $("selector").showModal();
@@ -4705,7 +4861,7 @@ function pintarSelector() {
   const q = $("buscarEj").value.trim(), lista = $("listaEj");
   lista.textContent = "";
   const uso = usoEjercicios();
-  const ejs = uso.lista.filter(e => compacto(e.nombre).includes(compacto(q)) && (!tipoSel || tipoDe(e.id) === tipoSel));
+  const ejs = uso.lista.filter(e => compacto(e.nombre).includes(compacto(q)) && (!tipoSel || tipoDe(e.id) === tipoSel) && coincideClasif(e, filtroSel));
   // «300», «300m» o «series 300 m» propone directamente «Series 300 m» de carrera
   const md = q.match(/^(?:series\s*(?:de\s*)?)?(\d+(?:[.,]\d+)?)\s*(m|km|metros)?$/i);
   const sugerencia = md ? "Series " + md[1] + " " + (md[2] && md[2].toLowerCase() === "km" ? "km" : "m") : "";
@@ -4714,7 +4870,7 @@ function pintarSelector() {
     b.type = "button";
     b.className = "opcion crear-dist";
     b.textContent = "+ Crear «" + sugerencia + "» (carrera) en el catálogo común";
-    b.addEventListener("click", () => elegir(crearEjercicio(sugerencia, "carrera")));
+    b.addEventListener("click", () => abrirNuevoEjercicio(sugerencia, "carrera"));   // v262: ficha en borrador antes de crear
     lista.appendChild(b);
   }
   if (puedeCrearEjercicios() && q && !ejs.some(e => compacto(e.nombre) === compacto(q)) && !SUGERIDOS.some(([n]) => compacto(n) === compacto(q))) {
@@ -4726,14 +4882,14 @@ function pintarSelector() {
     t.type = "button";
     t.className = "cf-t";
     t.textContent = "+ Crear «" + q + "» en el catálogo común (" + TIPOS[sugerido].nombre.toLowerCase() + ")" + (tipoSel ? "" : " · o elige el tipo:");
-    t.addEventListener("click", () => elegir(crearEjercicio(q, sugerido)));
+    t.addEventListener("click", () => abrirNuevoEjercicio(q, sugerido));
     fila.appendChild(t);
     (tipoSel ? [] : [sugerido].concat(Object.keys(TIPOS).filter(k => k !== sugerido))).forEach(k => {
       const b = document.createElement("button");
       b.type = "button";
       b.className = "opcion-tipo t-" + k + (k === sugerido ? " sugerido" : "");
       b.textContent = TIPOS[k].nombre;
-      b.addEventListener("click", () => elegir(crearEjercicio(q, k)));
+      b.addEventListener("click", () => abrirNuevoEjercicio(q, k));
       fila.appendChild(b);
     });
     lista.appendChild(fila);
@@ -4744,13 +4900,14 @@ function pintarSelector() {
     b.className = "opcion";
     b.textContent = e.nombre;
     b.appendChild(etiquetaTipo(tipoDe(e.id)));
+    etiquetasClasif(e.id).forEach(([x, k]) => { const c = document.createElement("span"); c.className = "clasif-tag clasif-" + k; c.textContent = x; b.appendChild(c); });   // v263
     const veces = uso.n(e.id);
     if (veces) { const c = document.createElement("span"); c.className = "op-uso"; c.textContent = veces + (veces === 1 ? " vez" : " veces"); b.appendChild(c); }
     b.addEventListener("click", () => elegir(e.id));
     lista.appendChild(b);
   });
   const tengo = new Set(vivos("ejercicios").map(e => compacto(e.nombre)));
-  const sug = SUGERIDOS.filter(([n, tipo]) => !tengo.has(compacto(n)) && compacto(n).includes(compacto(q)) && (!tipoSel || tipo === tipoSel));
+  const sug = SUGERIDOS.filter(([n, tipo]) => !tengo.has(compacto(n)) && compacto(n).includes(compacto(q)) && (!tipoSel || tipo === tipoSel) && !(clasifOk() && (filtroSel.region || filtroSel.tecnica)));   // v263: con filtro de clasificación, sin sugerencias (no tienen clasificación)
   if (puedeCrearEjercicios() && sug.length) {
     const h = document.createElement("p");
     h.className = "sug-tit";
@@ -4762,7 +4919,7 @@ function pintarSelector() {
       b.className = "opcion sugerida";
       b.textContent = n;
       b.appendChild(etiquetaTipo(tipo));
-      b.addEventListener("click", () => elegir(crearEjercicio(n, tipo)));
+      b.addEventListener("click", () => abrirNuevoEjercicio(n, tipo));
       lista.appendChild(b);
     });
   }
@@ -4774,6 +4931,125 @@ function pintarSelector() {
   }
 }
 $("buscarEj").addEventListener("input", pintarSelector);
+// ---------- v262 (INC-SEM-004): crear un ejercicio desde el buscador con su ficha en borrador ----------
+// El buscador recuerda dónde se abrió (día, entreno, parte con su posición, o el tramo de un bloque). «+ Crear…» abre esta ficha SIN
+// escribir nada; «Guardar y añadir» crea UNA sola ficha (personal o, si la cuenta edita el catálogo, común) y la añade UNA vez en ese
+// mismo destino con elegir(), igual que un ejercicio existente. «Cancelar» (o Esc) vuelve al buscador con lo escrito y no crea nada.
+// Un nombre que ya existe (mismo nombre, cualquier tipo) no se crea: se ofrece usar el existente o cambiar el nombre.
+let borradorEj = null;
+function abrirNuevoEjercicio(nombre, tipo) {
+  if (!puedeCrearEjercicios()) { setEstado("Tu cuenta no puede crear ejercicios. Elige uno del catálogo o pide al administrador que lo añada.", true); return; }
+  const t = TIPOS[tipo] ? tipo : "fuerza";
+  borradorEj = { tipo: t, medidas: (MEDIDAS_BASE[t] || []).slice(), regiones: [], tecnica: false, destino: { dia: diaSelector, alElegir: alElegirSel, grupo: grupoSel, parte: parteSel }, hecho: false };
+  $("neNombre").value = String(nombre || "").trim();
+  $("neVideo").value = ""; $("neNotas").value = ""; $("neLado").checked = false;
+  $("neComunL").hidden = true; $("neComun").checked = true;   // v266 beta: catálogo único, sin opción de ejercicio personal
+  pintarNuevoEj();
+  $("dlgNuevoEj").showModal();
+  $("neNombre").focus();
+}
+const conflictosNombre = n => vivos("ejercicios").filter(e => compacto(e.nombre) === compacto(n));
+function pintarNuevoEj() {
+  const b = borradorEj;
+  if (!b) return;
+  const n = $("neNombre").value.trim(), posibles = MAGNITUDES_TIPO[b.tipo];
+  $("neTipo").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.tipo === b.tipo)));
+  $("neMagSec").hidden = !posibles || !columnaMedidas;
+  const cont = $("neMag");
+  cont.textContent = "";
+  (posibles || []).forEach(m => {
+    const x = document.createElement("button");
+    x.type = "button"; x.className = "chip chip-op magnitud"; x.dataset.m = m; x.textContent = MAGNITUDES[m];
+    x.setAttribute("aria-pressed", String(b.medidas.includes(m)));
+    x.addEventListener("click", () => {
+      if (b.medidas.includes(m) && b.medidas.length === 1) return;   // al menos una
+      b.medidas = posibles.filter(y => y === m ? !b.medidas.includes(m) : b.medidas.includes(y));
+      pintarNuevoEj();
+    });
+    cont.appendChild(x);
+  });
+  $("neLadoL").hidden = b.tipo !== "fuerza" && b.tipo !== "movilidad";
+  // v263: clasificación opcional (solo con soporte del servidor): región en fuerza, Técnica en todos
+  $("neClasifSec").hidden = !clasifOk();
+  if (clasifOk()) {
+    $("neRegionFila").hidden = b.tipo !== "fuerza";
+    const cr = $("neRegion");
+    cr.textContent = "";
+    Object.entries(REGIONES).forEach(([k, t]) => {
+      const x = document.createElement("button");
+      x.type = "button"; x.className = "chip chip-op clasif"; x.textContent = t;
+      x.setAttribute("aria-pressed", String(b.regiones.includes(k)));
+      x.addEventListener("click", () => { b.regiones = alternarRegion(b.regiones, k); pintarNuevoEj(); });
+      cr.appendChild(x);
+    });
+    $("neTecnica").setAttribute("aria-pressed", String(b.tecnica));
+  }
+  const c = n ? conflictosNombre(n) : [];
+  $("neConflicto").hidden = !c.length;
+  $("neConflicto").textContent = c.length ? "Ya existe «" + c[0].nombre + "»" + (c.length > 1 ? " (" + c.length + " fichas)" : "") + ". Para no duplicarlo, úsalo o cambia el nombre." : "";
+  const usar = $("neUsar");
+  usar.textContent = ""; usar.hidden = !c.length;
+  c.forEach(e => {
+    const x = document.createElement("button");
+    x.type = "button"; x.className = "opcion";
+    x.textContent = "Usar «" + e.nombre + "»";
+    x.appendChild(etiquetaTipo(tipoDe(e.id)));
+    const d = document.createElement("span"); d.className = "op-uso"; d.textContent = e.compartido ? "catálogo común" : "personal"; x.appendChild(d);
+    x.addEventListener("click", () => usarDesdeBorrador(e.id));
+    usar.appendChild(x);
+  });
+  const comun = creaComun() && $("neComun").checked, d = b.destino;
+  const donde = d.alElegir ? "al bloque que estás editando" : d.dia ? (d.grupo ? "a «" + d.grupo + "»" + (d.parte ? " › «" + d.parte + "»" : "") + " del " : "a los ejercicios del ") + NOMBRES[d.dia.i].toLowerCase() + " " + fmt(deIso(d.dia.id)) : "";
+  $("neDonde").textContent = (comun ? "Se guardará en el catálogo común (lo verán todos los usuarios aprobados)" : "Se guardará como ejercicio personal (solo lo ves tú)") + (donde ? " y se añadirá " + donde : "") + ". Tus series y marcas son siempre solo tuyas.";
+  $("neGuardar").disabled = !n || c.length > 0 || b.hecho;
+}
+function restaurarDestino(d) { diaSelector = d.dia; alElegirSel = d.alElegir; grupoSel = d.grupo; parteSel = d.parte; }
+function cerrarNuevoEj() { borradorEj = null; if ($("dlgNuevoEj").open) $("dlgNuevoEj").close(); }
+function usarDesdeBorrador(id) {
+  const b = borradorEj;
+  if (!b || b.hecho || !ejercicioVivo(id)) return;
+  b.hecho = true;
+  cerrarNuevoEj();
+  restaurarDestino(b.destino);
+  elegir(id);
+}
+function guardarNuevoEj() {
+  const b = borradorEj;
+  if (!b || b.hecho) return;   // un solo alta aunque se pulse dos veces
+  const nombre = $("neNombre").value.trim();
+  if (!nombre) { $("neNombre").focus(); return; }
+  if (conflictosNombre(nombre).length) { pintarNuevoEj(); return; }
+  if (!puedeCrearEjercicios()) { setEstado("Tu cuenta no puede crear ejercicios.", true); cerrarNuevoEj(); return; }
+  b.hecho = true;
+  const comun = creaComun() && $("neComun").checked, base = MEDIDAS_BASE[b.tipo] || [];
+  const medidas = !MAGNITUDES_TIPO[b.tipo] || !columnaMedidas || (b.medidas.length === base.length && base.every(x => b.medidas.includes(x))) ? [] : b.medidas.slice();
+  let video = $("neVideo").value.trim().replace(/\s+/g, " ");
+  if (video && !/^https?:\/\//i.test(video)) video = "https://" + video;
+  const id = nuevoId();
+  const conClasif = clasifOk();   // v263: sin soporte del servidor no se guarda clasificación
+  cambiar("ejercicios", { id, user_id: sesion.user_id, nombre, tipo: b.tipo, video_url: video, notas: $("neNotas").value.trim(), compartido: comun, medidas, zonas: [], rm: 0,
+    regiones: conClasif && b.tipo === "fuerza" ? b.regiones.slice() : [], tecnica: conClasif && b.tecnica, borrado: false });
+  if ($("neLado").checked && !$("neLadoL").hidden) cambiar("personales", { ejercicio_id: id, rm: 0, medida: "", lado: true });
+  setEstado(comun ? "«" + nombre + "» se ha añadido al catálogo común: lo verán todos los usuarios aprobados. Tus series y marcas siguen siendo solo tuyas."
+                  : "«" + nombre + "» se ha creado como ejercicio personal: solo lo ves tú.");
+  cerrarNuevoEj();
+  restaurarDestino(b.destino);
+  elegir(id);
+  persistir();
+}
+$("neNombre").addEventListener("input", pintarNuevoEj);
+$("neNombre").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); if (!$("neGuardar").disabled) guardarNuevoEj(); } });
+$("neComun").addEventListener("change", pintarNuevoEj);
+$("neTipo").addEventListener("click", ev => {
+  const x = ev.target.closest("button[data-tipo]");
+  if (!x || !borradorEj) return;
+  borradorEj.tipo = x.dataset.tipo; borradorEj.medidas = (MEDIDAS_BASE[x.dataset.tipo] || []).slice();
+  pintarNuevoEj();
+});
+$("neTecnica").addEventListener("click", () => { if (!borradorEj) return; borradorEj.tecnica = !borradorEj.tecnica; pintarNuevoEj(); });
+$("neGuardar").addEventListener("click", guardarNuevoEj);
+$("neCancelar").addEventListener("click", () => { cerrarNuevoEj(); if ($("selector").open) $("buscarEj").focus(); });
+$("dlgNuevoEj").addEventListener("cancel", () => { borradorEj = null; });   // Esc: igual que Cancelar
 $("buscarEj").addEventListener("keydown", e => {
   if (e.key === "Enter") { e.preventDefault(); const primera = $("listaEj").querySelector(".opcion-tipo, .opcion"); if (primera) primera.click(); }
 });
@@ -4781,13 +5057,16 @@ $("buscarEj").addEventListener("keydown", e => {
 // ---------- Catálogo de ejercicios ----------
 function pintarCatalogo() {
   aplicarPermisosCatalogo();
+  { const ok = clasifOk(); $("filtroClasif").hidden = !ok; if (ok && !$("filtroClasif").children.length) pintarFiltroClasif($("filtroClasif"), filtroCat, "filtro-clasif-cat-v1", () => pintarCatalogo()); }   // v263
   const cont = $("catalogo"), q = $("filtroEj").value.trim();
   cont.textContent = "";
-  const ejs = ejerciciosOrdenados().filter(e => compacto(e.nombre).includes(compacto(q)));
+  const ejs = ejerciciosOrdenados().filter(e => compacto(e.nombre).includes(compacto(q)) && coincideClasif(e, filtroCat));
   if (!ejs.length) {
     const p = document.createElement("p");
     p.className = "vacio-lista";
-    p.textContent = !puedeCrearEjercicios() ? (q ? "No hay ningún ejercicio con ese nombre en el catálogo." : "Todavía no hay ejercicios en el catálogo.")
+    const filtrado = clasifOk() && (filtroCat.region || filtroCat.tecnica);
+    p.textContent = filtrado ? "Ningún ejercicio coincide con esa clasificación" + (q ? " y ese nombre" : "") + ". Quita un filtro, o asígnala desde la ficha de cada ejercicio (los existentes empiezan sin clasificar)."
+                      : !puedeCrearEjercicios() ? (q ? "No hay ningún ejercicio con ese nombre en el catálogo." : "Todavía no hay ejercicios en el catálogo.")
                       : q ? "No hay ningún ejercicio con ese nombre. Pulsa «+ Nuevo» para crearlo."
                       : "Aún no tienes ejercicios. Añádelos desde un día con «+ Ejercicio» o pulsa «+ Nuevo».";
     cont.appendChild(p);
@@ -5150,6 +5429,7 @@ function tarjetaEjercicio(e) {
   nombre.textContent = e.nombre || "Sin nombre";
   nombre.appendChild(etiquetaTipo(st.tipo));
   if (e.video_url) { const v = document.createElement("span"); v.className = "ico"; v.textContent = "▶ vídeo"; nombre.appendChild(v); }
+  etiquetasClasif(e.id).forEach(([x, k]) => { const c = document.createElement("span"); c.className = "clasif-tag clasif-" + k; c.textContent = x; nombre.appendChild(c); });   // v263
   t.querySelector(".t-mejor").textContent = st.resumen;
   t.querySelector(".t-ultima").textContent = st.ultima;
   if (!st.ultima) t.querySelector(".t-ultima").remove();
@@ -5303,12 +5583,15 @@ function refrescarDetalle() {
     const puesta = MEDIDAS[(db.personales[e.id] || {}).medida];
     $("detMedidaInfo").textContent = puesta ? "Elegido por ti." : "Automático (por el nombre y lo que apuntas): " + MEDIDAS[medida].toLowerCase() + ". Toca otra opción si no encaja.";
   }
-  const fuerza = tipo === "fuerza" && medida === "peso";
+  // v262: con medidas propias, las marcas van por condición; sin repeticiones no hay 1RM ni Bilbo que calcular
+  const propiasD = tipo === "fuerza" ? medidasPropias(e.id) : [];
+  if (propiasD.length) $("detMedidaInfo").textContent = "Con las medidas elegidas arriba, las marcas se comparan por condición: misma carga y, si hay distancia, la misma distancia (menos tiempo es mejor); por tiempo o por repeticiones, más es mejor.";
+  const fuerza = tipo === "fuerza" && medida === "peso" && !(propiasD.length && !propiasD.includes("reps"));
   $("detRmSec").hidden = !fuerza;
   $("detBilboSec").hidden = !fuerza;
   if (fuerza) {
     if (document.activeElement !== $("detRm")) $("detRm").value = rmPersonal(e.id) > 0 ? num(rmPersonal(e.id)) : "";
-    const p = st.lista.filter(s => n0(s.peso) > 0);
+    const p = st.lista.filter(cuentaRm);
     $("detRmEst").textContent = p.length ? "Estimado con tus series: " + num(Math.round(Math.max.apply(null, p.map(rm)))) + " kg" + (rmPersonal(e.id) > 0 ? "" : " (orientativo: las series en % solo calculan kg con el 1RM que pongas aquí)")
                                          : "Ponlo para que las series en % del RM calculen los kg.";
     pintarBilbo(e);
@@ -5342,22 +5625,29 @@ function refrescarDetalle() {
     $("detGraficaTit").textContent = "Progreso · minutos por sesión";
     puntos = st.sesiones.slice(-12).map(s => ({ f: s.fecha, v: Math.round(s.series.reduce((m, x) => m + segs(x), 0) / 6) / 10 }));
     etiqueta = v => num(v) + " min";
+  } else if (st.normal && !st.normal.length) {
+    // v262: solo series por condición (p. ej. pasos de granjero): una marca por condición, sin ganador entre condiciones distintas
+    rec.appendChild(recuadro("Sesiones", String(st.sesiones.length), st.lista.length + " series", true));
+    if (!st.condiciones.length) rec.appendChild(recuadro("Marcas", "—", "Se comparan con la misma carga y distancia (con su tiempo) o la misma carga por tiempo o repeticiones"));
+    $("detGraficaTit").textContent = "Progreso · series por sesión";
+    puntos = st.sesiones.slice(-12).map(s => ({ f: s.fecha, v: s.series.length }));
+    etiqueta = v => num(v) + " series";
   } else if (medida === "reps" || medida === "tiempo") {
     // Peso corporal: el récord son las repeticiones (o el tiempo) máximas de una serie
     const campo = medida === "reps" ? "reps" : "tiempo", fmtV = v => medida === "reps" ? v + " reps" : fmtSegs(v);
-    const val = st.lista.filter(x => n0(x[campo]) > 0 && !x.calentamiento);
+    const val = (st.normal || st.lista).filter(x => n0(x[campo]) > 0 && !x.calentamiento);
     const mejor = val.reduce((m, x) => !m || n0(x[campo]) > n0(m[campo]) ? x : m, null);
     if (mejor) rec.appendChild(recuadro(medida === "reps" ? "Máximo de repeticiones" : "Tiempo máximo", fmtV(n0(mejor[campo])), (n0(mejor.peso) > 0 ? "con " + num(mejor.peso) + " kg · " : "") + fechaCorta(mejor.fecha), true));
     rec.appendChild(recuadro("Sesiones", String(st.sesiones.length), st.lista.length + " series"));
     $("detGraficaTit").textContent = "Progreso · " + (medida === "reps" ? "repeticiones máximas" : "tiempo máximo") + " por sesión";
-    puntos = st.sesiones.slice(-12).map(x => ({ f: x.fecha, v: Math.max.apply(null, x.series.map(y => n0(y[campo])).concat(0)) }));
+    puntos = st.sesiones.slice(-12).map(x => ({ f: x.fecha, v: Math.max.apply(null, x.series.filter(y => !porCondicion(y)).map(y => n0(y[campo])).concat(0)) }));
     etiqueta = v => medida === "reps" ? num(v) + " reps" : fmtSegs(Math.round(v));
   } else if (st.mejor) {
     rec.appendChild(recuadro("Peso máximo", num(st.mejor.peso) + " kg", "× " + n0(st.mejor.reps) + " · " + fechaCorta(st.mejor.fecha), true));
     rec.appendChild(recuadro("1RM estimado", num(Math.round(rm(st.mejorRm))) + " kg", serieTexto(st.mejorRm) + " · " + fechaCorta(st.mejorRm.fecha)));
     rec.appendChild(recuadro("Sesiones", String(st.sesiones.length), st.lista.length + " series"));
     $("detGraficaTit").textContent = "Progreso · 1RM estimado";
-    puntos = st.sesiones.slice(-12).map(s => ({ f: s.fecha, v: Math.max.apply(null, s.series.filter(x => n0(x.peso) > 0).map(rm).concat(0)) }));
+    puntos = st.sesiones.slice(-12).map(s => ({ f: s.fecha, v: Math.max.apply(null, s.series.filter(cuentaRm).map(rm).concat(0)) }));
     etiqueta = v => num(Math.round(v * 10) / 10) + " kg";
   } else {
     rec.appendChild(recuadro("Más repeticiones", n0(st.mejorReps.reps) + " reps", fechaCorta(st.mejorReps.fecha), true));
@@ -5366,6 +5656,15 @@ function refrescarDetalle() {
     puntos = st.sesiones.slice(-12).map(s => ({ f: s.fecha, v: Math.max.apply(null, s.series.map(x => n0(x.reps))) }));
     etiqueta = v => num(v) + " reps";
   }
+  // v262: marcas por condición (fuerza con distancia o con medidas propias), una por condición y sin compararlas entre sí
+  if (tipo === "fuerza" && (st.condiciones || []).length) st.condiciones.forEach(c => {
+    const li = document.createElement("li");
+    li.innerHTML = '<span class="m-d"></span><span class="m-t"></span><span class="m-f"></span>';
+    li.querySelector(".m-d").textContent = c.cond;
+    li.querySelector(".m-t").textContent = c.valor;
+    li.querySelector(".m-f").textContent = fechaCorta(c.s.fecha);
+    marcas.appendChild(li);
+  });
   $("detGrafica").innerHTML = st.lista.length ? grafica(puntos, etiqueta) : "";
   const hist = $("detHistorial"), prs = prsDe(st.lista, tipo, tipo === "fuerza" ? medidaDe(e.id) : "");
   hist.textContent = "";
@@ -5535,6 +5834,8 @@ function abrirDetalle(id) {
   pintarVideo(e);
   refrescarDetalle();
   pintarZonasDetalle(e);
+  pintarMagnitudesDetalle(e);
+  pintarClasificacionDetalle(e);
   if (!$("detalle").open) $("detalle").showModal();
   $("detalle").scrollTop = 0;
 }
@@ -5548,7 +5849,76 @@ $("detTipo").addEventListener("click", ev => {
   if (!b) return;
   editarEjercicio({ tipo: b.dataset.tipo });
   refrescarDetalle();
+  pintarMagnitudesDetalle(db.ejercicios[detalleId]);
+  pintarClasificacionDetalle(db.ejercicios[detalleId]);
 });
+// v263: clasificación de la ficha (Región solo en fuerza; Técnica en todos los tipos). Solo quien puede editar la ficha la cambia; no toca series,
+// medidas, récords ni estadísticas. Oculta si el servidor no soporta P8.
+function pintarClasificacionDetalle(e) {
+  $("detClasifSec").hidden = !clasifOk();
+  if (!clasifOk() || !e) return;
+  const puede = editable(e), tipo = tipoDe(e.id);
+  $("detRegionFila").hidden = tipo !== "fuerza";
+  const cont = $("detRegion");
+  cont.textContent = "";
+  const act = regionesDe(e.id);
+  Object.entries(REGIONES).forEach(([k, t]) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip chip-op clasif"; b.textContent = t;
+    b.setAttribute("aria-pressed", String(act.includes(k)));
+    b.disabled = !puede;
+    b.addEventListener("click", () => {
+      editarEjercicio({ regiones: alternarRegion(regionesDe(e.id), k) });
+      pintarClasificacionDetalle(db.ejercicios[e.id]); pintarCatalogo();
+    });
+    cont.appendChild(b);
+  });
+  $("detTecnica").setAttribute("aria-pressed", String(esTecnica(e.id)));
+  $("detTecnica").disabled = !puede;
+  $("detClasifNota").textContent = (tipo === "fuerza" && !act.length ? "Sin clasificar: los ejercicios no se clasifican solos, elige la región. " : "") +
+    "«Técnica» es solo una etiqueta: no cambia cómo se miden ni se comparan tus series." + (puede ? "" : " Las ajusta quien edita el catálogo común.");
+}
+$("detTecnica").addEventListener("click", () => {
+  const e = ejercicioVivo(detalleId);
+  if (!e || !editable(e) || !clasifOk()) return;
+  editarEjercicio({ tecnica: !esTecnica(e.id) });
+  pintarClasificacionDetalle(db.ejercicios[e.id]); pintarCatalogo();
+});
+// v262 (MEJ-MEDIDA-001): magnitudes compatibles de la ficha (fuerza: repeticiones, tiempo, carga y distancia; movilidad: repeticiones y
+// tiempo). Siempre queda al menos una. Elegir exactamente las de siempre guarda la lista vacía («según el tipo»). Solo quien puede editar
+// la ficha (dueño de un personal o quien edita el catálogo común) las cambia; el servidor lo impone con las mismas políticas de la ficha.
+// Cambiarlas no toca ninguna serie guardada: los datos que ya tengan se siguen mostrando aunque la ficha deje de ofrecer ese campo.
+function pintarMagnitudesDetalle(e) {
+  const tipo = tipoDe(e.id), posibles = MAGNITUDES_TIPO[tipo];
+  $("detMagSec").hidden = !posibles;
+  const cont = $("detMag");
+  cont.textContent = "";
+  if (!posibles) return;
+  const puede = editable(e) && columnaMedidas, actuales = medidasDe(e.id), propias = medidasPropias(e.id).length > 0;
+  posibles.forEach(m => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "chip chip-op magnitud";
+    b.dataset.m = m;
+    b.textContent = MAGNITUDES[m];
+    b.setAttribute("aria-pressed", String(actuales.includes(m)));
+    b.disabled = !puede;
+    b.addEventListener("click", () => {
+      const ahora = medidasDe(e.id), quitar = ahora.includes(m);
+      if (quitar && ahora.length === 1) { $("detMagNota").textContent = "Tiene que quedar al menos una magnitud."; return; }
+      const nuevas = posibles.filter(x => x === m ? !quitar : ahora.includes(x));
+      const base = MEDIDAS_BASE[tipo];
+      editarEjercicio({ medidas: nuevas.length === base.length && base.every(x => nuevas.includes(x)) ? [] : nuevas });
+      pintarMagnitudesDetalle(db.ejercicios[e.id]);
+      pintarBloques(true);
+    });
+    cont.appendChild(b);
+  });
+  $("detMagNota").textContent = (propias ? "Elegidas para esta ficha. " : "Las de siempre para " + TIPOS[tipo].nombre.toLowerCase() + ". ") +
+    (!columnaMedidas ? "Para cambiarlas hace falta actualizar el servidor (migración P6); de momento se usan las de siempre." :
+     !editable(e) ? "Las ajusta quien edita el catálogo común." :
+     "Al programar y registrar solo se piden estos campos (p. ej. pasos de granjero: carga, distancia y tiempo). Las series ya guardadas no cambian.");
+}
 $("detNombre").addEventListener("change", () => {
   const n = $("detNombre").value.trim();
   if (!n) { $("detNombre").value = db.ejercicios[detalleId].nombre; return; }
@@ -6120,7 +6490,8 @@ function marcasFuerza(cont) {
     s.appendChild(tablaSimple(["Ejercicio", "Récord", "1RM est.", "Fecha"], deRegion.map(({ e, st }) => {
       const m = st.mejor || st.mejorReps;
       const sinPeso = m && !st.mejor ? (st.medida === "tiempo" ? fmtSegs(n0(m.tiempo)) : n0(m.reps) + (n0(m.reps) === 1 ? " rep" : " reps")) + (n0(m.peso) > 0 ? " · " + num(m.peso) + " kg" : "") + (m.por_lado ? " por lado" : "") : "";
-      return { celdas: [e.nombre, m ? (st.mejor ? serieTexto(m) : sinPeso) : "—", st.mejorRm ? num(Math.round(rm(st.mejorRm))) + " kg" : "—", m ? fechaCorta(m.fecha) : ""], alPulsar: () => abrirDetalle(e.id) };
+      const c = !m && (st.condiciones || []).length ? st.condiciones[st.condiciones.length - 1] : null;   // v262: solo marcas por condición
+      return { celdas: [e.nombre, m ? (st.mejor ? serieTexto(m) : sinPeso) : c ? c.valor + " (" + c.cond + ")" + (st.condiciones.length > 1 ? " · +" + (st.condiciones.length - 1) : "") : "—", st.mejorRm ? num(Math.round(rm(st.mejorRm))) + " kg" : "—", m ? fechaCorta(m.fecha) : c ? fechaCorta(c.s.fecha) : ""], alPulsar: () => abrirDetalle(e.id) };
     })));
     caja.appendChild(s);
   });
@@ -6320,6 +6691,7 @@ function pintarPlan() {
   });
   pintarSeleccion(ps);
 
+  if (selPlant && selMeso) selMeso = null;   // v263: solo una selección a la vez
   const lm = $("listaMesos");
   lm.textContent = "";
   const hoy = iso(new Date());
@@ -6332,8 +6704,13 @@ function pintarPlan() {
     const actual = m.inicio && hoy >= m.inicio && hoy < iso(sumarDias(deIso(m.inicio), n0(m.semanas) * 7));
     const semana = actual ? Math.floor((lunesDe(new Date()) - lunesDe(deIso(m.inicio))) / (7 * 864e5)) + 1 : 0;
     lm.appendChild(tarjeta(m.nombre, [rangoMeso(m) + (actual ? " · ahora en la semana " + semana : "") + (actual && esDescarga(m, semana - 1) ? " (descarga)" : ""),
-      resumenDiasMeso(m) + (n0(m.progresion) ? " · +" + num(m.progresion) + " kg/semana" : "") + (textoDescarga(m) ? " · " + textoDescarga(m) : "")], () => abrirMeso(m.id)));
+      resumenDiasMeso(m) + (n0(m.progresion) ? " · +" + num(m.progresion) + " kg/semana" : "") + (textoDescarga(m) ? " · " + textoDescarga(m) : "")],
+      () => { if (pulsacionLarga) { pulsacionLarga = false; return; } if (selMeso) marcarMeso(m.id); else abrirMeso(m.id); }));
+    const t = lm.lastElementChild;
+    if (selMeso) { t.classList.add("seleccionable"); t.setAttribute("aria-pressed", String(selMeso.has(m.id))); }
+    mantenerPulsado(t, () => { if (!selMeso) { selMeso = new Set(); selPlant = null; } selMeso.add(m.id); pintarPlan(); });
   });
+  pintarSeleccionMesos(ms);
 
   pintarSugerencias();
   pintarMolestias();
@@ -6724,6 +7101,7 @@ const TABS = { semana: "tabSemana", ejercicios: "tabEjercicios", listas: "tabLis
 function verPestana(cual) {
   if (!VISTAS[cual]) cual = "semana";
   if (cual !== "plan" && selPlant) { selPlant = null; $("selPlantAcciones").hidden = true; document.body.classList.remove("seleccionando"); }
+  if (cual !== "plan" && selMeso) { selMeso = null; $("selMesoAcciones").hidden = true; document.body.classList.remove("seleccionando"); }
   Object.keys(VISTAS).forEach(k => {
     $(VISTAS[k]).hidden = k !== cual;
     $(TABS[k]).setAttribute("aria-selected", String(k === cual));
@@ -7304,7 +7682,7 @@ function descargarResumenPeriodo(formato) {
   const dias = new Set(filas.map(s => s.fecha)), sesiones = new Set(filas.map(s => s.fecha + "|" + (s.grupo || "Entreno"))), correr = filas.filter(s => tipoDe(s.ejercicio_id) === "carrera"), nadar = filas.filter(s => tipoDe(s.ejercicio_id) === "natacion"), fuerza = filas.filter(s => tipoDe(s.ejercicio_id) === "fuerza");
   const metros = xs => xs.reduce((a, s) => a + n0(s.distancia), 0), segundos = xs => xs.reduce((a, s) => a + n0(s.tiempo), 0), desnivel = correr.reduce((a, s) => a + n0(s.desnivel_pos), 0);
   const registros = new Map();
-  fuerza.forEach(s => { const nombre = nombreEj(s.ejercicio_id), r = rm(s); if (r > 0 && (!registros.has(nombre) || r > registros.get(nombre).valor)) registros.set(nombre, { nombre, valor: r, detalle: num(n0(s.peso)) + " kg × " + num(n0(s.reps)) + " reps · 1RM estimado " + num(r) + " kg" }); });
+  fuerza.forEach(s => { if (!cuentaRm(s)) return; const nombre = nombreEj(s.ejercicio_id), r = rm(s); if (r > 0 && (!registros.has(nombre) || r > registros.get(nombre).valor)) registros.set(nombre, { nombre, valor: r, detalle: num(n0(s.peso)) + " kg × " + num(n0(s.reps)) + " reps · 1RM estimado " + num(r) + " kg" }); });
   correr.filter(s => n0(s.distancia) && n0(s.tiempo)).forEach(s => { const nombre = nombreEj(s.ejercicio_id), r = n0(s.tiempo) / n0(s.distancia); if (!registros.has(nombre) || r < registros.get(nombre).valor) registros.set(nombre, { nombre, valor: r, detalle: fmtDist(s.distancia) + " · " + fmtTiempo(s.tiempo) + " · " + ritmo(s, "carrera") }); });
   const esc = x => String(x).replace(/[&<>\"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" })[c]);
   const top = [...registros.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, "es")).slice(0, 30);
@@ -8408,8 +8786,8 @@ function textoDiscos(kg) {
 const paso = input => '<span class="paso"><button type="button" class="menos" aria-label="Menos" tabindex="-1">−</button>' + input + '<button type="button" class="mas" aria-label="Más" tabindex="-1">+</button></span>';
 function ajustarCampo(inp, clase, signo) {
   const v = clase === "t" ? leerTiempo(inp.value) : clase === "s" ? leerSegs(inp.value) : parseFloat((inp.value || "0").replace(",", ".")) || 0;
-  const n = Math.max(0, Math.round(((isNaN(v) ? 0 : v) + signo * { kg: ajustes().pasoKg, pct: 2.5, reps: 1, m: enKm() ? 0.1 : 100, t: 5, s: 5 }[clase]) * 100) / 100);
-  inp.value = !n ? "" : clase === "s" ? (n < 60 ? String(n) : fmtTiempo(n)) : clase === "t" ? fmtTiempo(n) : clase === "kg" || clase === "pct" || clase === "m" ? num(n) : String(n);
+  const n = Math.max(0, Math.round(((isNaN(v) ? 0 : v) + signo * { kg: ajustes().pasoKg, pct: 2.5, reps: 1, m: enKm() ? 0.1 : 100, dm: enKm() ? 0.01 : 5, t: 5, s: 5 }[clase]) * 100) / 100);
+  inp.value = !n ? "" : clase === "s" ? (n < 60 ? String(n) : fmtTiempo(n)) : clase === "t" ? fmtTiempo(n) : clase === "kg" || clase === "pct" || clase === "m" || clase === "dm" ? num(n) : String(n);
   inp.dispatchEvent(new Event("input"));
 }
 
@@ -9260,13 +9638,13 @@ function pintarEntreno() {
   if (ent.calent) $("enCalentT").textContent = "¿Calentamiento? " + ent.calent.map(p => (p.barra ? "barra" : num(p.peso) + " kg") + " × " + p.reps).join(" · ");
   // Campos para apuntar lo que de verdad se hizo
   const mov = tipo === "movilidad";
-  ent.campos = dist ? (n0(s.distancia) > 0 ? ["m", "t"] : ["t", "m"]) : !mov && (n0(s.tiempo) > 0 || s.max_tiempo) && !(n0(s.reps) > 0) ? ["kg", "s"] : mov ? (n0(s.reps) > 0 || !(n0(s.tiempo) > 0) ? ["reps", "s"] : ["s", "reps"]) : ["kg", "reps"];
+  ent.campos = dist ? (n0(s.distancia) > 0 ? ["m", "t"] : ["t", "m"]) : !mov && ((n0(s.tiempo) > 0 || s.max_tiempo) && !(n0(s.reps) > 0) || conDistFuerza(s) && !(n0(s.reps) > 0)) ? ["kg", "s"] : mov ? (n0(s.reps) > 0 || !(n0(s.tiempo) > 0) ? ["reps", "s"] : ["s", "reps"]) : ["kg", "reps"];
   const etiqueta = { kg: "Peso (kg)", reps: "Repeticiones" + (s.por_lado ? " por lado" : ""), m: enKm() ? "Kilómetros" : "Metros", t: "Tiempo", s: "Tiempo" + (s.por_lado ? " por lado" : "") + " (45 = segundos)" };
   const valor = c => c === "kg" ? (kg ? num(kg) : "") : c === "reps" ? ((s.ciclo_id === "auto" || esRango(s)) && !hecha(s) ? "" : n0(s.reps) || "")
     : c === "m" ? distCampo(s.distancia) : c === "s" ? (n0(s.tiempo) > 0 ? (n0(s.tiempo) < 60 ? String(n0(s.tiempo)) : fmtTiempo(s.tiempo)) : "") : n0(s.tiempo) ? fmtTiempo(s.tiempo) : "";
   [["enA", "enEtA"], ["enB", "enEtB"]].forEach(([inp, et], k) => {
     const c = ent.campos[k];
-    $(et).textContent = etiqueta[c] + ((dist || mov) && k === 1 ? " (opcional)" : "");
+    $(et).textContent = etiqueta[c] + ((dist || mov || conDistFuerza(s)) && k === 1 ? " (opcional)" : "");
     $(inp).value = valor(c);
     $(inp).inputMode = c === "reps" ? "numeric" : "decimal";
     // En carrera, el ejemplo del tiempo es el objetivo de la serie (si lo hay), no un número cualquiera
@@ -9308,7 +9686,7 @@ $("enHecha").addEventListener("click", () => {
     fila.reps = parseInt(v.reps, 10) || 0;
     fila.tiempo = leerSegs(v.s);
     if (isNaN(fila.tiempo)) { aviso("Revisa el tiempo (por ejemplo 45 o 1,30)."); return; }
-    if (!(fila.reps > 0) && !(fila.tiempo > 0)) { aviso("Pon las repeticiones o el tiempo."); return; }
+    if (!(fila.reps > 0) && !(fila.tiempo > 0) && !conDistFuerza(s)) { aviso("Pon las repeticiones o el tiempo."); return; }   // v262: con distancia, el tiempo es opcional
   } else {
     const v = {}; v[ent.campos[0]] = a.value; v[ent.campos[1]] = b.value;
     fila.distancia = leerDist(v.m);
@@ -9406,7 +9784,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v261" + (BETA ? " beta" : "");
+const VERSION_APP = "v266" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";
@@ -10058,6 +10436,52 @@ function mantenerPulsado(el, accion) {
   ["pointerup", "pointercancel", "pointerleave"].forEach(ev => el.addEventListener(ev, parar));
   el.addEventListener("contextmenu", e => { if (pulsacionLarga) e.preventDefault(); });
 }
+// ---------- v263: seleccionar y eliminar varios mesociclos ----------
+// Regla (la misma que ya usaba «Eliminar este mesociclo» del editor): el mesociclo se marca como borrado (no se pierde el registro en la nube
+// ni el historial) y, si se elige, se quitan del calendario SOLO sus series planificadas (no hechas). Las series ya hechas se conservan
+// siempre. NO se tocan plantillas (el mesociclo solo las referencia), listas (copian referencias a plantillas, no al mesociclo), el diario
+// ni los entrenamientos. Con «Deshacer» se recupera todo lo borrado.
+let selMeso = null;
+function marcarMeso(id) {
+  if (selMeso.has(id)) selMeso.delete(id); else selMeso.add(id);
+  pintarPlan();
+}
+function salirSeleccionMesos() { selMeso = null; pulsacionLarga = false; pintarPlan(); }
+function pintarSeleccionMesos(visibles) {
+  const n = selMeso ? selMeso.size : 0;
+  $("selMesoEntrar").hidden = !!selMeso || !visibles.length;
+  $("selMesoAcciones").hidden = !selMeso;
+  document.body.classList.toggle("seleccionando", !!selPlant || !!selMeso);
+  if (!selMeso) return;
+  $("selMesoN").textContent = n === 1 ? "1 seleccionado" : n + " seleccionados";
+  const todos = visibles.length && visibles.every(m => selMeso.has(m.id));
+  $("selMesoTodos").textContent = todos ? "Ninguno" : "Todos";
+  $("selMesoTodos").onclick = () => { visibles.forEach(m => todos ? selMeso.delete(m.id) : selMeso.add(m.id)); pintarPlan(); };
+  $("selMesoBorrar").disabled = !n;
+}
+$("selMesoEntrar").addEventListener("click", () => { selMeso = new Set(); selPlant = null; pintarPlan(); });
+$("selMesoCancelar").addEventListener("click", salirSeleccionMesos);
+$("selMesoBorrar").addEventListener("click", () => {
+  const ms = [...(selMeso || [])].map(id => db.mesociclos[id]).filter(m => m && !m.borrado).sort((a, b) => (b.inicio || "").localeCompare(a.inicio || ""));
+  if (!ms.length) return;
+  const ids = new Set(ms.map(m => m.id)), ss = seriesVivas().filter(s => ids.has(s.meso_id));
+  const planificadas = ss.filter(s => !hecha(s)), hechas = ss.length - planificadas.length;
+  const eliminar = quitarSeries => {
+    const antes = [];
+    if (quitarSeries) planificadas.forEach(s => { antes.push(["series", { ...s }]); cambiar("series", { ...s, borrado: true }, true); });
+    ms.forEach(m => { antes.push(["mesociclos", { ...m }]); cambiar("mesociclos", { ...m, borrado: true }, true); });
+    persistir();
+    selMeso = null; pulsacionLarga = false;
+    pintarTodo();
+    avisoDeshacer(ms.length + (ms.length === 1 ? " mesociclo eliminado" : " mesociclos eliminados") + (quitarSeries && planificadas.length ? " · " + planificadas.length + " series planificadas quitadas del calendario" : ""), antes);
+  };
+  const nombres = ms.map(m => "«" + m.nombre + "» (" + rangoMeso(m) + ")").join("; ");
+  const cuantos = ms.length + (ms.length === 1 ? " mesociclo" : " mesociclos");
+  abrirMenu("Eliminar " + cuantos, nombres + ". Se conservan las " + hechas + " series ya hechas (tu historial), tus plantillas, tus listas y tu diario: no se borra nada de eso.", [
+    { texto: "Eliminar y quitar del calendario sus " + planificadas.length + " series planificadas", peligro: true, confirmar: "Pulsa otra vez: se eliminan " + cuantos + " y se quitan " + planificadas.length + " series planificadas (las hechas se conservan)", accion: () => eliminar(true) },
+    { texto: "Eliminar solo los mesociclos (sus series planificadas se quedan en el calendario)", peligro: true, confirmar: "Pulsa otra vez: se eliminan " + cuantos + "; el calendario no cambia", accion: () => eliminar(false) }
+  ]);
+});
 function marcarPlant(id) {
   if (selPlant.has(id)) selPlant.delete(id); else selPlant.add(id);
   pintarPlan();

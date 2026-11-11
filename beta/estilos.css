@@ -2759,3 +2759,7 @@ dialog#dlgAviso { margin: auto; }
    estira y los dos quedan alineados por abajo */
 .en-campo { justify-content: flex-end; }
 .en-campo .paso { flex: none; }
+
+/* v272: repeticiones de cada ejercicio en el editor de bloque (solo series pendientes) */
+.eb-reps { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 14px; font-weight: 600; color: var(--muted); }
+.eb-reps input { width: 76px; min-height: 44px; text-align: center; font-size: 18px; font-weight: 700; color: var(--fg); }

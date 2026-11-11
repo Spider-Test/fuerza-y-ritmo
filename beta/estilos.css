@@ -2789,3 +2789,7 @@ dialog#dlgAviso { margin: auto; }
 .cal-ancho { grid-column: 1 / -1; }
 .cal-ancho input { text-align: left; }
 @media (min-width: 520px) { .cal-campos { grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); } .cal-ancho { grid-column: span 2; } }
+
+/* v277: diálogo «Añadir a una fecha» (plantillas): controles táctiles de 44 px */
+#dlgFechaPlant .d-botones button, #dlgFechaPlant input[type="date"] { min-height: 44px; }
+#dlgFechaPlant .d-botones { margin-top: 4px; }

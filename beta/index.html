@@ -27,7 +27,7 @@
   window.addEventListener("pageshow", actualizar);
 })();
 </script>
-<link rel="stylesheet" href="estilos.css?v=v276">
+<link rel="stylesheet" href="estilos.css?v=v277">
 </head>
 <body>
 
@@ -446,6 +446,23 @@
     <button class="cerrar" aria-label="Cerrar">✕</button>
   </form>
   <div class="d-cuerpo" id="calCuerpo"></div>
+</dialog>
+
+<dialog id="dlgFechaPlant" aria-label="Elegir fecha">
+  <form method="dialog" class="d-cab">
+    <h3 class="d-tit">Añadir a una fecha</h3>
+    <button class="cerrar" aria-label="Cerrar">✕</button>
+  </form>
+  <div class="d-cuerpo">
+    <p class="menu-det" id="fpResumen" style="padding:0"></p>
+    <label class="campo">Fecha <input id="fpFecha" type="date" min="1000-01-01" max="9999-12-31" aria-describedby="fpElegida"></label>
+    <p class="eb-nota" id="fpElegida" role="status"></p>
+    <p class="aviso" id="fpAviso" role="status"></p>
+    <div class="d-botones">
+      <button type="button" class="nav-btn" id="fpCancelar">Cancelar</button>
+      <button type="button" class="anadir" id="fpAnadir" disabled>Añadir</button>
+    </div>
+  </div>
 </dialog>
 
 <dialog id="dlgEditBloque" aria-label="Editar bloque">
@@ -1031,6 +1048,6 @@
 <div class="toast" id="toast" role="status" hidden><span id="toastTxt"></span><button type="button" id="toastBtn">Deshacer</button></div>
 <div class="fiesta" id="fiesta" aria-hidden="true"></div>
 
-<script src="app.js?v=v276"></script>
+<script src="app.js?v=v277"></script>
 </body>
 </html>

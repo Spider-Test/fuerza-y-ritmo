@@ -10314,7 +10314,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v276" + (BETA ? " beta" : "");
+const VERSION_APP = "v277" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";
@@ -11036,13 +11036,52 @@ $("selPlantCancelar").addEventListener("click", salirSeleccion);
 $("selPlantDia").addEventListener("click", () => {
   // v276: los entrenos quedan en el orden en que se SELECCIONARON (selPlant es un Set: conserva el orden de inserción), no en orden alfabético
   const ps = [...selPlant].map(id => db.plantillas[id]).filter(p => p && !p.borrado);
-  abrirMenu("Añadir " + ps.length + " plantillas", ps.map(p => p.nombre).join(", "), dias.map(d => ({ texto: NOMBRES[d.i] + " " + fmt(deIso(d.id)), accion: () => {
-    ps.forEach(p => pegarItems(d.id, p.items || [], p.nombre));
-    persistir();
-    salirSeleccion();
-    abrirDia(d.id);
-    setEstado(ps.length + " plantillas añadidas al " + NOMBRES[d.i]);
-  } })));
+  abrirMenu("Añadir " + ps.length + (ps.length === 1 ? " plantilla" : " plantillas"), ps.map(p => p.nombre).join(", "), [
+    // v277: cualquier fecha del calendario (el selector de fecha del navegador), sin tener que avanzar semana a semana
+    { texto: "📅 Elegir otra fecha…", accion: () => abrirFechaPlantillas(ps) },
+    ...dias.map(d => ({ texto: NOMBRES[d.i] + " " + fmt(deIso(d.id)), accion: () => {
+      ps.forEach(p => pegarItems(d.id, p.items || [], p.nombre));
+      persistir();
+      salirSeleccion();
+      abrirDia(d.id);
+      setEstado(ps.length + " plantillas añadidas al " + NOMBRES[d.i]);
+    } }))
+  ]);
+});
+// v277: «Añadir a un día» con cualquier fecha. Mismo comportamiento que los días de la semana visible (mismo pegarItems, mismo orden de selección, mismo contenido
+// existente conservado). Si la fecha cae fuera de la semana visible NO se cambia de semana: solo se avisa de dónde se ha añadido.
+const fechaLargaPlant = f => deIso(f).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+let fpPlantillas = null;
+function abrirFechaPlantillas(ps) {
+  fpPlantillas = ps;
+  $("fpResumen").textContent = ps.length + (ps.length === 1 ? " plantilla" : " plantillas") + " (en este orden): " + ps.map(p => p.nombre).join(" → ");
+  $("fpFecha").value = ""; $("fpAviso").textContent = ""; $("fpElegida").textContent = "Elige una fecha: se mostrará aquí antes de añadir.";
+  $("fpAnadir").disabled = true;
+  $("dlgFechaPlant").showModal();
+}
+function fpValidar() {
+  const f = $("fpFecha").value;
+  if (!fechaSerieValida(f)) { $("fpElegida").textContent = f ? "Fecha no válida." : "Elige una fecha: se mostrará aquí antes de añadir."; $("fpAnadir").disabled = true; return; }
+  const hoyIso = iso(new Date()), visible = dias.some(d => d.id === f);
+  const rel = f === hoyIso ? "hoy" : f < hoyIso ? "fecha pasada" : "fecha futura";
+  $("fpElegida").textContent = "Se añadirá el " + fechaLargaPlant(f) + " (" + rel + (visible ? ", en la semana que estás viendo" : ", fuera de la semana que estás viendo: no cambiará la pantalla") + ").";
+  const hay = seriesDelDia(f).length;
+  if (hay) $("fpElegida").textContent += " Ese día ya tiene " + hay + (hay === 1 ? " serie" : " series") + ": se conservan y las nuevas se añaden detrás.";
+  $("fpAnadir").disabled = false;
+}
+$("fpFecha").addEventListener("input", fpValidar);
+$("fpFecha").addEventListener("change", fpValidar);
+$("fpCancelar").addEventListener("click", () => $("dlgFechaPlant").close());
+$("fpAnadir").addEventListener("click", () => {
+  const f = $("fpFecha").value, ps = fpPlantillas;
+  if (!ps || !fechaSerieValida(f)) { $("fpAviso").textContent = "Elige una fecha válida."; return; }
+  $("dlgFechaPlant").close();
+  ps.forEach(p => pegarItems(f, p.items || [], p.nombre));
+  persistir();
+  salirSeleccion();
+  const d = dias.find(x => x.id === f);
+  if (d) { abrirDia(f); setEstado(ps.length + " plantillas añadidas al " + fechaLargaPlant(f)); }
+  else { pintarTodo(); setEstado(ps.length + (ps.length === 1 ? " plantilla añadida" : " plantillas añadidas") + " al " + fechaLargaPlant(f) + " (fuera de la semana visible)"); }
 });
 // Mesociclo: crear uno nuevo repartiéndolas por la semana, o añadirlas a un día de uno existente
 const REPARTO = [0, 2, 4, 1, 3, 5, 6];

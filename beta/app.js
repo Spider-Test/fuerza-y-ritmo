@@ -7275,7 +7275,8 @@ function menuPlantilla(p) {
     { texto: "Añadir a un día de esta semana…", accion: () => {
       // v277 (corrección): dias[].id solo se rellena al pintar la pestaña Semana; si se llega aquí antes salía «NaN undefined» y se guardaba con fecha vacía. Se asignan desde la semana visible (misma fórmula que pintarSemana).
       dias.forEach(d => { d.id = iso(sumarDias(lunesVista(), d.i)); });
-      abrirMenu("¿A qué día?", "", dias.map(d => ({ texto: NOMBRES[d.i] + " " + fmt(deIso(d.id)), accion: () => { aplicarPlantilla(d, p); verPestana("semana"); } })));
+      // v278: «Elegir otra fecha…» (mismo diálogo que la selección múltiple) además de los siete días de la semana visible
+      abrirMenu("¿A qué día?", "", [{ texto: "📅 Elegir otra fecha…", accion: () => abrirFechaPlantillas([p]) }].concat(dias.map(d => ({ texto: NOMBRES[d.i] + " " + fmt(deIso(d.id)), accion: () => { aplicarPlantilla(d, p); verPestana("semana"); } }))));
     } },
     { texto: "Compartir con un amigo…", accion: () => compartir(p.nombre, p.items || []) },
     { texto: "Cambiar nombre…", accion: async () => { const n = await pedirNombre("Nombre de la plantilla", p.nombre); if (n) { cambiar("plantillas", { ...p, nombre: n }); pintarPlan(); } } },
@@ -10318,7 +10319,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v277" + (BETA ? " beta" : "");
+const VERSION_APP = "v278" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";
@@ -11057,7 +11058,7 @@ $("selPlantDia").addEventListener("click", () => {
   ]);
 });
 // v277: «Añadir a un día» con cualquier fecha. Mismo comportamiento que los días de la semana visible (mismo pegarItems, mismo orden de selección, mismo contenido
-// existente conservado). Si la fecha cae fuera de la semana visible NO se cambia de semana: solo se avisa de dónde se ha añadido.
+// existente conservado). v278: sirve también a la plantilla individual y, al confirmar, SIEMPRE abre ese día (abrirDia lleva la vista a su semana; no cambia la fecha del sistema).
 const fechaLargaPlant = f => deIso(f).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 let fpPlantillas = null;
 function abrirFechaPlantillas(ps) {
@@ -11072,7 +11073,7 @@ function fpValidar() {
   if (!fechaSerieValida(f)) { $("fpElegida").textContent = f ? "Fecha no válida." : "Elige una fecha: se mostrará aquí antes de añadir."; $("fpAnadir").disabled = true; return; }
   const hoyIso = iso(new Date()), visible = iso(lunesDe(deIso(f))) === iso(lunesVista());
   const rel = f === hoyIso ? "hoy" : f < hoyIso ? "fecha pasada" : "fecha futura";
-  $("fpElegida").textContent = "Se añadirá el " + fechaLargaPlant(f) + " (" + rel + (visible ? ", en la semana que estás viendo" : ", fuera de la semana que estás viendo: no cambiará la pantalla") + ").";
+  $("fpElegida").textContent = "Se añadirá el " + fechaLargaPlant(f) + " (" + rel + (visible ? ", en la semana que estás viendo" : ", de otra semana: al confirmar se abrirá ese día") + ").";
   const hay = seriesDelDia(f).length;
   if (hay) $("fpElegida").textContent += " Ese día ya tiene " + hay + (hay === 1 ? " serie" : " series") + ": se conservan y las nuevas se añaden detrás.";
   $("fpAnadir").disabled = false;
@@ -11086,10 +11087,9 @@ $("fpAnadir").addEventListener("click", () => {
   $("dlgFechaPlant").close();
   ps.forEach(p => pegarItems(f, p.items || [], p.nombre));
   persistir();
-  salirSeleccion();
-  const visible = iso(lunesDe(deIso(f))) === iso(lunesVista());
-  if (visible) { abrirDia(f); setEstado(ps.length + " plantillas añadidas al " + fechaLargaPlant(f)); }
-  else { pintarTodo(); setEstado(ps.length + (ps.length === 1 ? " plantilla añadida" : " plantillas añadidas") + " al " + fechaLargaPlant(f) + " (fuera de la semana visible)"); }
+  if (selPlant) salirSeleccion();
+  abrirDia(f);
+  setEstado(ps.length + (ps.length === 1 ? " plantilla añadida" : " plantillas añadidas") + " al " + fechaLargaPlant(f));
 });
 // Mesociclo: crear uno nuevo repartiéndolas por la semana, o añadirlas a un día de uno existente
 const REPARTO = [0, 2, 4, 1, 3, 5, 6];

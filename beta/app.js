@@ -4134,26 +4134,38 @@ function desagruparBloque(dia, series) {
 }
 // Mete un ejercicio en un bloque: una serie suya en cada ronda, al final de la ronda. Si viene de fuera
 // (arrastrado), sus series pasan a las rondas (la 1.ª a la R1…) y desaparecen como ejercicio suelto
+// v261 (FASE_03, mover un ejercicio entre bloques): las series que vienen de fuera SE MUEVEN (misma serie, mismo id: conservan valores, estado
+// de completado, rangos, «máx», nota, etc.); antes se creaban copias con solo parte de los datos y se borraban las originales. Y si el ejercicio
+// tiene MÁS series que rondas el bloque, las que sobran se quedan sueltas donde estaban (antes se borraban sin avisar). El calentamiento no
+// entra en las rondas (no es una serie de trabajo) y se queda suelto. Si faltan series para alguna ronda, se completa con una serie planificada
+// (copia de la última) como siempre.
 function meterEnBloque(dia, seriesBloque, ejercicioId, sueltas) {
   const b0 = seriesBloque[0], rondas = [...new Set(seriesBloque.map(s => n0(s.ronda)))].sort((a, b) => a - b);
+  const venidas = (sueltas || []).filter(x => !x.calentamiento).slice().sort((a, b) => a.orden - b.orden);
   const hist = seriesDe(ejercicioId), ult = hist[hist.length - 1];
-  const base = sueltas && sueltas.length ? null : ult ? valores(ult) : { reps: tipoDe(ejercicioId) === "fuerza" || tipoDe(ejercicioId) === "movilidad" ? 10 : 0 };
-  const antes = (sueltas || []).map(x => ["series", { ...x }]);
-  let orden = Date.now();
-  const nuevas = [];
+  const base = venidas.length ? null : ult ? valores(ult) : { reps: tipoDe(ejercicioId) === "fuerza" || tipoDe(ejercicioId) === "movilidad" ? 10 : 0 };
+  const antes = [], nuevas = [];
+  let orden = Date.now(), movidas = 0;
   rondas.forEach((r, k) => {
-    const v = sueltas && sueltas.length ? sueltas[Math.min(k, sueltas.length - 1)] : base;
-    const hechaV = sueltas && sueltas[k] ? hecha(sueltas[k]) : false;
-    const fila = { id: nuevoId(), fecha: dia.id, ejercicio_id: ejercicioId, orden: orden++, grupo: b0.grupo || "", seccion: b0.seccion || "", meso_id: b0.meso_id || "",
-      bloque_id: b0.bloque_id, ronda: r, peso: n0(v.peso), reps: n0(v.reps), distancia: n0(v.distancia), tiempo: n0(v.tiempo), pct: n0(v.pct), por_lado: !!v.por_lado,
-      descanso: n0(v.descanso), rec_dist: n0(v.rec_dist), ciclo_id: "", calentamiento: false, nota: v.nota || "", letra_nueva: !!b0.letra_nueva, hecha: hechaV, borrado: false };
+    const comun = { grupo: b0.grupo || "", seccion: b0.seccion || "", bloque_id: b0.bloque_id, ronda: r, orden: orden++, letra_nueva: !!b0.letra_nueva, copia: 0 };
+    if (venidas[k]) {   // se mueve la propia serie
+      antes.push(["series", { ...venidas[k] }]);
+      cambiar("series", { ...venidas[k], ...comun }, true);
+      movidas++;
+      return;
+    }
+    const v = venidas.length ? venidas[venidas.length - 1] : base;   // faltan series para esta ronda: planificada, con los valores de la última
+    const fila = { id: nuevoId(), fecha: dia.id, ejercicio_id: ejercicioId, meso_id: b0.meso_id || "", peso: n0(v.peso), reps: n0(v.reps), distancia: n0(v.distancia), tiempo: n0(v.tiempo), pct: n0(v.pct), por_lado: !!v.por_lado,
+      descanso: n0(v.descanso), rec_dist: n0(v.rec_dist), max_reps: !!v.max_reps, max_tiempo: !!v.max_tiempo, rango_min: n0(v.rango_min), rango_max: n0(v.rango_max),
+      ciclo_id: "", calentamiento: false, nota: v.nota || "", hecha: false, borrado: false, ...comun };
     nuevas.push(fila);
     cambiar("series", fila, true);
   });
-  (sueltas || []).forEach(x => cambiar("series", { ...x, borrado: true }, true));
+  const sobran = venidas.length - movidas;
   persistir();
   pintarDia(dia);
-  avisoDeshacer(nombreEj(ejercicioId) + " añadido al bloque (" + rondas.length + " rondas)", antes.concat(nuevas.map(f => ["series", { ...f, borrado: true }])));
+  avisoDeshacer(nombreEj(ejercicioId) + " añadido al bloque (" + rondas.length + " rondas)" + (sobran > 0 ? " · " + sobran + (sobran === 1 ? " serie sigue suelta" : " series siguen sueltas") + " (no entran en las rondas)" : ""),
+    antes.concat(nuevas.map(f => ["series", { ...f, borrado: true }])));
 }
 // Bloque vacío: una caja «×N rondas» donde arrastrar (o añadir) ejercicios; con el primero pasa a ser un bloque normal
 function meterEnVacio(dia, vid, ejercicioId, sueltas) {
@@ -8831,8 +8843,10 @@ function asaArrastreDia(el, caja, hermanos, alSoltar, nombre, zonas) {
       const re = el.getBoundingClientRect();
       baseEl = re.top + sy - trasEl;   // dónde estaría sin el transform
       zlPos = zl.map(x => { const r = x.getBoundingClientRect(); return { x, top: r.top + sy, bottom: r.bottom + sy }; });
+      // v261 (FASE_03, mover un ejercicio a un bloque): caja entera de cada bloque que puede recibirlo (ver abajo)
+      zbPos = zl.map(x => { const r = (x.closest(".bloque-rep") || x).getBoundingClientRect(); return { top: r.top + sy, bottom: r.bottom + sy }; });
     };
-    let zlPos = [];
+    let zlPos = [], zbPos = [];
     const moverHueco = hacer => {
       const antes = new Map(pos.map(p => [p.x, p.top]));
       hacer();
@@ -8864,7 +8878,12 @@ function asaArrastreDia(el, caja, hermanos, alSoltar, nombre, zonas) {
       const z = cand && Date.now() - candDesde >= 450 ? cand : null;
       if (cand && !z) { clearTimeout(tZona); tZona = setTimeout(pedir, 470 - (Date.now() - candDesde)); }
       if (z !== zona) { if (zona) zona.classList.remove("zona-destino"); zona = z; if (zona) zona.classList.add("zona-destino"); el.classList.toggle("sobre-zona", !!zona); }
-      if (!zona) {
+      // v261: con el dedo dentro de la caja de un bloque que puede recibir el ejercicio, el hueco NO se mueve. Antes, en cuanto el borde de lo
+      // arrastrado entraba en el bloque, el hueco se colocaba delante o detrás de él y el título del bloque se desplazaba (tantos píxeles como
+      // altura del ejercicio) antes de que pasaran los 450 ms de espera: la zona «soltar sobre el título» no se podía alcanzar. Al salir del
+      // bloque, el hueco vuelve a seguir el borde, como siempre (reordenar no cambia)
+      const enBloque = zbPos.some(p => yDedo >= p.top && yDedo <= p.bottom);
+      if (!zona && !enBloque) {
         // Se mira con el borde de lo arrastrado: el de abajo al bajar, el de arriba al subir (igual de fácil en los dos sentidos)
         const y = dir > 0 ? topDoc + r0.height - 4 : topDoc + 4;
         const t = pos.find(p => y >= p.top && y <= p.bottom && !plegable(p.x));   // un título plegado no mueve el hueco: espera a desplegarse
@@ -9387,7 +9406,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v260" + (BETA ? " beta" : "");
+const VERSION_APP = "v261" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

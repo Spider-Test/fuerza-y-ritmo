@@ -2023,8 +2023,10 @@ function copiar(nombre, html, series, ambito) {
 }
 const hayItemsCopiados = () => !!(porta && ((porta.items || []).length || porta.html));
 // Pega y deja deshacerlo: todo lo nuevo se puede quitar de golpe
+let sufijoPegado = "";   // v281: aviso de entrenos pegados con sufijo (lo rellena pegarDiaEntero; lo muestra pegarConDeshacer)
 function pegarConDeshacer(dia, hacer) {
   const antes = new Set(Object.keys(db.series));
+  sufijoPegado = "";
   hacer();
   persistir();
   rellenar();
@@ -2033,7 +2035,7 @@ function pegarConDeshacer(dia, hacer) {
   if (!nuevas.length) { avisoDeshacer("No se ha pegado nada (¿el ejercicio copiado se ha borrado?)", null); return; }
   // Si ese ejercicio ya estaba en el mismo entreno y parte, sus series se suman a él (no sale otra tarjeta)
   const yaEstaba = nuevas.some(x => !x.bloque_id && seriesDelDia(x.fecha).some(y => !nuevas.includes(y) && y.ejercicio_id === x.ejercicio_id && !y.bloque_id && (y.grupo || "") === (x.grupo || "") && (y.seccion || "") === (x.seccion || "")));
-  avisoDeshacer("Pegado: " + porta.nombre + " (" + nuevas.length + (nuevas.length === 1 ? " serie" : " series") + ")" + (yaEstaba ? " · añadidas al mismo ejercicio, que ya estaba aquí" : ""), nuevas.map(x => ["series", { ...x, borrado: true }]));
+  avisoDeshacer("Pegado: " + porta.nombre + " (" + nuevas.length + (nuevas.length === 1 ? " serie" : " series") + ")" + (yaEstaba ? " · añadidas al mismo ejercicio, que ya estaba aquí" : "") + sufijoPegado, nuevas.map(x => ["series", { ...x, borrado: true }]));
 }
 function pegar(dia) {
   if (!hayItemsCopiados()) return;
@@ -2050,7 +2052,12 @@ function pegarDiaEntero(dia) {
     const html = antes ? antes + "<br>" + porta.html : porta.html;
     cambiar("entrenos", { ...db.entrenos[dia.id], fecha: dia.id, html, texto: aTexto(html) }, true);
   }
-  pegarItems(dia.id, porta.items);
+  // v281: pegar un entreno o un día entero CREA entrenos nuevos: si en el día ya hay uno con el mismo nombre se pega aparte, con sufijo («Nombre (1)»…), sin mezclar
+  const mapa = {}, reservados = [];
+  porta.items.forEach(it => { const g = it.grupo || ""; if (g && !(g in mapa)) { mapa[g] = nombreEntrenoLibre(dia.id, g, reservados); reservados.push(mapa[g]); } });
+  pegarItems(dia.id, porta.items.map(it => it.grupo && mapa[it.grupo] !== it.grupo ? { ...it, grupo: mapa[it.grupo] } : it));
+  const cambios = Object.keys(mapa).filter(g => mapa[g] !== g);
+  if (cambios.length) sufijoPegado = " · entrenos pegados con sufijo por nombre repetido: " + cambios.map(g => "«" + mapa[g] + "»").join(", ");
 }
 async function guardarPlantilla(nombreSugerido, series) {
   const nombre = await pedirNombre("Guardar como plantilla", nombreSugerido, "Si ya tienes una plantilla con este nombre, se reemplaza.");
@@ -2231,10 +2238,32 @@ function guardarCalentamientoEditado() {
   avisoDeshacer("Calentamiento «" + p.nombre + "» actualizado · las copias ya añadidas no cambian", [["plantillas", antes]]);
 }
 $("dlgCalent").addEventListener("close", () => { ce = null; });
+// v281: nombres de entreno que ya tiene un día (con series, vacíos, con partes o bloques vacíos o con ejercicios en espera). El sin entreno («») no cuenta
+function nombresEntrenoDia(fecha) {
+  const s = new Set(seriesDelDia(fecha).map(x => x.grupo || ""));
+  (sesionesVacias[fecha] || []).forEach(g => s.add(g));
+  Object.keys(partesVacias).forEach(k => { if (k.startsWith(fecha + "|")) s.add(k.slice(fecha.length + 1)); });
+  Object.keys(bloquesVacios).forEach(k => { if (k.startsWith(fecha + "|")) s.add((bloquesVacios[k] || {}).g || ""); });
+  (enEspera[fecha] || []).forEach(id => s.add(esperaGrupo[fecha + "|" + id] || ""));
+  s.delete("");
+  return [...s];
+}
+// v281: al CREAR un entreno nuevo en un día con un nombre que ya existe (mismo criterio de nombres que las partes: norm()), se crea aparte con sufijo: «Entreno (1)»,
+// «Entreno (2)»… (el primero libre). No se rechaza ni se mezcla con el existente. «reservados»: nombres ya elegidos en esta misma operación
+function nombreEntrenoLibre(fecha, nombre, reservados) {
+  if (!nombre) return nombre;
+  const usados = nombresEntrenoDia(fecha).concat(reservados || []).map(norm);
+  let n = nombre, k = 1;
+  while (usados.includes(norm(n))) n = nombre + " (" + k++ + ")";
+  return n;
+}
+const avisoNombreEntreno = (original, final) => original === final ? "" : "«" + original + "» se ha añadido como «" + final + "» porque ya había un entreno con ese nombre";
 function aplicarPlantilla(dia, p) {
-  pegarItems(dia.id, p.items, p.nombre);
+  const n = nombreEntrenoLibre(dia.id, p.nombre);
+  pegarItems(dia.id, p.items, n);
   persistir();
   pintarDia(dia);
+  if (n !== p.nombre) avisoDeshacer(avisoNombreEntreno(p.nombre, n), null);
 }
 function elegirPlantilla(titulo, alElegir) {
   const ps = vivos("plantillas").sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
@@ -2469,7 +2498,7 @@ function parteDuplicadaEnEntreno(dia, destino, parte) {
   const nomDestino = nombresPartes(dia.id, destino).concat((enEspera[dia.id] || []).filter(id => (esperaGrupo[dia.id + "|" + id] || "") === destino).map(id => esperaParte[dia.id + "|" + id] || ""));
   return nomDestino.some(p => norm(p) === norm(parte));
 }
-function moverParteAEntreno(dia, origen, parte, destino, seriesParte, etiqueta, abrirDestino) {
+function moverParteAEntreno(dia, origen, parte, destino, seriesParte, etiqueta, abrirDestino, nombresDestino, indice) {
   // v279: NO se fusionan partes. Si el entreno destino ya tiene una parte con el mismo nombre se cancela sin tocar nada: ni series, ni estructura, ni orden, ni plegados
   if (parteDuplicadaEnEntreno(dia, destino, parte)) {
     const m = "Ese entrenamiento ya tiene una parte con este nombre. Renómbrala o elige otro destino.";
@@ -2477,14 +2506,16 @@ function moverParteAEntreno(dia, origen, parte, destino, seriesParte, etiqueta, 
     return false;
   }
   const antes = seriesParte.map(sr => ["series", { ...sr }]);
+  // v281: «Deshacer» también devuelve el «orden» de las series del destino, que se realinea para el modo entreno
+  seriesDelDia(dia.id).filter(x => (x.grupo || "") === destino && !seriesParte.includes(x)).forEach(x => antes.push(["series", { ...x }]));
   // v279: «Deshacer» también devuelve la estructura (partes vacías, esperas, bloques vacíos, orden y posición de partes), no solo las series
-  const estr = JSON.stringify({ eg: esperaGrupo, bv: bloquesVacios, pv: partesVacias, op: ordenPartes, pp: posPartes, og: ordenGrupos, sv: sesionesVacias });
+  const estr = JSON.stringify({ eg: esperaGrupo, bv: bloquesVacios, pv: partesVacias, op: ordenPartes, pp: posPartes, og: ordenGrupos, sv: sesionesVacias, gp: gruposPlegados });
   const ordenG0 = [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].map(x => x.dataset.grupo || "");   // orden actual de los entrenos del día: no debe cambiar al sacar la parte del origen
   // v279: la parte pasa al FINAL de las partes del entreno destino y no cambia el orden de los entrenos: sus series se renumeran (misma secuencia relativa) detrás de las del destino
   const enDestino = seriesDelDia(dia.id).filter(x => !seriesParte.includes(x) && (x.grupo || "") === destino);
   const ordenBase = enDestino.length ? Math.max(...enDestino.map(x => n0(x.orden))) : null;
   const ordenNuevo = new Map(seriesParte.slice().sort((a, b) => n0(a.orden) - n0(b.orden)).map((sr, k) => [sr, ordenBase === null ? sr.orden : ordenBase + 1 + k]));
-  antes.push(["fn", () => { const e = JSON.parse(estr); esperaGrupo = e.eg; bloquesVacios = e.bv; partesVacias = e.pv; ordenPartes = e.op; posPartes = e.pp; ordenGrupos = e.og; sesionesVacias = e.sv; guardarSesiones(); guardarVacios(); }]);
+  antes.push(["fn", () => { const e = JSON.parse(estr); esperaGrupo = e.eg; bloquesVacios = e.bv; partesVacias = e.pv; ordenPartes = e.op; posPartes = e.pp; ordenGrupos = e.og; sesionesVacias = e.sv; gruposPlegados = e.gp; escribir("grupos-plegados-v1", gruposPlegados); guardarSesiones(); guardarVacios(); }]);
   seriesParte.forEach(sr => {
     let extra = {};
     if (!sr.bloque_id) {
@@ -2504,6 +2535,20 @@ function moverParteAEntreno(dia, origen, parte, destino, seriesParte, etiqueta, 
   // v280: si la parte era lo único del entreno de origen, el entreno NO desaparece: queda como entreno vacío (se puede borrar desde su ⋯)
   if (origen && !seriesDelDia(dia.id).some(x => (x.grupo || "") === origen && !seriesParte.includes(x)) && !(sesionesVacias[dia.id] || []).includes(origen)) (sesionesVacias[dia.id] = sesionesVacias[dia.id] || []).push(origen);
   if (ordenG0.length > 1) ordenGrupos[dia.id] = ordenG0;   // v279: el origen pierde sus series más antiguas y, sin esto, su entreno saltaba de sitio
+  // v281: posición elegida en el mismo arrastre. nombresDestino = partes con nombre del destino en el orden en que se veían; indice = dónde entra. Al final (o sin posición)
+  // queda como en v279 (detrás de todo). Al principio o en medio: orden explícito de partes del destino y «orden» de sus series realineado (los mismos huecos de «orden»
+  // reasignados en el orden visual; las series sin parte no se tocan) para que el modo entreno siga el orden que ves
+  {
+    const cajaD = [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].find(x => (x.dataset.grupo || "") === destino);
+    const base = Array.isArray(nombresDestino) ? nombresDestino : cajaD ? [...cajaD.querySelectorAll(":scope > .parte-caja")].map(x => x.dataset.parte || "") : [];   // sin posición (menú): al final
+    const nombres2 = base.filter(x => x !== parte); nombres2.splice(indice === undefined ? nombres2.length : Math.min(indice, nombres2.length), 0, parte);
+    if (nombres2.length > 1) {
+      ordenPartes[kd] = nombres2;
+      const conj = nombres2.map(nm => seriesDelDia(dia.id).filter(x => (x.grupo || "") === destino && (x.seccion || "") === nm)).filter(c => c.length);
+      const huecos = conj.flat().map(x => n0(x.orden)).sort((a, b) => a - b); let q = 0;
+      conj.forEach(c => c.slice().sort((a, b) => n0(a.orden) - n0(b.orden)).forEach(x => { const o = huecos[q++]; if (n0(x.orden) !== o) cambiar("series", { ...x, orden: o }, true); }));
+    }
+  }
   if (abrirDestino) { gruposPlegados[dia.id + "|" + destino] = 0; escribir("grupos-plegados-v1", gruposPlegados); }   // el entreno destino se despliega para ver el resultado
   guardarSesiones(); guardarVacios(); persistir();
   pintarDia(dia);
@@ -2561,10 +2606,12 @@ async function nuevoEntreno(dia) {
   const existentes = [...new Set(seriesDelDia(dia.id).map(s => s.grupo || "").concat(sesionesVacias[dia.id] || []))];
   const n = await pedirNombre("Nombre del nuevo entreno", existentes.length ? "Entreno " + (existentes.length + 1) : "Entreno 2", "Por ejemplo «Mañana», «Tarde», «Carrera» o «Gimnasio». Tendrá sus propios ejercicios y bloques.");
   if (!n) return;
-  if (!existentes.includes(n)) { (sesionesVacias[dia.id] = sesionesVacias[dia.id] || []).push(n); guardarSesiones(); }
+  const nf = nombreEntrenoLibre(dia.id, n);   // v281: si ya hay un entreno con ese nombre, se crea otro aparte («Nombre (1)»…) en vez de reutilizar el existente
+  (sesionesVacias[dia.id] = sesionesVacias[dia.id] || []).push(nf); guardarSesiones();
   if (dia.col.classList.contains("plegado")) plegarDia(dia);
   pintarDia(dia);
-  const caja = dia.bloquesEl.querySelector('.grupo[data-grupo="' + CSS.escape(n) + '"]');
+  if (nf !== n) avisoDeshacer(avisoNombreEntreno(n, nf), null);
+  const caja = dia.bloquesEl.querySelector('.grupo[data-grupo="' + CSS.escape(nf) + '"]');
   if (caja) caja.scrollIntoView({ block: "center", behavior: "smooth" });
 }
 // Pasar un entreno (o todo el día si grupo es null) a otro día: sus series, los ejercicios aún sin series y sus partes vacías
@@ -3290,7 +3337,7 @@ async function abrirCompartido(texto) {
         { texto: "Guardar en mis plantillas", accion: () => guardarPaqueteCompartido(c) },
         { texto: "Ponerlas en un día…", accion: () => elegirDiaDestino(lunesP, "¿En qué día pongo «" + c.nombre + "»?", async f => {
           const mapa = await resolverEjerciciosCompartidos(ejerciciosDeItemsCompartidos(listaEj)); if (!mapa) return;
-          x.plantillas.forEach(p => pegarItems(f, desdeCompartido(p.items, mapa), p.nombre)); persistir(); irADia(f, "«" + c.nombre + "» añadido");
+          const renom = []; x.plantillas.forEach(p => { const nf = nombreEntrenoLibre(f, p.nombre); pegarItems(f, desdeCompartido(p.items, mapa), nf); if (nf !== p.nombre) renom.push("«" + nf + "»"); }); persistir(); irADia(f, "«" + c.nombre + "» añadido" + (renom.length ? " · con sufijo por nombre repetido: " + renom.join(", ") : ""));
         }) }
       ]) }, { texto: "Solo mirar (cerrar)", accion: () => {} }], conResumen(vista));
     return;
@@ -3309,7 +3356,7 @@ async function abrirCompartido(texto) {
     [{ texto: "+ Añadir a mi rutina…", accion: () => abrirMenu("¿Cómo lo añado?", "«" + c.nombre + "»", [
       { texto: "Ponerlo en un día…", accion: () => elegirDiaDestino(lunes, "¿En qué día pongo «" + c.nombre + "»?", async f => {
         const mapa = await resolverEjerciciosCompartidos(ejerciciosDeItemsCompartidos(listaEj)); if (!mapa) return;
-        pegarItems(f, desdeCompartido(c.items, mapa), c.nombre); persistir(); irADia(f, "«" + c.nombre + "» añadido");
+        const nf = nombreEntrenoLibre(f, c.nombre); pegarItems(f, desdeCompartido(c.items, mapa), nf); persistir(); irADia(f, "«" + nf + "» añadido" + (nf !== c.nombre ? " (ya había un entreno «" + c.nombre + "»)" : ""));
       }) },
       { texto: "Guardar como plantilla", accion: async () => {
         const mapa = await resolverEjerciciosCompartidos(ejerciciosDeItemsCompartidos(listaEj)); if (!mapa) return;
@@ -3579,21 +3626,50 @@ function pintarDiaSinAncla(dia) {
         // un entreno). Responde casi al instante (120 ms), resalta la tarjeta y una indicación fija avisa de que la parte se añadirá al final de sus partes (o de que no se puede
         // porque ya tiene una con ese nombre). El asa se muestra aunque sea la única parte si existe otro entreno destino: se calcula con los datos del día, no con el DOM aún a medio pintar
         const hayDestinoParte = grupos.some(x => x.nombre && x.nombre !== g.nombre);
+        let objetivo = null, indiceAnt = null, textoAnt = "";   // v281: posición de inserción calculada en el último fotograma (la usa alSoltar)
         const zonasEntreno = { espera: 120,
           lista: () => [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].filter(x => (x.dataset.grupo || "") !== g.nombre && !x.classList.contains("grupo-sueltos")),
           alCambiar: z => {
-            const b = $("bannerDestino");
+            const b = $("bannerDestino"), m = $("marcaInsercion");
             document.querySelectorAll(".grupo.zona-invalida").forEach(x => x.classList.remove("zona-invalida"));
-            if (!z) { b.hidden = true; return; }
+            indiceAnt = null; textoAnt = "";
+            if (!z) { b.hidden = true; m.hidden = true; return; }   // «objetivo» se conserva: alSoltar se llama justo después
             const destino = z.dataset.grupo || "", etq = (z.querySelector(".gn-txt") || {}).textContent || destino, dup = parteDuplicadaEnEntreno(dia, destino, p.nombre);
             z.classList.toggle("zona-invalida", dup);
-            b.classList.toggle("invalido", dup);
-            b.textContent = dup ? "«" + etq + "» ya tiene una parte con el nombre «" + p.nombre + "»: no se puede mover aquí" : "Suelta aquí: «" + p.nombre + "» se añadirá al final de las partes de «" + etq + "»";
+            b.classList.toggle("invalido", dup); m.classList.toggle("invalido", dup);
+            if (dup) { b.textContent = "«" + etq + "» ya tiene una parte con el nombre «" + p.nombre + "»: no se puede mover aquí"; b.hidden = false; m.hidden = true; objetivo = null; }
+          },
+          // Cada fotograma: ¿antes o después de qué parte del destino? Por mitades de cada parte (con histéresis de 7 px para que no parpadee); por encima de la primera: al principio; por debajo
+          // de la última: al final. Destino plegado o sin partes: al final. El marcador es un elemento fijo (no mueve nada de la página): solo cambia de sitio
+          alMoverDentro: (z, y) => {
+            if (z.classList.contains("zona-invalida")) return;
+            const b = $("bannerDestino"), m = $("marcaInsercion");
+            const destino = z.dataset.grupo || "", etq = (z.querySelector(".gn-txt") || {}).textContent || destino;
+            const partes = [...z.querySelectorAll(":scope > .parte-caja")], rs = partes.map(x => x.getBoundingClientRect());
+            const visibles = !z.classList.contains("g-plegado") && partes.length > 0 && rs.every(r => r.height > 0);
+            const nombres = partes.map(x => x.dataset.parte || "");
+            let idx = nombres.length, marcaY = null, texto;
+            if (!visibles) { texto = "Suelta aquí: «" + p.nombre + "» se añadirá al final de las partes de «" + etq + "»"; }
+            else {
+              idx = 0;
+              rs.forEach((r, k) => { if (y >= r.top + r.height / 2 + (indiceAnt !== null && indiceAnt > k ? -7 : 7)) idx = k + 1; });
+              const h = rs.findIndex(r => y >= r.top && y <= r.bottom);
+              marcaY = idx === 0 ? rs[0].top - 4 : idx === rs.length ? rs[rs.length - 1].bottom + 4 : (rs[idx - 1].bottom + rs[idx].top) / 2;
+              const dentro = h >= 0 ? (idx === h ? "antes de «" + nombres[h] + "»" : "después de «" + nombres[h] + "»") : idx === 0 ? "al principio, antes de «" + nombres[0] + "»" : idx === rs.length ? "al final, después de «" + nombres[nombres.length - 1] + "»" : "entre «" + nombres[idx - 1] + "» y «" + nombres[idx] + "»";
+              texto = "Suelta aquí: «" + p.nombre + "» se insertará " + dentro + " (" + etq + ")";
+            }
+            indiceAnt = idx; objetivo = { destino, etq, nombres, indice: idx };
+            if (texto !== textoAnt) { b.textContent = texto; textoAnt = texto; }
             b.hidden = false;
+            if (marcaY === null) { m.hidden = true; return; }
+            const zr = z.getBoundingClientRect(), zf = z.offsetHeight > 0 ? zr.height / z.offsetHeight || 1 : 1;   // zoom del ordenador, como en asaArrastre
+            m.style.top = Math.round((marcaY - 2) / zf) + "px"; m.style.left = Math.round((zr.left + 10) / zf) + "px"; m.style.width = Math.max(40, Math.round((zr.width - 20) / zf)) + "px"; m.hidden = false;
           },
           alSoltar: z => {
             const destino = z.dataset.grupo || "", etq = (z.querySelector(".gn-txt") || {}).textContent || destino;
-            moverParteAEntreno(dia, g.nombre, p.nombre, destino, p.ids.flatMap(seriesItem), etq, true);
+            const o = objetivo && objetivo.destino === destino ? objetivo : null;
+            moverParteAEntreno(dia, g.nombre, p.nombre, destino, p.ids.flatMap(seriesItem), etq, true, o ? o.nombres : undefined, o ? o.indice : undefined);
+            objetivo = null;
           } };
         if (conNombre.length > 1 || hayDestinoParte) cabP.appendChild(asaArrastre(dest, () => [...caja.querySelectorAll(":scope > .parte-caja")], n => cabP.ordenarPartes(n.map(x => x.dataset.parte || "")), "parte " + p.nombre, zonasEntreno));
         const claveP = "p|" + dia.id + "|" + g.nombre + "|" + p.nombre, tg = cabP.querySelector(".p-toggle");
@@ -5653,11 +5729,12 @@ async function guardarEnLista(nombreSugerido, series) {
 }
 // Pone el entrenamiento k de la lista en un día; el siguiente pasa a ser el de después
 function ponerEnDia(l, p, k, f) {
-  pegarItems(f, p.items, p.nombre);
+  const nf = nombreEntrenoLibre(f, p.nombre);   // v281
+  pegarItems(f, p.items, nf);
   const n = recorrerLista(db.listas[l.id]).length;
   cambiar("listas", { ...db.listas[l.id], siguiente: n ? (k + 1) % n : 0 });
   persistir();
-  irADia(f, "«" + p.nombre + "» puesto el " + NOMBRES[(deIso(f).getDay() + 6) % 7].toLowerCase() + " " + fmt(deIso(f)));
+  irADia(f, "«" + nf + "» puesto el " + NOMBRES[(deIso(f).getDay() + 6) % 7].toLowerCase() + " " + fmt(deIso(f)) + (nf !== p.nombre ? " (ya había un entreno «" + p.nombre + "»)" : ""));
 }
 const ponerEntrenoDeLista = (l, p, k) => elegirDiaDestino(lunesVista(), "¿En qué día pongo «" + p.nombre + "»?", f => ponerEnDia(l, p, k, f));
 function pintarListas() {
@@ -9288,10 +9365,7 @@ $("iaAnadirDia").addEventListener("click", () => {
   const s = { ...original, nombre: titulo };
   if (destino !== "calendario") guardarRutina({ ...r, multi: false, bloques: [{ sesiones: [s] }] }, false);
   if (destino === "plantilla") { $("dlgIA").close(); return; }
-  const usados = new Set(seriesVivas().filter(x => x.fecha === f).map(x => x.grupo || ""));
-  (sesionesVacias[f] || []).forEach(g => usados.add(g));
-  let nombre = s.nombre, n = 2;
-  while (usados.has(nombre)) nombre = s.nombre + " (" + n++ + ")";
+  const nombre = nombreEntrenoLibre(f, s.nombre);   // v281: numeración común «Nombre (1)», «Nombre (2)»… (antes empezaba en (2) y solo miraba series y entrenos vacíos)
   pegarItems(f, itemsDesdeImportacion(s.items), nombre);
   gruposPlegados[f + "|" + nombre] = 0;
   persistir(); $("dlgIA").close(); abrirDia(f);
@@ -9686,6 +9760,7 @@ function asaArrastre(el, hermanos, alSoltar, nombre, zonas) {
       const z = cand && Date.now() - candDesde >= esperaZona ? cand : null;
       if (cand && !z) { clearTimeout(tZona); tZona = setTimeout(pedir, esperaZona + 20 - (Date.now() - candDesde)); }
       if (z !== zona) { if (zona) zona.classList.remove("zona-destino"); zona = z; if (zona) zona.classList.add("zona-destino"); el.classList.toggle("sobre-zona", !!zona); if (zonas && zonas.alCambiar) zonas.alCambiar(zona); }
+      if (zona && zonas.alMoverDentro) zonas.alMoverDentro(zona, dedoY);   // v281: posición de inserción dentro de la zona (cada fotograma, también al desplazarse la vista)
       lista.forEach((x, k) => {
         if (k === idx) return;
         if (zona) { x.style.transform = ""; return; }
@@ -10366,7 +10441,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v280" + (BETA ? " beta" : "");
+const VERSION_APP = "v281" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";
@@ -11095,11 +11170,12 @@ $("selPlantDia").addEventListener("click", () => {
     ...Array.from({ length: 7 }, (_, i) => {
       const f = sumarDias(lunesVista(), i), fi = iso(f);
       return { texto: NOMBRES[i] + " " + fmt(f), accion: () => {
-        ps.forEach(p => pegarItems(fi, p.items || [], p.nombre));
+        const renom = [];   // v281: nombres repetidos → «Nombre (1)»…
+        ps.forEach(p => { const nf = nombreEntrenoLibre(fi, p.nombre); pegarItems(fi, p.items || [], nf); if (nf !== p.nombre) renom.push("«" + nf + "»"); });
         persistir();
         salirSeleccion();
         abrirDia(fi);
-        setEstado(ps.length + (ps.length === 1 ? " plantilla añadida" : " plantillas añadidas") + " al " + NOMBRES[i]);
+        setEstado(ps.length + (ps.length === 1 ? " plantilla añadida" : " plantillas añadidas") + " al " + NOMBRES[i] + (renom.length ? " · con sufijo por nombre repetido: " + renom.join(", ") : ""));
       } };
     })
   ]);
@@ -11132,11 +11208,12 @@ $("fpAnadir").addEventListener("click", () => {
   const f = $("fpFecha").value, ps = fpPlantillas;
   if (!ps || !fechaSerieValida(f)) { $("fpAviso").textContent = "Elige una fecha válida."; return; }
   $("dlgFechaPlant").close();
-  ps.forEach(p => pegarItems(f, p.items || [], p.nombre));
+  const renom = [];   // v281
+  ps.forEach(p => { const nf = nombreEntrenoLibre(f, p.nombre); pegarItems(f, p.items || [], nf); if (nf !== p.nombre) renom.push("«" + nf + "»"); });
   persistir();
   if (selPlant) salirSeleccion();
   abrirDia(f);
-  setEstado(ps.length + (ps.length === 1 ? " plantilla añadida" : " plantillas añadidas") + " al " + fechaLargaPlant(f));
+  setEstado(ps.length + (ps.length === 1 ? " plantilla añadida" : " plantillas añadidas") + " al " + fechaLargaPlant(f) + (renom.length ? " · con sufijo por nombre repetido: " + renom.join(", ") : ""));
 });
 // Mesociclo: crear uno nuevo repartiéndolas por la semana, o añadirlas a un día de uno existente
 const REPARTO = [0, 2, 4, 1, 3, 5, 6];

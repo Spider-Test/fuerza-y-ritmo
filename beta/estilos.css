@@ -2803,3 +2803,8 @@ dialog#dlgAviso { margin: auto; }
   background: var(--toast-bg); color: var(--toast-fg); border: 3px solid var(--accent); font-size: 15px; font-weight: 700; line-height: 1.3; text-align: center; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28); pointer-events: none; }
 .banner-destino.invalido { border-color: var(--error, #c0392b); }
 .banner-destino[hidden] { display: none; }
+
+/* v281: marcador de inserción al arrastrar una parte a otro entreno: línea fija (no mueve la página) entre las partes del destino, antes de la primera o después de la última */
+.marca-insercion { position: fixed; height: 4px; border-radius: 3px; background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); z-index: 32; pointer-events: none; }
+.marca-insercion.invalido { background: var(--error, #c0392b); }
+.marca-insercion[hidden] { display: none; }

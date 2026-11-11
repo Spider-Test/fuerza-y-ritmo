@@ -1,16 +1,16 @@
-// OFICIAL (candidata v264 = oficial v263 publicada + mejoras de uso en el móvil; base: beta v260 validada): conectada EXCLUSIVAMENTE al proyecto de PRODUCCIÓN.
-const SUPA = "https://qtdvehlewuuljolistlw.supabase.co";
-const CLAVE = "sb_publishable_1W_oC99R9By_5iGixwbEqw_rogdHvoQ";   // clave pública (la misma de la oficial v238); los datos los protegen las reglas de las tablas
-// Barrera de arranque de la OFICIAL (inversa de la de la beta): solo funciona contra producción y fuera de /beta/. Si alguien copia estos
-// archivos en /beta/ o cambia la configuración, la aplicación se detiene antes de hacer ninguna petición (INC-PUB-001).
+// BETA: conectada EXCLUSIVAMENTE al proyecto de pruebas (fuerza-y-ritmo-pruebas). No debe apuntar nunca al de producción.
+const SUPA = "https://qqyedigitphvitejquxo.supabase.co";
+const CLAVE = "sb_publishable_RFPOOdGh5vEkjk3IW6WqHA_FLGgffFi";   // clave pública; los datos los protegen las reglas de las tablas
+// Barrera de arranque: esta beta solo funciona contra el proyecto de pruebas, desde la ruta /beta/ y con la clave publishable de ese proyecto.
+// Si alguien copia aquí archivos de la versión oficial (o al revés), la aplicación se detiene antes de hacer ninguna petición.
 (() => {
-  const URL_PRODUCCION = "https://qtdvehlewuuljolistlw.supabase.co";
-  const mal = SUPA !== URL_PRODUCCION || location.pathname.includes("/beta/");
+  const URL_PRUEBAS = "https://qqyedigitphvitejquxo.supabase.co", CLAVE_PRUEBAS_INICIO = "sb_publishable_RFPOOd";
+  const mal = SUPA !== URL_PRUEBAS || !CLAVE.startsWith(CLAVE_PRUEBAS_INICIO) || !location.pathname.includes("/beta/");
   if (!mal) return;
   document.addEventListener("DOMContentLoaded", () => {
-    document.body.innerHTML = '<main style="font:16px/1.4 -apple-system,system-ui,sans-serif;padding:24px;max-width:34em;margin:auto"><h1>Versión oficial detenida</h1><p>Estos archivos son de la versión oficial y no pueden funcionar aquí. No se ha enviado ninguna petición ni se han tocado datos.</p></main>';
+    document.body.innerHTML = '<main style="font:16px/1.4 -apple-system,system-ui,sans-serif;padding:24px;max-width:34em;margin:auto"><h1>Beta detenida</h1><p>La configuración de esta beta no coincide con el entorno de pruebas, así que no se ha iniciado para no tocar datos reales. No se ha enviado ninguna petición.</p></main>';
   });
-  throw new Error("Oficial detenida: ruta /beta/ o configuración distinta de producción");
+  throw new Error("Beta detenida: configuración distinta del proyecto de pruebas");
 })();
 
 const DIAS = ["lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"];
@@ -326,11 +326,11 @@ const puedeEditarCatalogo = () => !!(perfil && perfil.aprobado && (perfil.es_adm
 const editable = e => !!e && (!e.compartido || puedeEditarCatalogo());
 // Quitar algo del catálogo común (borrarlo o dejar de compartirlo) solo puede hacerlo el administrador
 const puedeQuitarDelCatalogo = e => !!e && (!e.compartido || !!(perfil && perfil.es_admin));
-// OFICIAL v261 (regla de la oficial v238): cualquier usuario APROBADO puede crear ejercicios. Quien edita el catálogo los crea COMUNES
-// (catálogo común, visibles para todos los aprobados); el resto, PERSONALES (privados, solo suyos). El servidor lo impone igual.
-const puedeCrearEjercicios = () => !!(perfil && perfil.aprobado);
-const creaComun = () => puedeEditarCatalogo();
-const dondeSeCrea = () => creaComun() ? "en el catálogo común" : "como ejercicio personal";
+// Crear ejercicios (privados o compartidos) es una capacidad del CATÁLOGO: solo el administrador y quien tenga edita_catalogo.
+// Todos los usuarios aprobados pueden usar los ejercicios existentes y editar los valores de sus series (metros, tiempos, pesos…).
+const puedeCrearEjercicios = () => puedeEditarCatalogo();
+// v266 (beta derivada de la oficial v265): catálogo ÚNICO (el proyecto de pruebas solo admite ejercicios comunes creados por quien edita el catálogo). La oficial permite además ejercicios personales (P2); aquí todo ejercicio nuevo es común.
+const creaComun = () => true;
 class FaltaEjercicio extends Error {
   constructor(nombre) {
     super("«" + nombre + "» no está en el catálogo y tu cuenta no puede crear ejercicios. Elige uno existente o pide al administrador que lo añada.");
@@ -1344,13 +1344,12 @@ async function subirEjercicios(filas) {
       const actualizadas = await u.json().catch(() => null);
       if (!Array.isArray(actualizadas)) throw new Error("Respuesta no válida al actualizar un ejercicio.");
       if (!actualizadas.length) {
-        // OFICIAL v261: un ejercicio que no existe en la nube se crea si es de esta cuenta y puede crearlo (privado: cualquier aprobado;
-        // común: solo quien edita el catálogo). Un privado ajeno o sin permiso se conserva en local y deja de contar como pendiente.
-        const puedeSubir = user_id === sesion.user_id && puedeCrearEjercicios() && (!f.compartido || creaComun());
-        if (!puedeSubir) {
-          if (!f.compartido) { const v = db.ejercicios[id]; if (v) v.retenido = true; continue; }
-          throw new Error("Tu cuenta no puede modificar este ejercicio.");
+        if (!f.compartido) {
+          // Privado heredado que no existe en la nube: no se crea (catálogo único), se conserva en local y deja de contar como pendiente.
+          const v = db.ejercicios[id]; if (v) v.retenido = true;
+          continue;
         }
+        if (user_id !== sesion.user_id || !puedeCrearEjercicios()) throw new Error("Tu cuenta no puede modificar este ejercicio.");
         const alta = () => api("/rest/v1/ejercicios", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify(f) });
         let i = await alta();
         for (let k = 0; k < 3 && !i.ok && await faltaColumnaOpcional(i); k++) { columnasFaltan.forEach(c => { delete f[c]; }); i = await alta(); }   // servidor sin P6 o sin P8
@@ -2721,7 +2720,7 @@ function resolverEjerciciosCompartidos(lista) {
     const refrescar = () => {
       const n = pend.filter(a => elec[a.clave] && elec[a.clave].accion === "crear").length;
       const b = $("menuOpciones").firstElementChild;
-      if (b) b.textContent = n ? "Crear " + n + (n === 1 ? " ejercicio" : " ejercicios") + " " + dondeSeCrea().replace("como ejercicio personal", "como personales") + " y continuar" : "Continuar";
+      if (b) b.textContent = n ? "Crear " + n + (n === 1 ? " ejercicio" : " ejercicios") + " en el catálogo común y continuar" : "Continuar";
     };
     pend.forEach(a => {
       const fila = document.createElement("div"); fila.className = "comp-fila";
@@ -2729,7 +2728,7 @@ function resolverEjerciciosCompartidos(lista) {
       t.textContent = "«" + a.nombre + "» · " + TIPOS[a.tipo].nombre + " · " + (a.estado === "otro_tipo" ? "existe con otro tipo" : "no está en el catálogo");
       const sel = document.createElement("select"); sel.setAttribute("aria-label", "¿Qué hago con " + a.nombre + "?");
       const opcion = (v, txt, padre) => { const o = document.createElement("option"); o.value = v; o.textContent = txt; (padre || sel).appendChild(o); return o; };
-      if (puedeCrear) opcion("crear", "Crear «" + a.nombre + "» " + dondeSeCrea());
+      if (puedeCrear) opcion("crear", "Crear «" + a.nombre + "» en el catálogo común");
       else { const o = opcion("", "Elige un ejercicio existente…"); o.disabled = true; }
       const grupo = (titulo, lista2) => { if (!lista2.length) return; const g = document.createElement("optgroup"); g.label = titulo; lista2.forEach(e => opcion("id:" + e.id, e.nombre + (e.tipo !== a.tipo ? " (" + TIPOS[e.tipo].nombre + ")" : ""), g)); sel.appendChild(g); };
       const cand = new Set(a.candidatos.map(e => e.id)), orden = (x, y) => x.nombre.localeCompare(y.nombre, "es");
@@ -2747,7 +2746,7 @@ function resolverEjerciciosCompartidos(lista) {
     $("menu").addEventListener("close", alCerrar);
     abrirMenu("Ejercicios de este entrenamiento",
       (pend.length === 1 ? "1 ejercicio no coincide" : pend.length + " ejercicios no coinciden") + " con tu catálogo. " +
-      (puedeCrear ? "Puedes crearlos " + (creaComun() ? "en el catálogo común (lo verán todos los usuarios aprobados)" : "como ejercicios personales (solo los verás tú)") + " o vincularlos a otros que ya existan. No se crea nada hasta que pulses el botón." : "Tu cuenta no puede crear ejercicios: vincula cada uno a uno existente o cancela. No se añade nada hasta entonces."),
+      (puedeCrear ? "Puedes crearlos en el catálogo común (lo verán todos los usuarios aprobados) o vincularlos a otros que ya existan. No se crea nada hasta que pulses el botón." : "Tu cuenta no puede crear ejercicios: vincula cada uno a uno existente o cancela. No se añade nada hasta entonces."),
       [{ texto: "Continuar", mantener: true, accion: () => {
         const plan = planificarImportacion(analisis, elec, puedeCrear, idsCatalogo);
         if (!plan.ok) { aviso.textContent = plan.mensaje; return; }
@@ -2772,7 +2771,7 @@ function resumenCatalogoCompartido(c) {
     const ul = document.createElement("ul"); ul.className = "vp-lista";
     faltan.forEach(a => { const li = document.createElement("li"); li.textContent = a.nombre + " (" + TIPOS[a.tipo].nombre + (a.estado === "otro_tipo" ? ", existe con otro tipo" : "") + ")"; ul.appendChild(li); });
     const q = document.createElement("p"); q.className = "menu-det nota"; q.style.padding = "0 0 4px";
-    q.textContent = puedeCrearEjercicios() ? "Al añadirlo podrás crearlos " + (creaComun() ? "en el catálogo común" : "como ejercicios personales") + " o vincularlos a otros existentes; antes te lo pregunto." : "Tu cuenta no puede crear ejercicios: al añadirlo tendrás que vincularlos a otros existentes.";
+    q.textContent = puedeCrearEjercicios() ? "Al añadirlo podrás crearlos en el catálogo común o vincularlos a otros existentes; antes te lo pregunto." : "Tu cuenta no puede crear ejercicios: al añadirlo tendrás que vincularlos a otros existentes.";
     caja.append(ul, q);
   }
   return caja;
@@ -2788,7 +2787,7 @@ function mensajeErrorCompartir(texto, codigo) {
   if (/compartido_contenido_invalido/.test(texto)) return "El contenido es demasiado grande o no es válido (máximo 1 MB y 5000 elementos). Comparte menos cosas a la vez.";
   if (/compartido_nombre_largo/.test(texto)) return "El nombre es demasiado largo (máximo 200 caracteres).";
   if (/compartido_caducidad_invalida/.test(texto)) return "La caducidad elegida no es válida. Revisa la fecha y la hora de tu dispositivo.";
-  if (codigo === "PGRST204" || /caduca/.test(texto)) return "El servidor aún no admite caducidad de enlaces (falta aplicar en el servidor la migración de seguridad de los enlaces). No se ha creado ningún código.";
+  if (codigo === "PGRST204" || /caduca/.test(texto)) return "El servidor aún no admite caducidad de enlaces (falta aplicar la migración de seguridad de la beta). No se ha creado ningún código.";
   if (/42501|row-level security|permission/.test(texto + " " + codigo)) return "Tu cuenta no tiene permiso para compartir.";
   return "No se ha podido compartir. Inténtalo de nuevo.";
 }
@@ -2914,7 +2913,7 @@ async function abrirMisCompartidos() {
     if (!r.ok) throw new Error();
     filas = await r.json();
     if (!Array.isArray(filas)) throw new Error();
-  } catch { setEstado("No se han podido cargar tus enlaces. Necesitas conexión y que el servidor tenga aplicada la migración de seguridad de los enlaces.", true); return; }
+  } catch { setEstado("No se han podido cargar tus enlaces. Necesitas conexión y que la beta tenga aplicada la migración de seguridad.", true); return; }
   const orden = { activo: 0, caducado: 1, revocado: 2 };
   filas.sort((a, b) => (orden[a.estado] - orden[b.estado]) || (new Date(b.creado) - new Date(a.creado)));
   // v263: «Quitar de la lista» solo se ofrece si el servidor lo admite (migración P7: mis_compartidos devuelve la columna «retirable»)
@@ -4286,26 +4285,38 @@ function desagruparBloque(dia, series) {
 }
 // Mete un ejercicio en un bloque: una serie suya en cada ronda, al final de la ronda. Si viene de fuera
 // (arrastrado), sus series pasan a las rondas (la 1.ª a la R1…) y desaparecen como ejercicio suelto
+// v261 (FASE_03, mover un ejercicio entre bloques): las series que vienen de fuera SE MUEVEN (misma serie, mismo id: conservan valores, estado
+// de completado, rangos, «máx», nota, etc.); antes se creaban copias con solo parte de los datos y se borraban las originales. Y si el ejercicio
+// tiene MÁS series que rondas el bloque, las que sobran se quedan sueltas donde estaban (antes se borraban sin avisar). El calentamiento no
+// entra en las rondas (no es una serie de trabajo) y se queda suelto. Si faltan series para alguna ronda, se completa con una serie planificada
+// (copia de la última) como siempre.
 function meterEnBloque(dia, seriesBloque, ejercicioId, sueltas) {
   const b0 = seriesBloque[0], rondas = [...new Set(seriesBloque.map(s => n0(s.ronda)))].sort((a, b) => a - b);
+  const venidas = (sueltas || []).filter(x => !x.calentamiento).slice().sort((a, b) => a.orden - b.orden);
   const hist = seriesDe(ejercicioId), ult = hist[hist.length - 1];
-  const base = sueltas && sueltas.length ? null : ult ? valores(ult) : { reps: tipoDe(ejercicioId) === "fuerza" || tipoDe(ejercicioId) === "movilidad" ? 10 : 0 };
-  const antes = (sueltas || []).map(x => ["series", { ...x }]);
-  let orden = Date.now();
-  const nuevas = [];
+  const base = venidas.length ? null : ult ? valores(ult) : { reps: tipoDe(ejercicioId) === "fuerza" || tipoDe(ejercicioId) === "movilidad" ? 10 : 0 };
+  const antes = [], nuevas = [];
+  let orden = Date.now(), movidas = 0;
   rondas.forEach((r, k) => {
-    const v = sueltas && sueltas.length ? sueltas[Math.min(k, sueltas.length - 1)] : base;
-    const hechaV = sueltas && sueltas[k] ? hecha(sueltas[k]) : false;
-    const fila = { id: nuevoId(), fecha: dia.id, ejercicio_id: ejercicioId, orden: orden++, grupo: b0.grupo || "", seccion: b0.seccion || "", meso_id: b0.meso_id || "",
-      bloque_id: b0.bloque_id, ronda: r, peso: n0(v.peso), reps: n0(v.reps), distancia: n0(v.distancia), tiempo: n0(v.tiempo), pct: n0(v.pct), por_lado: !!v.por_lado,
-      descanso: n0(v.descanso), rec_dist: n0(v.rec_dist), ciclo_id: "", calentamiento: false, nota: v.nota || "", letra_nueva: !!b0.letra_nueva, hecha: hechaV, borrado: false };
+    const comun = { grupo: b0.grupo || "", seccion: b0.seccion || "", bloque_id: b0.bloque_id, ronda: r, orden: orden++, letra_nueva: !!b0.letra_nueva, copia: 0 };
+    if (venidas[k]) {   // se mueve la propia serie
+      antes.push(["series", { ...venidas[k] }]);
+      cambiar("series", { ...venidas[k], ...comun }, true);
+      movidas++;
+      return;
+    }
+    const v = venidas.length ? venidas[venidas.length - 1] : base;   // faltan series para esta ronda: planificada, con los valores de la última
+    const fila = { id: nuevoId(), fecha: dia.id, ejercicio_id: ejercicioId, meso_id: b0.meso_id || "", peso: n0(v.peso), reps: n0(v.reps), distancia: n0(v.distancia), tiempo: n0(v.tiempo), pct: n0(v.pct), por_lado: !!v.por_lado,
+      descanso: n0(v.descanso), rec_dist: n0(v.rec_dist), max_reps: !!v.max_reps, max_tiempo: !!v.max_tiempo, rango_min: n0(v.rango_min), rango_max: n0(v.rango_max),
+      ciclo_id: "", calentamiento: false, nota: v.nota || "", hecha: false, borrado: false, ...comun };
     nuevas.push(fila);
     cambiar("series", fila, true);
   });
-  (sueltas || []).forEach(x => cambiar("series", { ...x, borrado: true }, true));
+  const sobran = venidas.length - movidas;
   persistir();
   pintarDia(dia);
-  avisoDeshacer(nombreEj(ejercicioId) + " añadido al bloque (" + rondas.length + " rondas)", antes.concat(nuevas.map(f => ["series", { ...f, borrado: true }])));
+  avisoDeshacer(nombreEj(ejercicioId) + " añadido al bloque (" + rondas.length + " rondas)" + (sobran > 0 ? " · " + sobran + (sobran === 1 ? " serie sigue suelta" : " series siguen sueltas") + " (no entran en las rondas)" : ""),
+    antes.concat(nuevas.map(f => ["series", { ...f, borrado: true }])));
 }
 // Bloque vacío: una caja «×N rondas» donde arrastrar (o añadir) ejercicios; con el primero pasa a ser un bloque normal
 function meterEnVacio(dia, vid, ejercicioId, sueltas) {
@@ -4802,11 +4813,9 @@ function crearEjercicio(nombre, tipo) {
   // Guarda de lógica (además de la RLS del servidor): una cuenta sin permiso de catálogo no crea ejercicios por ninguna vía.
   if (!puedeCrearEjercicios()) { setEstado("Tu cuenta no puede crear ejercicios. Elige uno del catálogo o pide al administrador que lo añada.", true); throw new FaltaEjercicio(nombreLimpio); }
   const id = nuevoId();
-  const comun = creaComun();
-  cambiar("ejercicios", { id, user_id: sesion.user_id, nombre: nombreLimpio, tipo: tipoLimpio, video_url: "", notas: "", compartido: comun, borrado: false });
-  // OFICIAL v261 (como v238): común si la cuenta edita el catálogo; si no, personal. Series, marcas y 1RM siguen siendo privados.
-  setEstado(comun ? "«" + nombreLimpio + "» se ha añadido al catálogo común: lo verán todos los usuarios aprobados. Tus series y marcas siguen siendo solo tuyas."
-                  : "«" + nombreLimpio + "» se ha creado como ejercicio personal: solo lo ves tú.");
+  cambiar("ejercicios", { id, user_id: sesion.user_id, nombre: nombreLimpio, tipo: tipoLimpio, video_url: "", notas: "", compartido: true, borrado: false });
+  // Catálogo único: todo ejercicio nuevo es COMÚN (lo verán todos los usuarios aprobados). Sus datos personales (series, marcas, 1RM…) siguen siendo privados.
+  setEstado("«" + nombreLimpio + "» se ha añadido al catálogo común: lo verán todos los usuarios aprobados. Tus series y marcas siguen siendo solo tuyas.");
   return id;
 }
 let grupoSel = "";
@@ -4860,7 +4869,7 @@ function pintarSelector() {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "opcion crear-dist";
-    b.textContent = "+ Crear «" + sugerencia + "» (carrera) " + dondeSeCrea();
+    b.textContent = "+ Crear «" + sugerencia + "» (carrera) en el catálogo común";
     b.addEventListener("click", () => abrirNuevoEjercicio(sugerencia, "carrera"));   // v262: ficha en borrador antes de crear
     lista.appendChild(b);
   }
@@ -4872,7 +4881,7 @@ function pintarSelector() {
     const t = document.createElement("button");
     t.type = "button";
     t.className = "cf-t";
-    t.textContent = "+ Crear «" + q + "» " + dondeSeCrea() + " (" + TIPOS[sugerido].nombre.toLowerCase() + ")" + (tipoSel ? "" : " · o elige el tipo:");
+    t.textContent = "+ Crear «" + q + "» en el catálogo común (" + TIPOS[sugerido].nombre.toLowerCase() + ")" + (tipoSel ? "" : " · o elige el tipo:");
     t.addEventListener("click", () => abrirNuevoEjercicio(q, sugerido));
     fila.appendChild(t);
     (tipoSel ? [] : [sugerido].concat(Object.keys(TIPOS).filter(k => k !== sugerido))).forEach(k => {
@@ -4934,7 +4943,7 @@ function abrirNuevoEjercicio(nombre, tipo) {
   borradorEj = { tipo: t, medidas: (MEDIDAS_BASE[t] || []).slice(), regiones: [], tecnica: false, destino: { dia: diaSelector, alElegir: alElegirSel, grupo: grupoSel, parte: parteSel }, hecho: false };
   $("neNombre").value = String(nombre || "").trim();
   $("neVideo").value = ""; $("neNotas").value = ""; $("neLado").checked = false;
-  $("neComunL").hidden = !creaComun(); $("neComun").checked = creaComun();
+  $("neComunL").hidden = true; $("neComun").checked = true;   // v266 beta: catálogo único, sin opción de ejercicio personal
   pintarNuevoEj();
   $("dlgNuevoEj").showModal();
   $("neNombre").focus();
@@ -9212,8 +9221,10 @@ function asaArrastreDia(el, caja, hermanos, alSoltar, nombre, zonas) {
       const re = el.getBoundingClientRect();
       baseEl = re.top + sy - trasEl;   // dónde estaría sin el transform
       zlPos = zl.map(x => { const r = x.getBoundingClientRect(); return { x, top: r.top + sy, bottom: r.bottom + sy }; });
+      // v261 (FASE_03, mover un ejercicio a un bloque): caja entera de cada bloque que puede recibirlo (ver abajo)
+      zbPos = zl.map(x => { const r = (x.closest(".bloque-rep") || x).getBoundingClientRect(); return { top: r.top + sy, bottom: r.bottom + sy }; });
     };
-    let zlPos = [];
+    let zlPos = [], zbPos = [];
     const moverHueco = hacer => {
       const antes = new Map(pos.map(p => [p.x, p.top]));
       hacer();
@@ -9245,7 +9256,12 @@ function asaArrastreDia(el, caja, hermanos, alSoltar, nombre, zonas) {
       const z = cand && Date.now() - candDesde >= 450 ? cand : null;
       if (cand && !z) { clearTimeout(tZona); tZona = setTimeout(pedir, 470 - (Date.now() - candDesde)); }
       if (z !== zona) { if (zona) zona.classList.remove("zona-destino"); zona = z; if (zona) zona.classList.add("zona-destino"); el.classList.toggle("sobre-zona", !!zona); }
-      if (!zona) {
+      // v261: con el dedo dentro de la caja de un bloque que puede recibir el ejercicio, el hueco NO se mueve. Antes, en cuanto el borde de lo
+      // arrastrado entraba en el bloque, el hueco se colocaba delante o detrás de él y el título del bloque se desplazaba (tantos píxeles como
+      // altura del ejercicio) antes de que pasaran los 450 ms de espera: la zona «soltar sobre el título» no se podía alcanzar. Al salir del
+      // bloque, el hueco vuelve a seguir el borde, como siempre (reordenar no cambia)
+      const enBloque = zbPos.some(p => yDedo >= p.top && yDedo <= p.bottom);
+      if (!zona && !enBloque) {
         // Se mira con el borde de lo arrastrado: el de abajo al bajar, el de arriba al subir (igual de fácil en los dos sentidos)
         const y = dir > 0 ? topDoc + r0.height - 4 : topDoc + 4;
         const t = pos.find(p => y >= p.top && y <= p.bottom && !plegable(p.x));   // un título plegado no mueve el hueco: espera a desplegarse
@@ -9768,7 +9784,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v264" + (BETA ? " beta" : "");
+const VERSION_APP = "v268" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

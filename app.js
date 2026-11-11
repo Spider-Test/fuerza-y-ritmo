@@ -1,16 +1,16 @@
-// OFICIAL (candidata v264 = oficial v263 publicada + mejoras de uso en el móvil; base: beta v260 validada): conectada EXCLUSIVAMENTE al proyecto de PRODUCCIÓN.
-const SUPA = "https://qtdvehlewuuljolistlw.supabase.co";
-const CLAVE = "sb_publishable_1W_oC99R9By_5iGixwbEqw_rogdHvoQ";   // clave pública (la misma de la oficial v238); los datos los protegen las reglas de las tablas
-// Barrera de arranque de la OFICIAL (inversa de la de la beta): solo funciona contra producción y fuera de /beta/. Si alguien copia estos
-// archivos en /beta/ o cambia la configuración, la aplicación se detiene antes de hacer ninguna petición (INC-PUB-001).
+// BETA: conectada EXCLUSIVAMENTE al proyecto de pruebas (fuerza-y-ritmo-pruebas). No debe apuntar nunca al de producción.
+const SUPA = "https://qqyedigitphvitejquxo.supabase.co";
+const CLAVE = "sb_publishable_RFPOOdGh5vEkjk3IW6WqHA_FLGgffFi";   // clave pública; los datos los protegen las reglas de las tablas
+// Barrera de arranque: esta beta solo funciona contra el proyecto de pruebas, desde la ruta /beta/ y con la clave publishable de ese proyecto.
+// Si alguien copia aquí archivos de la versión oficial (o al revés), la aplicación se detiene antes de hacer ninguna petición.
 (() => {
-  const URL_PRODUCCION = "https://qtdvehlewuuljolistlw.supabase.co";
-  const mal = SUPA !== URL_PRODUCCION || location.pathname.includes("/beta/");
+  const URL_PRUEBAS = "https://qqyedigitphvitejquxo.supabase.co", CLAVE_PRUEBAS_INICIO = "sb_publishable_RFPOOd";
+  const mal = SUPA !== URL_PRUEBAS || !CLAVE.startsWith(CLAVE_PRUEBAS_INICIO) || !location.pathname.includes("/beta/");
   if (!mal) return;
   document.addEventListener("DOMContentLoaded", () => {
-    document.body.innerHTML = '<main style="font:16px/1.4 -apple-system,system-ui,sans-serif;padding:24px;max-width:34em;margin:auto"><h1>Versión oficial detenida</h1><p>Estos archivos son de la versión oficial y no pueden funcionar aquí. No se ha enviado ninguna petición ni se han tocado datos.</p></main>';
+    document.body.innerHTML = '<main style="font:16px/1.4 -apple-system,system-ui,sans-serif;padding:24px;max-width:34em;margin:auto"><h1>Beta detenida</h1><p>La configuración de esta beta no coincide con el entorno de pruebas, así que no se ha iniciado para no tocar datos reales. No se ha enviado ninguna petición.</p></main>';
   });
-  throw new Error("Oficial detenida: ruta /beta/ o configuración distinta de producción");
+  throw new Error("Beta detenida: configuración distinta del proyecto de pruebas");
 })();
 
 const DIAS = ["lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"];
@@ -78,7 +78,7 @@ const escribir = (k, v) => {
 };
 // Datos de cada día que no son series (ejercicios añadidos aún sin series, entrenos y partes vacíos, su descripción,
 // su letra y su posición): se guardan en el día (tabla entrenos, columna extra) para verlos igual en todos los dispositivos
-const CLAVES_EXTRA = new Set(["orden-grupos-v1", "orden-partes-v1", "pos-partes-v1","bloques-vacios-v1", "bloques-v1", "sesiones-v1", "espera-grupo-v1", "partes-v1", "espera-parte-v1", "espera-nota-v1", "espera-letra-v1", "espera-antes-v1"]);
+const CLAVES_EXTRA = new Set(["orden-grupos-v1", "orden-partes-v1", "pos-partes-v1","bloques-vacios-v1", "bloques-v1", "sesiones-v1", "espera-grupo-v1", "partes-v1", "espera-parte-v1", "espera-nota-v1", "espera-letra-v1", "espera-antes-v1", "nombres-hist-v1"]);
 if (BETA) { document.documentElement.classList.add("beta"); document.title = "Fuerza y Ritmo β"; document.querySelector('meta[name="apple-mobile-web-app-title"]').content = "Fuerza y Ritmo β"; }
 
 // Cada tabla se sincroniza por cuenta; los cambios locales en conflicto se conservan.
@@ -326,11 +326,11 @@ const puedeEditarCatalogo = () => !!(perfil && perfil.aprobado && (perfil.es_adm
 const editable = e => !!e && (!e.compartido || puedeEditarCatalogo());
 // Quitar algo del catálogo común (borrarlo o dejar de compartirlo) solo puede hacerlo el administrador
 const puedeQuitarDelCatalogo = e => !!e && (!e.compartido || !!(perfil && perfil.es_admin));
-// OFICIAL v261 (regla de la oficial v238): cualquier usuario APROBADO puede crear ejercicios. Quien edita el catálogo los crea COMUNES
-// (catálogo común, visibles para todos los aprobados); el resto, PERSONALES (privados, solo suyos). El servidor lo impone igual.
-const puedeCrearEjercicios = () => !!(perfil && perfil.aprobado);
-const creaComun = () => puedeEditarCatalogo();
-const dondeSeCrea = () => creaComun() ? "en el catálogo común" : "como ejercicio personal";
+// Crear ejercicios (privados o compartidos) es una capacidad del CATÁLOGO: solo el administrador y quien tenga edita_catalogo.
+// Todos los usuarios aprobados pueden usar los ejercicios existentes y editar los valores de sus series (metros, tiempos, pesos…).
+const puedeCrearEjercicios = () => puedeEditarCatalogo();
+// v266 (beta derivada de la oficial v265): catálogo ÚNICO (el proyecto de pruebas solo admite ejercicios comunes creados por quien edita el catálogo). La oficial permite además ejercicios personales (P2); aquí todo ejercicio nuevo es común.
+const creaComun = () => true;
 class FaltaEjercicio extends Error {
   constructor(nombre) {
     super("«" + nombre + "» no está en el catálogo y tu cuenta no puede crear ejercicios. Elige uno existente o pide al administrador que lo añada.");
@@ -360,6 +360,10 @@ const MEDIDAS_BASE = { fuerza: ["reps", "tiempo", "carga"], movilidad: ["reps", 
 const medidasPropias = id => { const e = db.ejercicios[id], ok = MAGNITUDES_TIPO[tipoDe(id)] || []; return e && Array.isArray(e.medidas) ? ok.filter(m => e.medidas.includes(m)) : []; };
 const medidasDe = id => { const p = medidasPropias(id); return p.length ? p : (MEDIDAS_BASE[tipoDe(id)] || []).slice(); };
 const admite = (id, m) => medidasDe(id).includes(m);
+// v271 (kg en ejercicios sin carga): la MISMA condición con la que la tarjeta del día oculta el campo de kg (sin-peso): un ejercicio de fuerza con medidas
+// propias en la ficha y sin «Carga», o, sin medidas propias, con una medida de progreso distinta de «Peso». Para esos ejercicios no se copia ningún kg a las
+// series NUEVAS (el campo oculto arrastraba el de la serie anterior); lo ya guardado (series y pesos históricos) no se toca ni se oculta.
+const sinCarga = id => tipoDe(id) === "fuerza" && (medidasPropias(id).length ? !medidasPropias(id).includes("carga") : medidaDe(id) !== "peso");
 // Fuerza con distancia (granjero: carga + distancia, con el tiempo opcional): el récord se compara solo con la misma carga y distancia
 const conDistFuerza = s => n0(s.distancia) > 0 && !esDistancia(tipoDe(s.ejercicio_id));
 // ---------- v263: clasificación de ejercicios (Región y Técnica) ----------
@@ -1123,11 +1127,11 @@ function mezclar(tabla, f) {
   return true;
 }
 // ---- Extra de cada día: construirlo desde lo guardado en el dispositivo y aplicarlo cuando llega del servidor ----
-const PROPIEDADES_EXTRA = new Set(["e", "s", "g", "p", "pa", "n", "l", "a", "bv", "og", "op", "pp"]);
+const PROPIEDADES_EXTRA = new Set(["e", "s", "g", "p", "pa", "n", "l", "a", "bv", "og", "op", "pp", "hn"]);
 function extraDe(f) {
   const pre = f + "|";
   const sub = o => { const r = {}; Object.keys(o || {}).filter(k => k.startsWith(pre)).sort().forEach(k => { r[k.slice(pre.length)] = o[k]; }); return r; };
-  const e = { e: enEspera[f] || [], s: sesionesVacias[f] || [], g: sub(esperaGrupo), p: sub(partesVacias), pa: sub(esperaParte), n: sub(esperaNota), l: sub(esperaLetra), a: sub(esperaAntes), bv: sub(bloquesVacios), og: ordenGrupos[f] || [], op: sub(ordenPartes), pp: sub(posPartes) };
+  const e = { e: enEspera[f] || [], s: sesionesVacias[f] || [], g: sub(esperaGrupo), p: sub(partesVacias), pa: sub(esperaParte), n: sub(esperaNota), l: sub(esperaLetra), a: sub(esperaAntes), bv: sub(bloquesVacios), og: ordenGrupos[f] || [], op: sub(ordenPartes), hn: sub(nombresHist), pp: sub(posPartes) };
   Object.keys(e).forEach(k => { if (Array.isArray(e[k]) ? !e[k].length : !Object.keys(e[k]).length) delete e[k]; });
   // v249: lo que esta versión no conoce (p. ej. propiedades de una versión posterior) se conserva tal cual al volver a serializar el día;
   // las propiedades CONOCIDAS se reconstruyen siempre desde el estado local, así que borrarlas a propósito sigue funcionando
@@ -1146,14 +1150,18 @@ function aplicarExtra(f, e) {
   if ((e.og || []).length) ordenGrupos[f] = e.og.slice(); else delete ordenGrupos[f];
   poner(ordenPartes, e.op);
   poner(posPartes, e.pp);   // v250
+  // v273: «hn» (nombre del entreno de las completadas conservadas por «Vaciar día») se FUSIONA con lo local en vez de reemplazarlo: si el servidor trae un extra sin
+  // «hn» (p. ej. lo reescribió una versión que no lo conocía con datos antiguos), no se pierde el nombre guardado aquí y volcarExtra() lo vuelve a subir. Una entrada
+  // sobrante es inofensiva: el nombre que vale es el `grupo` de la serie si lo tiene, y «Vaciar día» limpia las del día.
+  Object.entries(e.hn || {}).forEach(([k, n]) => { if (typeof n === "string" && n) nombresHist[pre + k] = n; });
   guardarVacios();
-  escribir("bloques-v1", enEspera); guardarSesiones(); escribir("espera-nota-v1", esperaNota); escribir("espera-letra-v1", esperaLetra); escribir("espera-antes-v1", esperaAntes);
+  escribir("bloques-v1", enEspera); guardarSesiones(); escribir("espera-nota-v1", esperaNota); escribir("espera-letra-v1", esperaLetra); escribir("espera-antes-v1", esperaAntes); escribir("nombres-hist-v1", nombresHist);
   aplicandoExtra = false;
 }
 // Tras cambiar algo local, se compara cada día con lo guardado y se marca para subir lo que cambie
 function marcarExtra() {
   if (aplicandoExtra) return;
-  try { esperaAntes; esperaNota; esperaLetra; } catch { return; }   // aún cargando la app
+  try { esperaAntes; esperaNota; esperaLetra; nombresHist; } catch { return; }   // aún cargando la app
   clearTimeout(timerExtra);
   timerExtra = setTimeout(volcarExtra, 400);
 }
@@ -1161,7 +1169,7 @@ function volcarExtra() {
     clearTimeout(timerExtra);
     if (!sesion || sesion.user_id !== cuentaLocal) return;
     const fechas = new Set([...Object.keys(enEspera), ...Object.keys(sesionesVacias), ...Object.keys(ordenGrupos)]);
-    [ordenPartes, posPartes, esperaGrupo, partesVacias, esperaParte, esperaNota, esperaLetra, esperaAntes, bloquesVacios].forEach(o => Object.keys(o || {}).forEach(k => fechas.add(k.split("|")[0])));
+    [ordenPartes, posPartes, esperaGrupo, partesVacias, esperaParte, esperaNota, esperaLetra, esperaAntes, bloquesVacios, nombresHist].forEach(o => Object.keys(o || {}).forEach(k => fechas.add(k.split("|")[0])));
     Object.values(db.entrenos).forEach(x => { if (x.extra && Object.keys(x.extra).length) fechas.add(x.fecha); });
     let hay = false;
     // Guardado interno y automático: no es un paso que deshacer (si no, Ctrl+Z se «gastaba» en él y se perdía el rehacer)
@@ -1344,13 +1352,12 @@ async function subirEjercicios(filas) {
       const actualizadas = await u.json().catch(() => null);
       if (!Array.isArray(actualizadas)) throw new Error("Respuesta no válida al actualizar un ejercicio.");
       if (!actualizadas.length) {
-        // OFICIAL v261: un ejercicio que no existe en la nube se crea si es de esta cuenta y puede crearlo (privado: cualquier aprobado;
-        // común: solo quien edita el catálogo). Un privado ajeno o sin permiso se conserva en local y deja de contar como pendiente.
-        const puedeSubir = user_id === sesion.user_id && puedeCrearEjercicios() && (!f.compartido || creaComun());
-        if (!puedeSubir) {
-          if (!f.compartido) { const v = db.ejercicios[id]; if (v) v.retenido = true; continue; }
-          throw new Error("Tu cuenta no puede modificar este ejercicio.");
+        if (!f.compartido) {
+          // Privado heredado que no existe en la nube: no se crea (catálogo único), se conserva en local y deja de contar como pendiente.
+          const v = db.ejercicios[id]; if (v) v.retenido = true;
+          continue;
         }
+        if (user_id !== sesion.user_id || !puedeCrearEjercicios()) throw new Error("Tu cuenta no puede modificar este ejercicio.");
         const alta = () => api("/rest/v1/ejercicios", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify(f) });
         let i = await alta();
         for (let k = 0; k < 3 && !i.ok && await faltaColumnaOpcional(i); k++) { columnasFaltan.forEach(c => { delete f[c]; }); i = await alta(); }   // servidor sin P6 o sin P8
@@ -2053,6 +2060,177 @@ async function guardarPlantilla(nombreSugerido, series) {
   cambiar("plantillas", { id: existe ? existe.id : nuevoId(), nombre, items, borrado: false });
   setEstado("Plantilla «" + nombre + "» guardada");
 }
+// ---------- v273: calentamientos guardados ----------
+// Modelo (sin columnas ni migraciones): un calentamiento guardado es una PLANTILLA normal (misma tabla y mismo formato de items) cuyos ejercicios son todos sueltos
+// y cuyas series llevan TODAS la marca `calentamiento`. Al guardarlo se fuerza esa marca y la parte «Calentamiento»; así se distingue de una plantilla normal sin
+// ningún campo nuevo y las versiones anteriores lo tratan como una plantilla más (con las series ya marcadas). Se aplica como COPIA: series nuevas (otros id) al
+// principio del entreno, con la marca de calentamiento (fuera de récords y estadísticas); editarlas no toca la plantilla y borrar la plantilla no toca las copias.
+const esPlantillaCalentamiento = p => { const it = (p && p.items) || []; return it.length > 0 && it.every(x => !x.bloque && Array.isArray(x.series) && x.series.length > 0 && x.series.every(v => !!v.calentamiento)); };
+// v274: «Guardar calentamiento…» está en el menú ⋯ de cada PARTE cuyo nombre contiene «calentamiento» (o «warm-up»): guarda solo lo de esa parte; si hay varias, cada una por separado
+async function guardarCalentamientoParte(dia, grupo, parte) {
+  const todas = seriesDelDia(dia.id).filter(s => (s.grupo || "") === grupo && (s.seccion || "") === parte).sort((a, b) => a.orden - b.orden);
+  const warm = todas.filter(s => !s.bloque_id), deBloque = todas.filter(s => s.bloque_id);
+  if (!warm.length) { avisoImportante("No se puede guardar", deBloque.length ? "Esta parte solo tiene bloques y el calentamiento guardado no admite bloques. Añade ejercicios sueltos a la parte para guardarla." : "Esta parte no tiene ejercicios con series que guardar."); return; }
+  if (deBloque.length) {
+    const nB = new Set(deBloque.map(x => x.bloque_id)).size, nEj = new Set(warm.map(x => x.ejercicio_id)).size;
+    const ok = await confirmar("Esta parte incluye bloques", "El calentamiento guardado no admite bloques. Se guardarán las " + warm.length + (warm.length === 1 ? " serie suelta" : " series sueltas") + " (" + nEj + (nEj === 1 ? " ejercicio" : " ejercicios") + ") y NO se guardarán " + nB + (nB === 1 ? " bloque" : " bloques") + " con " + deBloque.length + (deBloque.length === 1 ? " serie" : " series") + ". La parte no cambia.", "Guardar sin los bloques");
+    if (!ok) return;
+  }
+  const nombre = await pedirNombre("Guardar calentamiento", parte + (grupo ? " · " + grupo : ""), "Se guarda una copia ordenada de esta parte con sus ejercicios, repeticiones, tiempo, distancia, peso, descansos y notas. Si ya tienes un calentamiento guardado con este nombre, se reemplaza.");
+  if (!nombre) return;
+  const existe = vivos("plantillas").find(p => norm(p.nombre) === norm(nombre));
+  if (existe && !esPlantillaCalentamiento(existe)) { setEstado("Ya hay una plantilla normal con ese nombre; elige otro para el calentamiento", true); return; }
+  const items = itemsDe(warm).map(it => ({ ejercicio_id: it.ejercicio_id, seccion: "Calentamiento", series: it.series.map(v => ({ ...v, calentamiento: true })) }));
+  cambiar("plantillas", { id: existe ? existe.id : nuevoId(), nombre, items, borrado: false });
+  setEstado("Calentamiento «" + nombre + "» guardado (" + contarSeries(items) + " series)" + (deBloque.length ? " · sin los bloques de la parte" : ""));
+}
+function elegirCalentamientoGuardado(dia, grupo) {
+  const ps = vivos("plantillas").filter(esPlantillaCalentamiento).sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+  if (!ps.length) { abrirMenu("Calentamientos guardados", "Aún no tienes ninguno. Guárdalo desde ⋯ del entreno → «Guardar calentamiento…».", [{ texto: "Cerrar", accion: () => {} }]); return; }
+  abrirMenu("Añadir calentamiento guardado", "Se añade una COPIA al principio de «" + (grupo || "Entreno 1") + "»; la plantilla guardada no cambia.", ps.map(p => ({ texto: p.nombre + " · " + resumenItems(p.items), accion: () => aplicarCalentamiento(dia, grupo, p) })));
+}
+function aplicarCalentamiento(dia, grupo, p) {
+  const f = dia.id, delGrupo = seriesDelDia(f).filter(s => (s.grupo || "") === grupo);
+  const parte = nombresPartes(f, grupo).find(esNombreCalentamiento) || "Calentamiento";
+  const items = (p.items || []).filter(it => ejercicioVivo(it.ejercicio_id) && !it.bloque), n = contarSeries(items);
+  if (!n) { setEstado("El calentamiento guardado ya no tiene ejercicios disponibles", true); return; }
+  const base = (delGrupo.length ? Math.min(...delGrupo.map(s => n0(s.orden))) : Date.now()) - n - 1;   // todas antes de lo que ya hay en el entreno
+  const creadas = []; let k = 0;
+  items.forEach(it => {
+    const usadas = delGrupo.concat(creadas).filter(s => s.ejercicio_id === it.ejercicio_id && !s.bloque_id && (s.seccion || "") === parte).map(s => n0(s.copia) > 1 ? n0(s.copia) : 1);
+    const copia = usadas.length ? Math.max(...usadas) + 1 : 0;   // si ya hay ese ejercicio en el calentamiento, otra tarjeta (no se mezclan)
+    it.series.forEach(v => {
+      const fila = { id: nuevoId(), fecha: f, ejercicio_id: it.ejercicio_id, orden: base + k++, peso: n0(v.peso), reps: n0(v.reps), distancia: n0(v.distancia), tiempo: n0(v.tiempo),
+        descanso: n0(v.descanso), rec_dist: n0(v.rec_dist), pct: n0(v.pct), ciclo_id: v.bilbo ? "auto" : "", calentamiento: true, por_lado: !!v.por_lado, nota: v.nota || "", letra_nueva: false,
+        max_tiempo: !!v.max_tiempo, max_reps: !!v.max_reps, rango_min: n0(v.rango_min), rango_max: n0(v.rango_max), hecha: false, meso_id: "", grupo, seccion: parte, bloque_id: "", ronda: 0, copia, borrado: false };
+      creadas.push(fila); cambiar("series", fila, true);
+    });
+  });
+  const kp = f + "|" + grupo;
+  if (ordenPartes[kp] && !ordenPartes[kp].includes(parte)) ordenPartes[kp] = [parte, ...ordenPartes[kp]];   // la parte nueva va la primera
+  guardarSesiones(); persistir(); pintarDia(dia);
+  avisoDeshacer("Calentamiento «" + p.nombre + "» añadido (" + creadas.length + (creadas.length === 1 ? " serie" : " series") + ")", creadas.map(x => ["series", { ...x, borrado: true }]));
+}
+// ---------- v274: pestaña Ejercicios › Calentamientos (ver, editar, renombrar y eliminar los calentamientos guardados) ----------
+// Misma fuente que Entrenos › Plantillas (db.plantillas): no hay duplicados; aquí solo se muestran las que son calentamiento (esPlantillaCalentamiento). Editar o eliminar una
+// plantilla NO toca las copias ya añadidas a los entrenos (son series propias con otros id).
+let ejVista = "ejercicios", ce = null;
+function mostrarEjVista(v) {
+  ejVista = v;
+  $("ejSel").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.ejv === v)));
+  $("ejPanelEj").hidden = v !== "ejercicios"; $("ejPanelCal").hidden = v !== "calentamientos";
+  if (v === "calentamientos") pintarCalentamientos();
+}
+$("ejSel").addEventListener("click", ev => { const b = ev.target.closest("button[data-ejv]"); if (b) mostrarEjVista(b.dataset.ejv); });
+$("filtroCal").addEventListener("input", () => pintarCalentamientos());
+function pintarCalentamientos() {
+  const lp = $("listaCalent"), q = norm($("filtroCal").value.trim());
+  lp.textContent = "";
+  const todas = vivos("plantillas").filter(esPlantillaCalentamiento).sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+  const ps = q ? todas.filter(p => norm(p.nombre).includes(q) || norm(nombresItems(p.items || [])).includes(q)) : todas;
+  if (!ps.length) { const v = document.createElement("p"); v.className = "vacio-lista"; v.textContent = todas.length ? "Ningún calentamiento tiene «" + $("filtroCal").value.trim() + "» en su nombre ni en sus ejercicios." : "Aún no tienes calentamientos guardados. Guárdalos desde ⋯ de una parte «Calentamiento» → «Guardar calentamiento…»."; lp.appendChild(v); return; }
+  ps.forEach(p => lp.appendChild(tarjeta(p.nombre, [resumenItems(p.items || []), nombresItems(p.items || [])], () => abrirCalentamiento(p.id))));
+}
+const CAL_CAMPOS = { fuerza: ["reps", "peso", "tiempo"], movilidad: ["reps", "tiempo"], carrera: ["distancia", "tiempo"], natacion: ["distancia", "tiempo"] };
+function abrirCalentamiento(id) {
+  const p = db.plantillas[id];
+  if (!p || p.borrado || !esPlantillaCalentamiento(p)) return;
+  ce = { id, items: copiaJson(p.items || []) };
+  pintarCalentamientoDlg();
+  $("dlgCalent").showModal();
+}
+function pintarCalentamientoDlg() {
+  const p = db.plantillas[ce.id], cuerpo = $("calCuerpo");
+  $("calTit").textContent = p.nombre;
+  cuerpo.textContent = "";
+  const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt !== undefined) x.textContent = txt; return x; };
+  const boton = (txt, cls, fn, aria) => { const b = el("button", cls, txt); b.type = "button"; if (aria) b.setAttribute("aria-label", aria); b.addEventListener("click", fn); return b; };
+  const fila0 = el("div", "cal-acciones");
+  fila0.append(boton("Cambiar nombre…", "nav-btn", async () => {
+    const n = await pedirNombre("Nombre del calentamiento", p.nombre, "Solo cambia el nombre de la plantilla guardada; las copias ya añadidas a tus entrenos no cambian.");
+    if (!n || n === p.nombre) return;
+    const otra = vivos("plantillas").find(x => x.id !== p.id && norm(x.nombre) === norm(n));
+    if (otra) { setEstado("Ya hay una plantilla con ese nombre; elige otro", true); return; }
+    cambiar("plantillas", { ...db.plantillas[ce.id], nombre: n }); pintarCalentamientoDlg(); pintarCalentamientos();
+  }), boton("Eliminar…", "nav-btn peligro-op", async () => {
+    const ok = await confirmar("¿Eliminar este calentamiento?", "Se elimina «" + p.nombre + "» de tus plantillas (también de Entrenos › Plantillas). Las copias que ya añadiste a tus entrenos no cambian ni se borran.", "Eliminar");
+    if (!ok) return;
+    const antes = { ...db.plantillas[ce.id] };
+    cambiar("plantillas", { ...antes, borrado: true }); $("dlgCalent").close(); pintarCalentamientos(); pintarPlan();
+    avisoDeshacer("Calentamiento «" + p.nombre + "» eliminado (las copias en tus entrenos siguen)", [["plantillas", antes]]);
+  }));
+  cuerpo.appendChild(fila0);
+  cuerpo.appendChild(el("p", "eb-nota", "Edita ejercicios y valores y pulsa «Guardar cambios». Las copias ya añadidas a tus entrenos no cambian. Todas las series se guardan como calentamiento (fuera de récords y estadísticas)."));
+  const lista = el("div", "cal-items");
+  ce.items.forEach((it, i) => {
+    const tipo = tipoDe(it.ejercicio_id), campos = CAL_CAMPOS[tipo] || ["reps", "tiempo"];
+    const caja = el("section", "cal-item");
+    const cab = el("div", "cal-item-cab");
+    cab.appendChild(el("strong", "cal-item-n", nombreEj(it.ejercicio_id) || "Ejercicio eliminado"));
+    const bs = el("span", "cal-item-bs");
+    const subir = boton("↑", "nav-btn eb-paso", () => { leerCalentamientoCampos(); [ce.items[i - 1], ce.items[i]] = [ce.items[i], ce.items[i - 1]]; pintarCalentamientoDlg(); }, "Subir " + nombreEj(it.ejercicio_id)); subir.disabled = i === 0;
+    const bajar = boton("↓", "nav-btn eb-paso", () => { leerCalentamientoCampos(); [ce.items[i + 1], ce.items[i]] = [ce.items[i], ce.items[i + 1]]; pintarCalentamientoDlg(); }, "Bajar " + nombreEj(it.ejercicio_id)); bajar.disabled = i === ce.items.length - 1;
+    const quitar = boton("Quitar", "nav-btn", () => { leerCalentamientoCampos(); ce.items.splice(i, 1); pintarCalentamientoDlg(); }, "Quitar " + nombreEj(it.ejercicio_id) + " del calentamiento"); quitar.disabled = ce.items.length <= 1;
+    bs.append(subir, bajar, quitar); cab.appendChild(bs); caja.appendChild(cab);
+    it.series.forEach((v, j) => {
+      // v275: cada valor lleva su etiqueta visible (no solo un placeholder) y los campos van en una cuadrícula adaptable dentro de la tarjeta
+      const fila = el("div", "cal-fila"), cabF = el("div", "cal-fila-cab"), grid = el("div", "cal-campos");
+      cabF.appendChild(el("span", "cal-n", "Serie " + (j + 1)));
+      const campo = (cls, etiqueta, ph, val, aria, ancho) => {
+        const lab = el("label", "cal-campo" + (ancho ? " cal-ancho" : "")), inp = document.createElement("input");
+        inp.className = cls; inp.placeholder = ph; inp.value = val; inp.autocomplete = "off"; inp.setAttribute("aria-label", aria + " de la serie " + (j + 1) + " de " + nombreEj(it.ejercicio_id)); inp.dataset.i = i; inp.dataset.j = j; inp.dataset.c = cls;
+        lab.append(el("span", "cal-et", etiqueta), inp); grid.appendChild(lab); return inp;
+      };
+      const porDist = tipo === "carrera" || tipo === "natacion";
+      const tiempoTxt = t => n0(t) > 0 ? (porDist ? fmtTiempo(t) : (n0(t) < 60 ? String(n0(t)) : fmtTiempo(t))) : "";
+      if (campos.includes("reps")) campo("c-reps", "Reps", v.max_reps ? "máx" : "", n0(v.reps) > 0 ? String(n0(v.reps)) : "", "Repeticiones");
+      if (campos.includes("distancia")) campo("c-dist", "Distancia (" + (enKm() ? "km" : "m") + ")", "", distCampo(v.distancia), "Distancia");
+      if (campos.includes("peso")) campo("c-peso", "kg", "", n0(v.peso) > 0 ? num(v.peso) : "", "Peso en kg");
+      if (campos.includes("tiempo")) campo("c-tiempo", porDist ? "Tiempo (m:ss)" : "Tiempo (s)", porDist ? "3:40" : "45", tiempoTxt(v.tiempo), "Tiempo");
+      campo("c-desc", "Descanso (s)", "90 o 1:30", recTexto(v), "Descanso");
+      campo("c-nota", "Nota", "", v.nota || "", "Nota", true);
+      const q = boton("✕", "nav-btn cal-quitar", () => { leerCalentamientoCampos(); it.series.splice(j, 1); pintarCalentamientoDlg(); }, "Quitar la serie " + (j + 1) + " de " + nombreEj(it.ejercicio_id)); q.disabled = it.series.length <= 1;
+      cabF.appendChild(q); fila.append(cabF, grid); caja.appendChild(fila);
+    });
+    caja.appendChild(boton("+ Serie", "add-ej", () => { leerCalentamientoCampos(); it.series.push({ ...copiaJson(it.series[it.series.length - 1]) }); pintarCalentamientoDlg(); }));
+    lista.appendChild(caja);
+  });
+  cuerpo.appendChild(lista);
+  cuerpo.appendChild(boton("+ Añadir ejercicio", "add-ej", () => { leerCalentamientoCampos(); abrirSelector(null, id => { if (!ce) return; const t = tipoDe(id); ce.items.push({ ejercicio_id: id, seccion: "Calentamiento", series: [t === "carrera" || t === "natacion" ? { tiempo: 300, calentamiento: true } : { reps: 10, calentamiento: true }] }); pintarCalentamientoDlg(); }, "", ""); }));
+  cuerpo.appendChild(el("p", "aviso eb-err", ""));
+  const bt = el("div", "d-botones");
+  bt.append(boton("Cancelar", "nav-btn", () => $("dlgCalent").close()), boton("Guardar cambios", "anadir", () => guardarCalentamientoEditado()));
+  cuerpo.appendChild(bt);
+}
+// Vuelca lo escrito en los campos al borrador (antes de repintar) y devuelve el primer error de formato, o ""
+function leerCalentamientoCampos() {
+  let err = "";
+  $("calCuerpo").querySelectorAll("input[data-c]").forEach(inp => {
+    const it = ce.items[+inp.dataset.i], v = it && it.series[+inp.dataset.j]; if (!v) return;
+    const c = inp.dataset.c, t = inp.value.trim(), tipo = tipoDe(it.ejercicio_id), nom = nombreEj(it.ejercicio_id) + " serie " + (+inp.dataset.j + 1);
+    if (c === "c-reps") { if (/^\s*(m[aá]x|amrap|fallo)/i.test(t)) { v.reps = 0; v.max_reps = true; } else if (!t) { v.reps = 0; } else if (/^\d+$/.test(t) && +t > 0 && +t <= 999) { v.reps = +t; v.max_reps = false; } else if (!err) err = nom + ": repeticiones no válidas"; }
+    else if (c === "c-dist") { v.distancia = leerDist(t); if (t && !(v.distancia > 0) && !err) err = nom + ": distancia no válida"; }
+    else if (c === "c-peso") { const x = parseFloat(t.replace(",", ".")); if (!t) v.peso = 0; else if (x >= 0) v.peso = x; else if (!err) err = nom + ": peso no válido"; }
+    else if (c === "c-tiempo") { const x = (tipo === "carrera" || tipo === "natacion") ? leerTiempo(t) : leerSegs(t); if (!t) v.tiempo = 0; else if (!isNaN(x) && x >= 0) v.tiempo = x; else if (!err) err = nom + ": tiempo no válido"; }
+    else if (c === "c-desc") { const r = leerRecuperacion(t); if (!t || /^\s*0\s*$/.test(t)) { v.descanso = 0; v.rec_dist = 0; } else if (r) { v.descanso = r.descanso; v.rec_dist = r.rec_dist; } else if (!err) err = nom + ": descanso no válido (prueba 30, 1,30 o 300 m)"; }
+    else if (c === "c-nota") v.nota = t.slice(0, 300);
+  });
+  return err;
+}
+function guardarCalentamientoEditado() {
+  const err = leerCalentamientoCampos(), msg = document.querySelector("#calCuerpo .eb-err");
+  const p = db.plantillas[ce.id];
+  if (!p || p.borrado) { $("dlgCalent").close(); setEstado("Este calentamiento ya no existe", true); return; }
+  let falta = "";
+  ce.items.forEach(it => it.series.forEach((v, j) => { if (!falta && !(n0(v.reps) > 0 || v.max_reps || n0(v.tiempo) > 0 || n0(v.distancia) > 0)) falta = nombreEj(it.ejercicio_id) + " serie " + (j + 1) + ": pon repeticiones, tiempo o distancia"; }));
+  if (err || falta) { msg.textContent = err || falta; return; }
+  const items = ce.items.map(it => ({ ...it, seccion: "Calentamiento", series: it.series.map(v => ({ ...v, calentamiento: true })) }));
+  const antes = { ...p };
+  cambiar("plantillas", { ...p, items });
+  $("dlgCalent").close(); pintarCalentamientos(); pintarPlan();
+  avisoDeshacer("Calentamiento «" + p.nombre + "» actualizado · las copias ya añadidas no cambian", [["plantillas", antes]]);
+}
+$("dlgCalent").addEventListener("close", () => { ce = null; });
 function aplicarPlantilla(dia, p) {
   pegarItems(dia.id, p.items, p.nombre);
   persistir();
@@ -2061,7 +2239,71 @@ function aplicarPlantilla(dia, p) {
 function elegirPlantilla(titulo, alElegir) {
   const ps = vivos("plantillas").sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
   abrirMenu(titulo, ps.length ? "" : "Aún no tienes plantillas. Monta un entrenamiento en un día y usa «Guardar ejercicios como plantilla».",
-    ps.map(p => ({ texto: p.nombre + " · " + resumenItems(p.items || []), accion: () => alElegir(p) })));
+    ps.map(p => ({ texto: p.nombre + " · " + resumenItems(p.items || []) + (esPlantillaCalentamiento(p) ? " · calentamiento" : ""), accion: () => alElegir(p) })));
+}
+// ---------- v272: «Vaciar día» (quita entrenamientos, partes, bloques y lo pendiente; CONSERVA las series completadas) con confirmación y Deshacer completo ----------
+// Decisión del usuario: las series completadas siguen ACTIVAS (mismos id, valores realizados, fecha y estado «hecha»; no se marcan borradas), así que siguen
+// en el historial y en Marcas. Solo pierden su contenedor: pasan a ejercicios sueltos de ese día (grupo y parte vacíos, sin bloque ni ronda, `copia` 0 y sin
+// «letra nueva»); conservan su `orden`, su nota y su calentamiento. Las series PENDIENTES se marcan borradas y se vacía la estructura local del día (entrenos y
+// partes vacíos, ejercicios añadidos sin series, bloques vacíos, descripciones, letras, posiciones y órdenes). No toca otros días, plantillas, listas ni mesociclos,
+// ni la nota/esfuerzo del día. Sin cambios de esquema: solo cambian columnas que ya existen. El Deshacer restaura series (todas las filas completas) y estructura.
+const mapasEstructura = () => ({ esperaGrupo, esperaParte, esperaNota, esperaLetra, esperaAntes, partesVacias, ordenPartes, posPartes, bloquesVacios, esperaOrden, nombresHist });
+function instantaneaEstructura(f) {
+  const pre = f + "|", r = { enEspera: enEspera[f] ? copiaJson(enEspera[f]) : null, sesiones: sesionesVacias[f] ? copiaJson(sesionesVacias[f]) : null, og: ordenGrupos[f] ? copiaJson(ordenGrupos[f]) : null, mapas: {} };
+  Object.entries(mapasEstructura()).forEach(([n, m]) => { r.mapas[n] = {}; Object.keys(m).filter(x => x.startsWith(pre)).forEach(x => { r.mapas[n][x] = copiaJson(m[x]); }); });
+  return r;
+}
+function ponerEstructura(f, snap) {   // snap = null → vacía la estructura del día
+  const pre = f + "|";
+  const poner = (obj, k, v) => { if (v === null || v === undefined) delete obj[k]; else obj[k] = copiaJson(v); };
+  poner(enEspera, f, snap && snap.enEspera); poner(sesionesVacias, f, snap && snap.sesiones); poner(ordenGrupos, f, snap && snap.og);
+  Object.entries(mapasEstructura()).forEach(([n, m]) => {
+    Object.keys(m).filter(x => x.startsWith(pre)).forEach(x => delete m[x]);
+    if (snap) Object.entries(snap.mapas[n] || {}).forEach(([k, v]) => { m[k] = copiaJson(v); });
+  });
+  guardarEspera(); guardarSesiones(); guardarVacios(); guardarEsperaOrden();
+  escribir("espera-nota-v1", esperaNota); escribir("espera-letra-v1", esperaLetra); escribir("espera-antes-v1", esperaAntes); escribir("nombres-hist-v1", nombresHist);
+}
+// Qué hace «Vaciar día» con lo que hay: recuentos para la confirmación
+function resumenVaciarDia(dia) {
+  const f = dia.id, series = seriesDelDia(f), pre = f + "|";
+  const gs = gruposDelDia(f), nPartes = gs.reduce((a, g) => a + nombresPartes(f, g).filter(Boolean).length, 0);
+  const nBloques = new Set(series.filter(x => x.bloque_id).map(x => x.bloque_id)).size + Object.keys(bloquesVacios).filter(k => k.startsWith(pre)).length;
+  const hechas = series.filter(hecha), pend = series.filter(x => !hecha(x));
+  return { gs: gs.length, nPartes, nBloques, hechas: hechas.length, pend: pend.length, sinSeries: (enEspera[f] || []).length };
+}
+function textoVaciarDia(dia) {
+  const r = resumenVaciarDia(dia), pl = (n, a, b) => n + " " + (n === 1 ? a : b);
+  return "se quitan " + pl(r.gs, "entrenamiento", "entrenamientos") + ", " + pl(r.nPartes, "parte", "partes") + " y " + pl(r.nBloques, "bloque", "bloques") + " de este día. " +
+    "Se CONSERVAN " + pl(r.hechas, "serie completada", "series completadas") + " como ejercicios sueltos del día (siguen en el historial y en Marcas, con sus valores, fecha y estado). " +
+    "Se ELIMINAN " + pl(r.pend, "serie pendiente", "series pendientes") + (r.sinSeries ? " y " + pl(r.sinSeries, "ejercicio añadido sin series", "ejercicios añadidos sin series") : "") +
+    ". No cambia ningún otro día, plantilla ni lista. Después podrás pulsar «Deshacer» (queda disponible unos 15 segundos; pasado ese tiempo, lo eliminado no se recupera y lo completado sigue en el historial)";
+}
+function vaciarDiaCompleto(dia) {
+  const f = dia.id;
+  const vivas = seriesDelDia(f);   // por si algo cambió mientras estaba la confirmación
+  const hechas = vivas.filter(hecha), pend = vivas.filter(x => !hecha(x));
+  const antesSeries = vivas.map(x => ["series", { ...x }]), antesEstructura = instantaneaEstructura(f);
+  const nombres = {};   // nombre del entreno de cada completada: el suyo, o el ya archivado en un vaciado anterior
+  hechas.forEach(x => { const n = nombreEntrenoHist(x); if (n) nombres[f + "|" + x.id] = n; });
+  sinHistorial = true;   // el único Deshacer es el del aviso (restaura series Y estructura); Ctrl+Z no debe deshacer solo la mitad
+  try {
+    pend.forEach(x => cambiar("series", { ...x, borrado: true }, true));
+    hechas.forEach(x => cambiar("series", { ...x, grupo: "", seccion: "", bloque_id: "", ronda: 0, copia: 0, letra_nueva: false }, true));   // solo el contenedor; el resto idéntico
+  } finally { sinHistorial = false; }
+  ponerEstructura(f, null);
+  Object.entries(nombres).forEach(([k, n]) => { nombresHist[k] = n; });   // tras vaciar la estructura (que borra los nombres antiguos del día), se guardan los de las completadas que quedan
+  escribir("nombres-hist-v1", nombresHist);
+  persistir(); pintarDia(dia);
+  avisoDeshacer("Día vaciado · " + hechas.length + (hechas.length === 1 ? " completada conservada" : " completadas conservadas") + " · " + pend.length + (pend.length === 1 ? " pendiente eliminada" : " pendientes eliminadas"), null);
+  $("toastBtn").hidden = false;
+  deshacerSug = () => {
+    sinHistorial = true;
+    try { antesSeries.forEach(([t, r]) => { const c = { ...r }; delete c.sucio; cambiar(t, c, true); }); ponerEstructura(f, antesEstructura); }
+    finally { sinHistorial = false; }
+    persistir(); pintarTodo();
+  };
+  clearTimeout(timerAviso); timerAviso = setTimeout(() => { $("toast").hidden = true; deshacerSug = null; }, 15000);
 }
 function menuDia(dia) {
   const series = seriesDelDia(dia.id), html = db.entrenos[dia.id]?.html || "";
@@ -2083,7 +2325,8 @@ function menuDia(dia) {
     series.length && { texto: "Compartir con un amigo…", accion: () => compartir(series[0].grupo || titulo, itemsDe(series, true)) },
     series.length && { texto: "Vaciar ejercicios del día", peligro: true, confirmar: "Pulsa otra vez: se borran " + series.length + " series", accion: () => {
       series.forEach(s => cambiar("series", { ...s, borrado: true }, true)); delete enEspera[dia.id]; guardarEspera(); persistir(); pintarDia(dia);
-    } }
+    } },
+    (series.length || gruposDelDia(dia.id).length || (enEspera[dia.id] || []).length || Object.keys(bloquesVacios).some(k => k.startsWith(dia.id + "|"))) && { texto: "Vaciar día (quita entrenamientos; conserva lo hecho)", peligro: true, confirmar: "Pulsa otra vez: " + textoVaciarDia(dia), accion: () => vaciarDiaCompleto(dia) }
   ]);
 }
 // ---------- Partes de un entreno (opcionales): cabecera de color con su progreso y su menú ----------
@@ -2104,6 +2347,7 @@ function cabeceraParte(dia, grupo, p, color, nNombradas, partes, seriesItem) {
     abrirMenu(p.nombre, ss.length ? ss.length + (ss.length === 1 ? " serie" : " series") : "Parte vacía", [
       // v262: el nombre de la parte vuelve a cambiarse aquí, con una acción deliberada (antes, v259, tocando su texto en la cabecera)
       { texto: "Cambiar nombre", accion: () => cambiarNombreParte(dia, grupo, p.nombre) },
+      esNombreCalentamiento(p.nombre) && ss.length > 0 && { texto: "Guardar calentamiento…", accion: () => guardarCalentamientoParte(dia, grupo, p.nombre) },   // v274
       // v262: sin «+ Ejercicio en esta parte» en este menú; se añade con los botones visibles de la propia parte
       ...(() => { const otros = [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].map(x => x.dataset.grupo || "").filter(x => x !== grupo);
         return otros.length ? [{ texto: "Mover la parte a otro entreno…", accion: () => abrirMenu("¿A qué entreno?", "La parte «" + p.nombre + "» pasa entera, con sus ejercicios y bloques", otros.map(x => ({ texto: x || "Entreno 1", accion: () => moverParteAEntreno(dia, grupo, p.nombre, x, ss) }))) }] : []; })(),
@@ -2207,7 +2451,9 @@ function moverEntreEntrenos(dia, origen, clave, espera, destino, destParte, orde
     if (!x.espera || x.propio && !espera) return;
     const ck = x.propio ? clave : x.clave, sig = orden.slice(j + 1).find(y => !y.espera || (y.propio && !espera));
     if (sig) esperaAntes[dia.id + "|" + ck] = sig.propio ? nuevaClave : sig.clave; else delete esperaAntes[dia.id + "|" + ck];
+    delete esperaOrden[dia.id + "|" + ck];   // v269: la posición puesta a mano manda
   });
+  guardarEsperaOrden();
   escribir("espera-antes-v1", esperaAntes);
   const listas = orden.filter(x => x.propio ? !espera : !x.espera).map(x => x.propio ? ids.map(i => db.series[i]).filter(Boolean) : seriesDeItem(dia.id, destino, x.clave));
   sinHistorial = false;
@@ -2568,6 +2814,7 @@ function menuGrupo(dia, grupo) {
     series.filter(s => !s.bloque_id).length > 1 && { texto: "Seleccionar series para agrupar en bloque", accion: () => empezarSelSeries(dia) },
     series.length && { texto: "Copiar entreno", accion: () => copiar(grupo || "Entreno 1", "", series, "entreno") },
     series.length && { texto: "Guardar en una lista de entrenamientos…", accion: () => guardarEnLista(grupo || "Entrenamiento", series) },
+    { texto: "Añadir calentamiento guardado…", accion: () => elegirCalentamientoGuardado(dia, grupo) },   // v273
     { texto: "Guardar como plantilla…", accion: () => guardarPlantilla(grupo, series) },
     { texto: "Compartir con un amigo…", accion: () => compartir(grupo, itemsDe(series, true)) },
     { texto: "Quitar este entreno del día", peligro: true, confirmar: series.length ? "Pulsa otra vez: se borran " + series.length + " series" : "Pulsa otra vez para quitarlo", accion: () => {
@@ -2721,7 +2968,7 @@ function resolverEjerciciosCompartidos(lista) {
     const refrescar = () => {
       const n = pend.filter(a => elec[a.clave] && elec[a.clave].accion === "crear").length;
       const b = $("menuOpciones").firstElementChild;
-      if (b) b.textContent = n ? "Crear " + n + (n === 1 ? " ejercicio" : " ejercicios") + " " + dondeSeCrea().replace("como ejercicio personal", "como personales") + " y continuar" : "Continuar";
+      if (b) b.textContent = n ? "Crear " + n + (n === 1 ? " ejercicio" : " ejercicios") + " en el catálogo común y continuar" : "Continuar";
     };
     pend.forEach(a => {
       const fila = document.createElement("div"); fila.className = "comp-fila";
@@ -2729,7 +2976,7 @@ function resolverEjerciciosCompartidos(lista) {
       t.textContent = "«" + a.nombre + "» · " + TIPOS[a.tipo].nombre + " · " + (a.estado === "otro_tipo" ? "existe con otro tipo" : "no está en el catálogo");
       const sel = document.createElement("select"); sel.setAttribute("aria-label", "¿Qué hago con " + a.nombre + "?");
       const opcion = (v, txt, padre) => { const o = document.createElement("option"); o.value = v; o.textContent = txt; (padre || sel).appendChild(o); return o; };
-      if (puedeCrear) opcion("crear", "Crear «" + a.nombre + "» " + dondeSeCrea());
+      if (puedeCrear) opcion("crear", "Crear «" + a.nombre + "» en el catálogo común");
       else { const o = opcion("", "Elige un ejercicio existente…"); o.disabled = true; }
       const grupo = (titulo, lista2) => { if (!lista2.length) return; const g = document.createElement("optgroup"); g.label = titulo; lista2.forEach(e => opcion("id:" + e.id, e.nombre + (e.tipo !== a.tipo ? " (" + TIPOS[e.tipo].nombre + ")" : ""), g)); sel.appendChild(g); };
       const cand = new Set(a.candidatos.map(e => e.id)), orden = (x, y) => x.nombre.localeCompare(y.nombre, "es");
@@ -2747,7 +2994,7 @@ function resolverEjerciciosCompartidos(lista) {
     $("menu").addEventListener("close", alCerrar);
     abrirMenu("Ejercicios de este entrenamiento",
       (pend.length === 1 ? "1 ejercicio no coincide" : pend.length + " ejercicios no coinciden") + " con tu catálogo. " +
-      (puedeCrear ? "Puedes crearlos " + (creaComun() ? "en el catálogo común (lo verán todos los usuarios aprobados)" : "como ejercicios personales (solo los verás tú)") + " o vincularlos a otros que ya existan. No se crea nada hasta que pulses el botón." : "Tu cuenta no puede crear ejercicios: vincula cada uno a uno existente o cancela. No se añade nada hasta entonces."),
+      (puedeCrear ? "Puedes crearlos en el catálogo común (lo verán todos los usuarios aprobados) o vincularlos a otros que ya existan. No se crea nada hasta que pulses el botón." : "Tu cuenta no puede crear ejercicios: vincula cada uno a uno existente o cancela. No se añade nada hasta entonces."),
       [{ texto: "Continuar", mantener: true, accion: () => {
         const plan = planificarImportacion(analisis, elec, puedeCrear, idsCatalogo);
         if (!plan.ok) { aviso.textContent = plan.mensaje; return; }
@@ -2772,7 +3019,7 @@ function resumenCatalogoCompartido(c) {
     const ul = document.createElement("ul"); ul.className = "vp-lista";
     faltan.forEach(a => { const li = document.createElement("li"); li.textContent = a.nombre + " (" + TIPOS[a.tipo].nombre + (a.estado === "otro_tipo" ? ", existe con otro tipo" : "") + ")"; ul.appendChild(li); });
     const q = document.createElement("p"); q.className = "menu-det nota"; q.style.padding = "0 0 4px";
-    q.textContent = puedeCrearEjercicios() ? "Al añadirlo podrás crearlos " + (creaComun() ? "en el catálogo común" : "como ejercicios personales") + " o vincularlos a otros existentes; antes te lo pregunto." : "Tu cuenta no puede crear ejercicios: al añadirlo tendrás que vincularlos a otros existentes.";
+    q.textContent = puedeCrearEjercicios() ? "Al añadirlo podrás crearlos en el catálogo común o vincularlos a otros existentes; antes te lo pregunto." : "Tu cuenta no puede crear ejercicios: al añadirlo tendrás que vincularlos a otros existentes.";
     caja.append(ul, q);
   }
   return caja;
@@ -2788,7 +3035,7 @@ function mensajeErrorCompartir(texto, codigo) {
   if (/compartido_contenido_invalido/.test(texto)) return "El contenido es demasiado grande o no es válido (máximo 1 MB y 5000 elementos). Comparte menos cosas a la vez.";
   if (/compartido_nombre_largo/.test(texto)) return "El nombre es demasiado largo (máximo 200 caracteres).";
   if (/compartido_caducidad_invalida/.test(texto)) return "La caducidad elegida no es válida. Revisa la fecha y la hora de tu dispositivo.";
-  if (codigo === "PGRST204" || /caduca/.test(texto)) return "El servidor aún no admite caducidad de enlaces (falta aplicar en el servidor la migración de seguridad de los enlaces). No se ha creado ningún código.";
+  if (codigo === "PGRST204" || /caduca/.test(texto)) return "El servidor aún no admite caducidad de enlaces (falta aplicar la migración de seguridad de la beta). No se ha creado ningún código.";
   if (/42501|row-level security|permission/.test(texto + " " + codigo)) return "Tu cuenta no tiene permiso para compartir.";
   return "No se ha podido compartir. Inténtalo de nuevo.";
 }
@@ -2914,7 +3161,7 @@ async function abrirMisCompartidos() {
     if (!r.ok) throw new Error();
     filas = await r.json();
     if (!Array.isArray(filas)) throw new Error();
-  } catch { setEstado("No se han podido cargar tus enlaces. Necesitas conexión y que el servidor tenga aplicada la migración de seguridad de los enlaces.", true); return; }
+  } catch { setEstado("No se han podido cargar tus enlaces. Necesitas conexión y que la beta tenga aplicada la migración de seguridad.", true); return; }
   const orden = { activo: 0, caducado: 1, revocado: 2 };
   filas.sort((a, b) => (orden[a.estado] - orden[b.estado]) || (new Date(b.creado) - new Date(a.creado)));
   // v263: «Quitar de la lista» solo se ofrece si el servidor lo admite (migración P7: mis_compartidos devuelve la columna «retirable»)
@@ -3095,6 +3342,7 @@ function recolocar(ancla) {
 $("semana").addEventListener("focusout", () => setTimeout(() => { if (repintarLuego && !escribiendoSerie()) pintarBloques(); }, 0));
 
 function quitarEspera(fecha, id) {
+  if (esperaOrden[fecha + "|" + id] !== undefined) { delete esperaOrden[fecha + "|" + id]; guardarEsperaOrden(); }   // v269
   if (!enEspera[fecha]) return;
   enEspera[fecha] = enEspera[fecha].filter(x => x !== id);
   if (!enEspera[fecha].length) delete enEspera[fecha];
@@ -3170,7 +3418,8 @@ function pintarDiaSinAncla(dia) {
   const grupos = [];
   const grupo = nombre => grupos.find(g => g.nombre === nombre) || grupos[grupos.push({ nombre, ids: [] }) - 1];
   // Cada elemento de una sesión es un ejercicio suelto o un bloque ("b:" + id), en el orden en que aparecen
-  delDia.forEach(s => { const g = grupo(s.grupo || ""), k = claveSerie(s); if (!g.ids.includes(k)) g.ids.push(k); });
+  const ordenMinDia = {};   // v269: «orden» más bajo de las series de cada elemento
+  delDia.forEach(s => { const g = grupo(s.grupo || ""), k = claveSerie(s); if (!g.ids.includes(k)) g.ids.push(k); ordenMinDia[k] = Math.min(ordenMinDia[k] ?? Infinity, n0(s.orden)); });
   // Entrenos creados con «+ Entreno» que aún no tienen series
   (sesionesVacias[dia.id] || []).forEach(n => grupo(n));
   // …y los entrenos que solo tienen partes vacías (p. ej. «Calentamiento» recién creado en un día sin nada)
@@ -3179,7 +3428,13 @@ function pintarDiaSinAncla(dia) {
   (enEspera[dia.id] || []).forEach(id => {
     const gn = esperaGrupo[dia.id + "|" + id] || "";
     if (!ejercicioVivo(ejDeClave(id)) || grupos.some(g => g.nombre === gn && g.ids.includes(id))) return;
-    const g = grupo(gn), antes = esperaAntes[dia.id + "|" + id], i = antes ? g.ids.indexOf(antes) : -1;
+    const g = grupo(gn), antes = esperaAntes[dia.id + "|" + id];
+    let i = antes ? g.ids.indexOf(antes) : -1;
+    // v269: sin posición puesta a mano, queda delante del primer elemento con series que se creó después de añadirlo (orden de añadido)
+    if (i < 0 && !antes && esperaOrden[dia.id + "|" + id] !== undefined) {
+      const t = n0(esperaOrden[dia.id + "|" + id]);
+      i = g.ids.findIndex(k2 => ordenMinDia[k2] !== undefined && ordenMinDia[k2] > t);
+    }
     if (i >= 0) g.ids.splice(i, 0, id); else g.ids.push(id);
   });
   const diaVacio = !grupos.length && !Object.keys(bloquesVacios).some(k => k.startsWith(dia.id + "|"));
@@ -3415,7 +3670,9 @@ function pintarDiaSinAncla(dia) {
         if (!x.dataset.espera) return;
         const sig = n.slice(k + 1).find(y => !y.dataset.espera);
         if (sig) esperaAntes[dia.id + "|" + x.dataset.clave] = sig.dataset.clave; else delete esperaAntes[dia.id + "|" + x.dataset.clave];
+        delete esperaOrden[dia.id + "|" + x.dataset.clave];   // v269: la posición puesta a mano manda
       });
+      guardarEsperaOrden();
       escribir("espera-antes-v1", esperaAntes);
       // El orden entre los que aún no tienen series sale de su lista: se guarda tal como han quedado
       const ordenEsp = n.filter(x => x.dataset.espera).map(x => x.dataset.clave);
@@ -3521,7 +3778,8 @@ function pintarDiaSinAncla(dia) {
       b.addEventListener("click", () => abrirMenu("Añadir a «" + g.nombre + "»", "", [
         { texto: "+ Ejercicio", accion: () => abrirSelector(dia, null, g.nombre) },
         { texto: "+ Bloque", accion: () => abrirBloque(dia, g.nombre) },
-        { texto: "+ Parte", accion: () => nuevaParte(dia, g.nombre) }
+        { texto: "+ Parte", accion: () => nuevaParte(dia, g.nombre) },
+        { texto: "+ Calentamiento guardado", accion: () => elegirCalentamientoGuardado(dia, g.nombre) }   // v273
       ]));
       caja.appendChild(add);
     }
@@ -3709,7 +3967,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
     const row = extrasEl.children[k - 1];
     if (!row) return v;
     const out = { ...v }, r = row.querySelector(".r-reps").value.trim(), kg = row.querySelector(".r-kg").value.trim();
-    if (kg !== "") { const x = parseFloat(kg.replace(",", ".")); if (x >= 0) { out.pct = enPct ? x : 0; out.peso = enPct ? kgDePct(id, x) : x; } }
+    if (kg !== "" && !sinCarga(id)) { const x = parseFloat(kg.replace(",", ".")); if (x >= 0) { out.pct = enPct ? x : 0; out.peso = enPct ? kgDePct(id, x) : x; } }
     if (!enMax() && r !== "") {
       if (enTiempo()) { const t = leerSegs(r); if (t > 0) out.tiempo = t; }
       else if (leerRango(r)) { const g = leerRango(r); out.reps = g.min; out.rango_min = g.min; out.rango_max = g.max; }
@@ -3928,7 +4186,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
       fa.value = t ? ti : m;
       fb.value = t ? m : ti;
     }
-    else if (mov) { fa.value = n0(s.reps) || ""; fb.value = n0(s.tiempo) > 0 ? (n0(s.tiempo) < 60 ? String(n0(s.tiempo)) : fmtTiempo(s.tiempo)) : ""; b.querySelector(".por-lado").checked = !!s.por_lado || ladoDe(id); }
+    else if (mov) { fa.value = n0(s.reps) || ""; fb.value = n0(s.tiempo) > 0 ? (n0(s.tiempo) < 60 ? String(n0(s.tiempo)) : fmtTiempo(s.tiempo)) : ""; b.querySelector(".por-lado").checked = (modoForm === "editar" && !!s.por_lado) || ladoDe(id); }   // v271: una serie nueva toma «por lado» de la ficha, no de la anterior
     else {
       const t = ((n0(s.tiempo) > 0 || !!s.max_tiempo) && !(n0(s.reps) > 0)) || (!(n0(s.reps) > 0) && !admite(id, "reps") && admite(id, "tiempo"));
       ponerPorT(t);
@@ -3937,7 +4195,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
       else { ponerModo(false); const kg = pesoMostrado(s); fa.value = kg > 0 ? num(kg) : ""; }
       fb.value = t ? segTxt(s.tiempo) : n0(s.reps) || "";
       if (!t && esRango(s) && !hecha(s)) { fb.value = modoForm === "editar" ? "" : rangoTxt(s); if (modoForm === "editar") setTimeout(() => { fb.placeholder = rangoTxt(s) + ": ¿cuántas?"; }, 0); }
-      if (b.querySelector(".por-lado")) b.querySelector(".por-lado").checked = !!s.por_lado || ladoDe(id);
+      if (b.querySelector(".por-lado")) b.querySelector(".por-lado").checked = (modoForm === "editar" && !!s.por_lado) || ladoDe(id);   // v271
       const esMax = !(n0(s.reps) > 0) && !(n0(s.tiempo) > 0) && !(n0(s.distancia) > 0) && !s.ciclo_id;
       // Completar una serie «máx» pendiente: se apunta lo que salió (reps o segundos)
       if (esMax && modoForm === "editar") { ponerMax(false); fb.placeholder = t ? "¿cuántos segundos?" : "¿cuántas reps?"; }
@@ -4113,6 +4371,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
       const x = parseFloat((fa.value.trim() || "0").replace(",", "."));
       v.pct = enPct ? x : 0;
       v.peso = enPct ? kgDePct(id, x) : x;
+      if (sinCarga(id)) { const e0 = modoForm === "editar" && editando ? editando : null; v.peso = e0 ? n0(e0.peso) : 0; v.pct = e0 ? n0(e0.pct) : 0; }   // v271: el kg oculto no se guarda
       v.ciclo_id = chkBilbo && chkBilbo.checked && ciclo ? ciclo.id : "";
       v.por_lado = !!(b.querySelector(".por-lado") || {}).checked || ladoDe(id);
       v.rango_min = 0; v.rango_max = 0;
@@ -4166,7 +4425,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
     const letraNueva = series.length ? series.some(x => x.letra_nueva) : !!esperaLetra[dia.id + "|" + idK];
     if (esperaLetra[dia.id + "|" + idK]) { delete esperaLetra[dia.id + "|" + idK]; escribir("espera-letra-v1", esperaLetra); }
     if (esperaNota[dia.id + "|" + idK]) { delete esperaNota[dia.id + "|" + idK]; escribir("espera-nota-v1", esperaNota); }
-    const nueva = (k, vk) => ({ id: nuevoId(), fecha: dia.id, ejercicio_id: id, orden: Date.now() + k, grupo, seccion: parte || "", meso_id: "", bloque_id: "", ronda: 0, copia: copia > 1 ? copia : 0, borrado: false, calentamiento: false, nota: notaNueva, letra_nueva: letraNueva, ...(vk || v), hecha: nuevaHecha });
+    const nueva = (k, vk) => ({ id: nuevoId(), fecha: dia.id, ejercicio_id: id, orden: (!series.length && esperaOrden[dia.id + "|" + idK] || Date.now()) + k, grupo, seccion: parte || "", meso_id: "", bloque_id: "", ronda: 0, copia: copia > 1 ? copia : 0, borrado: false, calentamiento: false, nota: notaNueva, letra_nueva: letraNueva, ...(vk || v), hecha: nuevaHecha });
     if (modoForm === "una" || !series.length) {
       const n = modoForm === "una" ? 1 : Math.min(50, Math.max(1, parseInt(vecesEl.value, 10) || 1));
       if (!series.length) {
@@ -4188,7 +4447,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
     const aplicar = borrarHechas => {
       const deshacer = series.map(x => ["series", { ...x }]);
       const nuevas = [];
-      pend.forEach(x => cambiar("series", { ...x, ...valoresFila(efect.indexOf(x), v), hecha: false }, true));
+      pend.forEach(x => cambiar("series", { ...x, ...valoresFila(efect.indexOf(x), v), ...(sinCarga(id) ? { peso: x.peso, pct: x.pct } : {}), hecha: false }, true));   // v271: sin carga, cada pendiente conserva su peso
       if (objetivo > efect.length) {
         const ultimo = Math.max(...series.map(x => n0(x.orden)));
         for (let k = 0; k < objetivo - efect.length; k++) { const f = { ...nueva(k, valoresFila(efect.length + k, v)), orden: ultimo + (k + 1) / 100, hecha: false }; nuevas.push(f); cambiar("series", f, true); }
@@ -4307,7 +4566,7 @@ function meterEnBloque(dia, seriesBloque, ejercicioId, sueltas) {
       return;
     }
     const v = venidas.length ? venidas[venidas.length - 1] : base;   // faltan series para esta ronda: planificada, con los valores de la última
-    const fila = { id: nuevoId(), fecha: dia.id, ejercicio_id: ejercicioId, meso_id: b0.meso_id || "", peso: n0(v.peso), reps: n0(v.reps), distancia: n0(v.distancia), tiempo: n0(v.tiempo), pct: n0(v.pct), por_lado: !!v.por_lado,
+    const fila = { id: nuevoId(), fecha: dia.id, ejercicio_id: ejercicioId, meso_id: b0.meso_id || "", peso: sinCarga(ejercicioId) ? 0 : n0(v.peso), reps: n0(v.reps), distancia: n0(v.distancia), tiempo: n0(v.tiempo), pct: sinCarga(ejercicioId) ? 0 : n0(v.pct), por_lado: !!v.por_lado,
       descanso: n0(v.descanso), rec_dist: n0(v.rec_dist), max_reps: !!v.max_reps, max_tiempo: !!v.max_tiempo, rango_min: n0(v.rango_min), rango_max: n0(v.rango_max),
       ciclo_id: "", calentamiento: false, nota: v.nota || "", hecha: false, borrado: false, ...comun };
     nuevas.push(fila);
@@ -4328,6 +4587,232 @@ function meterEnVacio(dia, vid, ejercicioId, sueltas) {
   guardarVacios();
   meterEnBloque(dia, rondas, ejercicioId, sueltas);
 }
+// ---------- v270 (MEJ-BLQ-001): editor unificado del bloque ----------
+// Un solo panel («⋯ → Editar bloque…») para añadir/quitar rondas, ajustar los descansos y añadir/quitar ejercicios. Todo se prepara en un borrador y solo se
+// aplica al pulsar «Guardar cambios» (Cancelar, ✕ o Esc no cambian nada) y con UN solo «Deshacer» que restaura series, valores, orden y completado.
+// Modelo (sin cambios de esquema): una serie de un bloque lleva bloque_id + ronda + orden; el descanso va en la serie (descanso / rec_dist).
+//  · Añadir ronda: copia de la última ronda (sin hacer), al final. · Quitar rondas: borra las series de las últimas rondas (marca «borrado», recuperable con
+//    Deshacer); el panel las lista, avisa de las hechas y exige confirmación explícita.
+//  · Quitar un ejercicio: sus series NO se borran; pasan a sueltas en el mismo entreno y parte (mismos id, valores, orden y completado; sin ronda).
+//  · Añadir un ejercicio: una serie suya en cada ronda, al final de la ronda y en el orden en que se eligieron. NO se mueve ningún ejercicio entre bloques.
+let ebE = null;
+function abrirEditorBloque(dia, bloqueId) {
+  const base = seriesDelDia(dia.id).filter(x => x.bloque_id === bloqueId).sort((a, b) => n0(a.ronda) - n0(b.ronda) || a.orden - b.orden);
+  if (!base.length) return;
+  const rondas = [...new Set(base.map(x => n0(x.ronda)))].sort((a, b) => a - b);
+  const ejs = [];
+  base.filter(x => n0(x.ronda) === rondas[0]).forEach(x => { if (!ejs.includes(x.ejercicio_id)) ejs.push(x.ejercicio_id); });
+  const grupos = lista => {   // series de cada tipo de descanso: entre ejercicios, entre rondas y al terminar
+    const por = [...new Set(lista.map(x => n0(x.ronda)))].sort((a, b) => a - b).map(r => lista.filter(x => n0(x.ronda) === r).sort((a, b) => a.orden - b.orden));
+    return { ej: por.flatMap(l => l.slice(0, -1)), ron: por.slice(0, -1).map(l => l[l.length - 1]), fin: por.length ? [por[por.length - 1][por[por.length - 1].length - 1]] : [] };
+  };
+  const actual = l => { const t = l.map(recTexto); return t.length && t.every(x => x === t[0]) ? t[0] : ""; };
+  const g0 = grupos(base), mixto = l => new Set(l.map(recTexto)).size > 1;
+  ebE = { dia, bloqueId, base, rondas, ejs, n: rondas.length, quitar: new Set(), nuevos: [], conf: false, grupos, actual, mixto: { ej: mixto(g0.ej), ron: mixto(g0.ron), fin: mixto(g0.fin) },
+    ini: { ej: actual(g0.ej), ron: actual(g0.ron), fin: actual(g0.fin) }, desc: { ej: actual(g0.ej), ron: actual(g0.ron), fin: actual(g0.fin) } };
+  // v272: repeticiones de cada ejercicio del bloque (solo series PENDIENTES): valor común si todas coinciden; vacío = sin cambios
+  ebE.reps = {}; ebE.repsIni = {}; ebE.repsInfo = {};
+  ejs.forEach(id => {
+    const pend = base.filter(x => x.ejercicio_id === id && !hecha(x) && !x.calentamiento);
+    const porTiempo = !pend.length || pend.every(x => n0(x.tiempo) > 0 && !(n0(x.reps) > 0)) || esDistancia(tipoDe(id)) || pend.some(x => n0(x.distancia) > 0);
+    const vals = [...new Set(pend.map(x => n0(x.reps)))];
+    ebE.repsInfo[id] = { editable: !porTiempo, pend: pend.length, hechas: base.filter(x => x.ejercicio_id === id && hecha(x)).length, mixto: vals.length > 1, rango: pend.some(esRango) };
+    ebE.repsIni[id] = vals.length === 1 && vals[0] > 0 ? String(vals[0]) : ""; ebE.reps[id] = ebE.repsIni[id];
+  });
+  pintarEditorBloque();
+  $("dlgEditBloque").showModal();
+}
+// Qué series se borrarían al bajar de rondas (las de los ejercicios que se quedan en el bloque)
+function ebAfectadas() {
+  const e = ebE, fuera = e.rondas.slice(e.n);
+  return e.base.filter(x => fuera.includes(n0(x.ronda)) && !e.quitar.has(x.ejercicio_id));
+}
+function ebDescanso(txt) {   // → {descanso, rec_dist} | null si no se entiende
+  const t = (txt || "").trim();
+  if (!t || /^\s*0\s*$/.test(t)) return { descanso: 0, rec_dist: 0 };
+  return leerRecuperacion(t);
+}
+function pintarEditorBloque() {
+  const e = ebE, cuerpo = $("ebCuerpo");
+  const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt !== undefined) x.textContent = txt; return x; };
+  const boton = (txt, cls, fn, aria) => { const b = el("button", cls, txt); b.type = "button"; if (aria) b.setAttribute("aria-label", aria); b.addEventListener("click", fn); return b; };
+  cuerpo.textContent = "";
+  const R = e.rondas.length;
+  // Rondas
+  const sr = el("section", "eb-sec");
+  sr.appendChild(el("h4", "eb-h", "Rondas"));
+  const fr = el("div", "eb-rondas");
+  const menos = boton("−", "nav-btn eb-paso", () => { e.n = Math.max(1, e.n - 1); e.conf = false; pintarEditorBloque(); }, "Quitar la última ronda");
+  menos.disabled = e.n <= 1;
+  const mas = boton("+", "nav-btn eb-paso", () => { e.n = Math.min(50, e.n + 1); e.conf = false; pintarEditorBloque(); }, "Añadir una ronda");
+  mas.disabled = e.n >= 50;
+  fr.append(menos, el("output", "eb-n", "×" + e.n), mas);
+  sr.appendChild(fr);
+  if (e.n > R) sr.appendChild(el("p", "eb-nota", (e.n - R === 1 ? "Se añadirá 1 ronda" : "Se añadirán " + (e.n - R) + " rondas") + " al final, copia de la última y sin marcar como hechas. Las rondas actuales no cambian."));
+  if (e.n < R) {
+    const af = ebAfectadas(), hechas = af.filter(hecha).length;
+    const caja = el("div", "eb-aviso eb-peligro");
+    caja.appendChild(el("p", "eb-t", "Se borrarán " + af.length + (af.length === 1 ? " serie" : " series") + " de la" + (R - e.n === 1 ? " última ronda" : "s últimas " + (R - e.n) + " rondas") + (hechas ? " · " + hechas + " ya " + (hechas === 1 ? "hecha" : "hechas") : "") + ":"));
+    const ul = el("ul", "eb-lista");
+    e.rondas.slice(e.n).forEach(r => {
+      const l = af.filter(x => n0(x.ronda) === r);
+      if (l.length) ul.appendChild(el("li", "", "Ronda " + r + ": " + l.map(x => nombreEj(x.ejercicio_id) + " " + serieTexto(x) + (hecha(x) ? " ✓" : "")).join(" · ")));
+    });
+    caja.appendChild(ul);
+    const lab = el("label", "eb-conf"), ck = document.createElement("input");
+    ck.type = "checkbox"; ck.checked = e.conf;
+    ck.addEventListener("change", () => { e.conf = ck.checked; pintarEditorBloque(); });
+    lab.append(ck, el("span", "", "Entiendo que se borran estas series (Deshacer las recupera enteras durante unos segundos)"));
+    caja.appendChild(lab);
+    sr.appendChild(caja);
+  }
+  cuerpo.appendChild(sr);
+  // Ejercicios
+  const se = el("section", "eb-sec");
+  se.appendChild(el("h4", "eb-h", "Ejercicios"));
+  const quedan = e.ejs.filter(x => !e.quitar.has(x)).length + e.nuevos.length;
+  const ul = el("ul", "eb-ejs");
+  e.ejs.forEach(id => {
+    const li = el("li", "eb-ej"), fuera = e.quitar.has(id), n = e.base.filter(x => x.ejercicio_id === id).length;
+    const t = el("div", "eb-ej-t");
+    t.appendChild(el("span", "eb-ej-n", nombreEj(id)));
+    t.appendChild(el("span", "eb-ej-d", fuera ? "Se quedará suelto en este entreno con sus " + n + " series, tal como están" : n + (n === 1 ? " serie" : " series")));
+    li.appendChild(t);
+    const inf = e.repsInfo[id];
+    if (!fuera && inf && inf.editable) {
+      const lr = el("label", "eb-reps"), ir = document.createElement("input");
+      ir.value = e.reps[id]; ir.inputMode = "numeric"; ir.autocomplete = "off"; ir.setAttribute("aria-label", "Repeticiones de " + nombreEj(id) + " en las series pendientes de todas las rondas");
+      ir.placeholder = inf.mixto ? "varias" : inf.rango ? "rango" : "reps";
+      ir.addEventListener("input", () => { e.reps[id] = ir.value; ebValidar(); });
+      lr.append("Reps ", ir); lr.title = inf.pend + (inf.pend === 1 ? " serie pendiente" : " series pendientes") + (inf.hechas ? " · " + (inf.hechas === 1 ? "la hecha no cambia" : "las " + inf.hechas + " hechas no cambian") : "");
+      t.appendChild(lr);
+      t.appendChild(el("span", "eb-ej-d", "Solo las " + inf.pend + (inf.pend === 1 ? " serie pendiente" : " series pendientes") + (inf.hechas ? " (" + inf.hechas + (inf.hechas === 1 ? " hecha" : " hechas") + " sin tocar)" : "") + (inf.rango ? " · sustituye el rango por reps fijas" : "")));
+    }
+    const b = fuera ? boton("Mantener", "nav-btn eb-bt", () => { e.quitar.delete(id); e.conf = false; pintarEditorBloque(); }) : boton("Quitar del bloque", "nav-btn eb-bt", () => { e.quitar.add(id); e.conf = false; pintarEditorBloque(); }, "Quitar " + nombreEj(id) + " del bloque (queda suelto)");
+    if (!fuera && quedan <= 1) { b.disabled = true; b.title = "Un bloque necesita al menos un ejercicio: usa «Desagrupar» en el menú del bloque"; }
+    li.appendChild(b);
+    if (fuera) li.classList.add("eb-quitado");
+    ul.appendChild(li);
+  });
+  e.nuevos.forEach((id, k) => {
+    const li = el("li", "eb-ej eb-nuevo"), t = el("div", "eb-ej-t");
+    t.appendChild(el("span", "eb-ej-n", nombreEj(id)));
+    t.appendChild(el("span", "eb-ej-d", "Nuevo · una serie en cada una de las " + e.n + " rondas"));
+    li.appendChild(t);
+    li.appendChild(boton("Quitar", "nav-btn eb-bt", () => { e.nuevos.splice(k, 1); pintarEditorBloque(); }, "No añadir " + nombreEj(id)));
+    ul.appendChild(li);
+  });
+  se.appendChild(ul);
+  if (e.quitar.size) se.appendChild(el("p", "eb-nota", "Un ejercicio quitado no se borra: queda suelto en el mismo entreno con todas sus series, valores y lo que ya hiciste."));
+  se.appendChild(boton("+ Añadir un ejercicio", "add-ej", () => abrirSelector(e.dia, id => { if (ebE === e) { e.nuevos.push(id); e.conf = false; pintarEditorBloque(); } }, e.base[0].grupo || "", e.base[0].seccion || "")));
+  cuerpo.appendChild(se);
+  // Descansos (se guardan en la serie de antes del descanso)
+  const sd = el("section", "eb-sec");
+  sd.appendChild(el("h4", "eb-h", "Descansos"));
+  const campo = (k, rotulo, visible) => {
+    if (!visible) return;
+    const lab = el("label", "campo"), inp = document.createElement("input");
+    inp.value = e.desc[k]; inp.placeholder = e.mixto[k] ? "varios valores · escribe uno para igualarlos" : "1,30 · 90 · 300 m"; inp.autocomplete = "off"; inp.setAttribute("enterkeyhint", "done");
+    inp.addEventListener("input", () => { e.desc[k] = inp.value; ebValidar(); });
+    lab.append(rotulo, inp); sd.appendChild(lab);
+  };
+  campo("ej", "Entre ejercicios (dentro de cada ronda)", quedan > 1);
+  campo("ron", "Entre rondas", e.n > 1);
+  campo("fin", "Al terminar el bloque", true);
+  sd.appendChild(el("p", "eb-nota", "Tiempo («1,30» o «90»), metros trotando («300 m») o ambos («300 m · 1:30»). Vacío o «0» lo quita. Sin tocar, no cambia."));
+  cuerpo.appendChild(sd);
+  cuerpo.appendChild(el("p", "aviso eb-err", ""));
+  const bt = el("div", "d-botones");
+  bt.append(boton("Cancelar", "nav-btn", () => $("dlgEditBloque").close()), boton("Guardar cambios", "anadir eb-guardar", () => guardarEditorBloque()));
+  cuerpo.appendChild(bt);
+  ebValidar();
+}
+// v272: ejercicios (no quitados) cuyas repeticiones se han escrito distintas de las actuales
+const ebRepsCambiadas = () => ebE.ejs.filter(id => !ebE.quitar.has(id) && ebE.repsInfo[id].editable && ebE.reps[id].trim() !== ebE.repsIni[id]);
+function ebCambios() {
+  const e = ebE;
+  return { rondas: e.n !== e.rondas.length, ejs: e.quitar.size > 0 || e.nuevos.length > 0, desc: ["ej", "ron", "fin"].some(k => e.desc[k].trim() !== e.ini[k]), reps: ebRepsCambiadas().length > 0 };
+}
+function ebValidar() {
+  const e = ebE, c = ebCambios(), err = document.querySelector("#ebCuerpo .eb-err"), g = document.querySelector("#ebCuerpo .eb-guardar");
+  if (!g) return;
+  let msg = "";
+  ["ej", "ron", "fin"].forEach(k => { if (!msg && e.desc[k].trim() !== e.ini[k] && !ebDescanso(e.desc[k])) msg = "No entiendo «" + e.desc[k].trim() + "»: prueba 1,30, 90 o 300 m"; });
+  ebRepsCambiadas().forEach(id => { const v = e.reps[id].trim(); if (!msg && !(/^\d+$/.test(v) && parseInt(v, 10) > 0 && parseInt(v, 10) <= 999)) msg = "Repeticiones de " + nombreEj(id) + ": escribe un número entero de 1 a 999."; });
+  if (!msg && e.n < e.rondas.length && !e.conf) msg = "Marca la casilla para confirmar que se borran esas series.";
+  err.textContent = msg;
+  g.disabled = !(c.rondas || c.ejs || c.desc || c.reps) || !!msg;
+}
+function guardarEditorBloque() {
+  const e = ebE, dia = e.dia;
+  // El bloque debe seguir tal como estaba al abrir el panel (p. ej. por una sincronización): si no, no se aplica nada
+  const fresco = seriesDelDia(dia.id).filter(x => x.bloque_id === e.bloqueId);
+  const igual = fresco.length === e.base.length && e.base.every(x => { const f = db.series[x.id]; return f && !f.borrado && f.bloque_id === e.bloqueId && JSON.stringify(f) === JSON.stringify(x); });
+  if (!igual) { $("dlgEditBloque").close(); setEstado("El bloque ha cambiado mientras lo editabas. Ábrelo de nuevo."); return; }
+  const b0 = e.base[0], orig = new Map(e.base.map(x => [x.id, { ...x }])), trab = new Map(e.base.map(x => [x.id, { ...x }]));
+  const vivas = () => [...trab.values()].filter(x => x.bloque_id === e.bloqueId && !x.borrado);
+  const rondasAct = () => [...new Set(vivas().map(x => n0(x.ronda)))].sort((a, b) => a - b);
+  let orden = Date.now(), nSueltas = 0, nBorradas = 0, nNuevas = 0;
+  // 1) ejercicios que se quitan: pasan a sueltos en el mismo entreno y parte, con todas sus series
+  e.ejs.filter(id => e.quitar.has(id)).forEach(id => {
+    const usadas = seriesDelDia(dia.id).filter(x => x.ejercicio_id === id && !x.bloque_id && (x.grupo || "") === (b0.grupo || "") && (x.seccion || "") === (b0.seccion || "")).map(x => n0(x.copia) > 1 ? n0(x.copia) : 1);
+    const copia = usadas.length ? Math.max(...usadas) + 1 : 0;   // si ya hay uno suelto igual en esa parte, otra tarjeta (no se mezclan)
+    [...trab.values()].filter(x => x.ejercicio_id === id && x.bloque_id === e.bloqueId).forEach(x => { x.bloque_id = ""; x.ronda = 0; x.letra_nueva = false; x.copia = copia; nSueltas++; });
+  });
+  // 2) rondas que se quitan
+  const act = rondasAct();
+  if (e.n < act.length) { const fuera = act.slice(e.n); vivas().filter(x => fuera.includes(n0(x.ronda))).forEach(x => { x.borrado = true; nBorradas++; }); }
+  // 2b) v272: repeticiones por ejercicio: solo las series PENDIENTES del bloque, en todas las rondas (las hechas no se tocan); sustituye marca «máx» y rango por reps fijas
+  let nReps = 0;
+  ebRepsCambiadas().forEach(id => {
+    const v = parseInt(e.reps[id].trim(), 10);
+    vivas().filter(x => x.ejercicio_id === id && !hecha(x) && !x.calentamiento).forEach(x => { x.reps = v; x.max_reps = false; x.rango_min = 0; x.rango_max = 0; nReps++; });
+  });
+  // 3) ejercicios que se añaden: una serie en cada ronda, al final de la ronda, en el orden en que se eligieron
+  e.nuevos.forEach(id => {
+    const hist = seriesDe(id), ult = hist[hist.length - 1];
+    const v = ult ? valores(ult) : { reps: tipoDe(id) === "fuerza" || tipoDe(id) === "movilidad" ? 10 : 0 };
+    rondasAct().forEach(r => {
+      const f = { id: nuevoId(), fecha: dia.id, ejercicio_id: id, meso_id: b0.meso_id || "", peso: sinCarga(id) ? 0 : n0(v.peso), reps: n0(v.reps), distancia: n0(v.distancia), tiempo: n0(v.tiempo), pct: sinCarga(id) ? 0 : n0(v.pct), por_lado: !!v.por_lado,
+        descanso: n0(v.descanso), rec_dist: n0(v.rec_dist), max_reps: !!v.max_reps, max_tiempo: !!v.max_tiempo, rango_min: n0(v.rango_min), rango_max: n0(v.rango_max),
+        ciclo_id: "", calentamiento: false, nota: v.nota || "", hecha: false, borrado: false, grupo: b0.grupo || "", seccion: b0.seccion || "", bloque_id: e.bloqueId, ronda: r, orden: orden++, letra_nueva: !!b0.letra_nueva, copia: 0 };
+      trab.set(f.id, f); nNuevas++;
+    });
+  });
+  // 4) rondas que se añaden: copia de la última (con lo añadido en el paso 3), al final y sin hacer
+  const act2 = rondasAct();
+  if (e.n > e.rondas.length) {
+    const ultima = vivas().filter(x => n0(x.ronda) === act2[act2.length - 1]).sort((a, b) => a.orden - b.orden);
+    for (let k = 1; k <= e.n - e.rondas.length; k++) ultima.forEach(x => { const f = { ...x, id: nuevoId(), orden: orden++, ronda: act2[act2.length - 1] + k, hecha: false }; delete f.sucio; trab.set(f.id, f); nNuevas++; });
+  }
+  // 5) descansos: solo los campos que se han tocado, sobre la estructura final
+  const gf = e.grupos(vivas());
+  [["ej", gf.ej], ["ron", gf.ron], ["fin", gf.fin]].forEach(([k, lista]) => {
+    if (e.desc[k].trim() === e.ini[k]) return;
+    const rec = ebDescanso(e.desc[k]);
+    if (rec) lista.forEach(x => { x.descanso = rec.descanso; x.rec_dist = rec.rec_dist; });
+  });
+  // 6) aplicar y preparar el Deshacer único (lo que ya existía vuelve como estaba; lo creado se marca borrado)
+  const antes = [], creadas = [];
+  trab.forEach((f, id) => {
+    const o = orig.get(id);
+    if (!o) { cambiar("series", f, true); creadas.push(["series", { ...f, borrado: true }]); }
+    else if (JSON.stringify(o) !== JSON.stringify(f)) { antes.push(["series", o]); cambiar("series", f, true); }
+  });
+  persistir();
+  $("dlgEditBloque").close();
+  pintarDia(dia);
+  const partes = [];
+  if (e.n > e.rondas.length) partes.push("+" + (e.n - e.rondas.length) + (e.n - e.rondas.length === 1 ? " ronda" : " rondas"));
+  if (nBorradas) partes.push(nBorradas + (nBorradas === 1 ? " serie borrada" : " series borradas") + " (" + (e.rondas.length - e.n) + (e.rondas.length - e.n === 1 ? " ronda" : " rondas") + ")");
+  if (e.quitar.size) partes.push(e.quitar.size + (e.quitar.size === 1 ? " ejercicio suelto" : " ejercicios sueltos"));
+  if (e.nuevos.length) partes.push(e.nuevos.length + (e.nuevos.length === 1 ? " ejercicio añadido" : " ejercicios añadidos"));
+  if (ebCambios().desc) partes.push("descansos");
+  if (nReps) partes.push("reps en " + nReps + (nReps === 1 ? " serie pendiente" : " series pendientes"));
+  ebE = null;
+  avisoDeshacer("Bloque editado" + (partes.length ? " · " + partes.join(" · ") : ""), antes.concat(creadas));
+}
+$("dlgEditBloque").addEventListener("close", () => { ebE = null; });
 function tarjetaBloqueVacio(dia, vid) {
   const k = dia.id + "|" + vid, bv = bloquesVacios[k];
   const c = document.createElement("div");
@@ -4373,28 +4858,12 @@ function tarjetaBloque(dia, bloqueId, series) {
   const menu = c.querySelector(".menu-btn");
   menu.setAttribute("aria-label", "Opciones del bloque");
   menu.addEventListener("click", () => {
-    const ultima = series.filter(s => n0(s.ronda) === rondas[rondas.length - 1]);
     abrirMenu("Bloque ×" + rondas.length, primera.map(s => nombreEj(s.ejercicio_id)).join(" + "), [
-      ...[...new Set(seriesDelDia(dia.id).map(s => s.grupo || ""))].filter(x => x !== (series[0].grupo || "")).map(x => ({ texto: "Mover al entreno «" + (x || "Entreno 1") + "»", accion: () => moverASesion(series, x) })),
-      { texto: "Añadir una ronda", accion: () => {
-        let orden = Date.now();
-        ultima.sort((a, b) => a.orden - b.orden).forEach(s => cambiar("series", { ...s, id: nuevoId(), orden: orden++, ronda: n0(s.ronda) + 1, hecha: false, meso_id: s.meso_id || "" }, true));
-        persistir(); pintarDia(dia);
-      } },
-      rondas.length > 1 && { texto: "Quitar la última ronda", accion: () => { ultima.forEach(s => cambiar("series", { ...s, borrado: true }, true)); persistir(); pintarDia(dia); } },
+      { texto: "Editar bloque…", accion: () => abrirEditorBloque(dia, bloqueId) },   // v270 (MEJ-BLQ-001): rondas, descansos y ejercicios en un solo panel
       c.dataset.puedeLetra && { texto: c.dataset.letraNueva ? "Seguir con la letra anterior" : "Empezar letra nueva aquí (" + String.fromCharCode(c.querySelector(".etq-orden").textContent.charCodeAt(0) + 1) + "1)", accion: () => ponerLetraNueva(dia, series[0].grupo || "", "b:" + bloqueId, false, !c.dataset.letraNueva) },
       (variosTramos || !notaDe(series)) && { texto: variosTramos ? "Descripción (del bloque o de un ejercicio)…" : "+ Descripción (tempo, banda, EEP…)", accion: () => !variosTramos ? editarNota(dia, series, "Descripción del bloque")
         : abrirMenu("¿Descripción de qué?", "", [{ texto: "De todo el bloque", accion: () => editarNota(dia, series, "Descripción del bloque") }]
           .concat(primera.map(s0 => ({ texto: nombreEj(s0.ejercicio_id), accion: () => editarNota(dia, series.filter(x => x.ejercicio_id === s0.ejercicio_id), "Descripción de " + nombreEj(s0.ejercicio_id)) })))) },
-      { texto: "⏱ Descansos del bloque…", accion: () => menuDescansos() },
-      { texto: "+ Añadir un ejercicio al bloque…", accion: () => abrirSelector(dia, id => meterEnBloque(dia, series, id, null), series[0].grupo || "", series[0].seccion || "") },
-      variosTramos && { texto: "Quitar un ejercicio del bloque…", accion: () => abrirMenu("¿Qué ejercicio quitas?", "Se borran sus series de todas las rondas", primera.map(s0 => ({ texto: nombreEj(s0.ejercicio_id), peligro: true, accion: () => {
-        const fuera = series.filter(x => x.ejercicio_id === s0.ejercicio_id);
-        const antes = fuera.map(x => ["series", { ...x }]);
-        fuera.forEach(x => cambiar("series", { ...x, borrado: true }, true));
-        persistir(); pintarDia(dia);
-        avisoDeshacer(nombreEj(s0.ejercicio_id) + " quitado del bloque", antes);
-      } }))) },
       { texto: "Desagrupar (series sueltas)", accion: () => desagruparBloque(dia, series) },
       { texto: "Compartir con un amigo…", accion: () => compartir("Bloque ×" + rondas.length + " · " + primera.map(s => nombreEj(s.ejercicio_id)).join(" + "), itemsDe(series, true)) },
       { texto: "Quitar bloque", peligro: true, confirmar: "Pulsa otra vez: se borran " + series.length + " series", accion: () => {
@@ -4403,29 +4872,6 @@ function tarjetaBloque(dia, bloqueId, series) {
     ]);
   });
 
-  // Descansos: entre ejercicios (dentro de la ronda), entre rondas (tras el último de cada ronda) y al acabar el bloque
-  // (tras la última serie: es el descanso antes de lo siguiente). Se guardan en la serie, como en los ejercicios sueltos
-  function menuDescansos() {
-    const porRonda = rondas.map(r => series.filter(s => n0(s.ronda) === r).sort((a, b) => a.orden - b.orden));
-    const entreEj = porRonda.flatMap(l => l.slice(0, -1)), entreR = porRonda.slice(0, -1).map(l => l[l.length - 1]), alFinal = [porRonda[porRonda.length - 1].slice(-1)[0]];
-    const actual = l => { const t = l.map(recTexto); return t.every(x => x === t[0]) ? t[0] : ""; };
-    const poner = async (lista, titulo) => {
-      const t = await pedirNombre(titulo, actual(lista) || "", "Tiempo («1,30»), metros trotando («300 m») o ambos («300 m · 1:30»). «0» lo quita.");
-      if (t === null) return;
-      const rec = /^\s*0\s*$/.test(t) ? { descanso: 0, rec_dist: 0 } : leerRecuperacion(t);
-      if (!rec) { setEstado("No entiendo «" + t + "»: prueba 1,30, 90 o 300 m"); return; }
-      const antes = lista.map(x => ["series", { ...x }]);
-      lista.forEach(x => cambiar("series", { ...x, descanso: rec.descanso, rec_dist: rec.rec_dist }, true));
-      persistir(); pintarDia(dia);
-      avisoDeshacer("Descanso puesto en " + lista.length + (lista.length === 1 ? " serie" : " series"), antes);
-    };
-    const et = l => actual(l) ? " (ahora " + actual(l) + ")" : "";
-    abrirMenu("Descansos del bloque", "Se guardan en la serie de antes del descanso, y el modo entreno los usa.", [
-      variosTramos && { texto: "Entre ejercicios" + et(entreEj), accion: () => poner(entreEj, "Descanso entre ejercicios") },
-      rondas.length > 1 && { texto: "Entre rondas" + et(entreR), accion: () => poner(entreR, "Descanso entre rondas") },
-      { texto: "Al terminar el bloque" + et(alFinal), accion: () => poner(alFinal, "Descanso al terminar el bloque") }
-    ]);
-  }
   const form = c.querySelector("form"), fa = c.querySelector(".in-a"), fb = c.querySelector(".in-b"), fc = c.querySelector(".in-c");
   const brModo = c.querySelector(".br-modo"), brCalc = c.querySelector(".br-calc"), brTodas = c.querySelector(".br-todas");
   let brPct = false, brM = "reps";
@@ -4814,11 +5260,9 @@ function crearEjercicio(nombre, tipo) {
   // Guarda de lógica (además de la RLS del servidor): una cuenta sin permiso de catálogo no crea ejercicios por ninguna vía.
   if (!puedeCrearEjercicios()) { setEstado("Tu cuenta no puede crear ejercicios. Elige uno del catálogo o pide al administrador que lo añada.", true); throw new FaltaEjercicio(nombreLimpio); }
   const id = nuevoId();
-  const comun = creaComun();
-  cambiar("ejercicios", { id, user_id: sesion.user_id, nombre: nombreLimpio, tipo: tipoLimpio, video_url: "", notas: "", compartido: comun, borrado: false });
-  // OFICIAL v261 (como v238): común si la cuenta edita el catálogo; si no, personal. Series, marcas y 1RM siguen siendo privados.
-  setEstado(comun ? "«" + nombreLimpio + "» se ha añadido al catálogo común: lo verán todos los usuarios aprobados. Tus series y marcas siguen siendo solo tuyas."
-                  : "«" + nombreLimpio + "» se ha creado como ejercicio personal: solo lo ves tú.");
+  cambiar("ejercicios", { id, user_id: sesion.user_id, nombre: nombreLimpio, tipo: tipoLimpio, video_url: "", notas: "", compartido: true, borrado: false });
+  // Catálogo único: todo ejercicio nuevo es COMÚN (lo verán todos los usuarios aprobados). Sus datos personales (series, marcas, 1RM…) siguen siendo privados.
+  setEstado("«" + nombreLimpio + "» se ha añadido al catálogo común: lo verán todos los usuarios aprobados. Tus series y marcas siguen siendo solo tuyas.");
   return id;
 }
 let grupoSel = "";
@@ -4849,6 +5293,7 @@ function elegir(id) {
   {
     id = idK;
     enEspera[dia.id] = (enEspera[dia.id] || []).filter(x => x !== id).concat(id); guardarEspera();
+    esperaOrden[dia.id + "|" + id] = Math.max(Date.now(), ...Object.values(esperaOrden).map(v => n0(v) + 1)); guardarEsperaOrden();   // v269: siempre posterior a los anteriores
     if (grupoSel) esperaGrupo[dia.id + "|" + id] = grupoSel; else delete esperaGrupo[dia.id + "|" + id];
     if (parteSel) esperaParte[dia.id + "|" + id] = parteSel; else delete esperaParte[dia.id + "|" + id];
     // v250: en una parte sin series con posición guardada, el ejercicio nuevo queda en ese sitio (y su primera serie también)
@@ -4872,7 +5317,7 @@ function pintarSelector() {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "opcion crear-dist";
-    b.textContent = "+ Crear «" + sugerencia + "» (carrera) " + dondeSeCrea();
+    b.textContent = "+ Crear «" + sugerencia + "» (carrera) en el catálogo común";
     b.addEventListener("click", () => abrirNuevoEjercicio(sugerencia, "carrera"));   // v262: ficha en borrador antes de crear
     lista.appendChild(b);
   }
@@ -4884,7 +5329,7 @@ function pintarSelector() {
     const t = document.createElement("button");
     t.type = "button";
     t.className = "cf-t";
-    t.textContent = "+ Crear «" + q + "» " + dondeSeCrea() + " (" + TIPOS[sugerido].nombre.toLowerCase() + ")" + (tipoSel ? "" : " · o elige el tipo:");
+    t.textContent = "+ Crear «" + q + "» en el catálogo común (" + TIPOS[sugerido].nombre.toLowerCase() + ")" + (tipoSel ? "" : " · o elige el tipo:");
     t.addEventListener("click", () => abrirNuevoEjercicio(q, sugerido));
     fila.appendChild(t);
     (tipoSel ? [] : [sugerido].concat(Object.keys(TIPOS).filter(k => k !== sugerido))).forEach(k => {
@@ -4946,7 +5391,7 @@ function abrirNuevoEjercicio(nombre, tipo) {
   borradorEj = { tipo: t, medidas: (MEDIDAS_BASE[t] || []).slice(), regiones: [], tecnica: false, destino: { dia: diaSelector, alElegir: alElegirSel, grupo: grupoSel, parte: parteSel }, hecho: false };
   $("neNombre").value = String(nombre || "").trim();
   $("neVideo").value = ""; $("neNotas").value = ""; $("neLado").checked = false;
-  $("neComunL").hidden = !creaComun(); $("neComun").checked = creaComun();
+  $("neComunL").hidden = true; $("neComun").checked = true;   // v266 beta: catálogo único, sin opción de ejercicio personal
   pintarNuevoEj();
   $("dlgNuevoEj").showModal();
   $("neNombre").focus();
@@ -5581,6 +6026,7 @@ function refrescarDetalle() {
   $("detMedidaSec").hidden = tipo !== "fuerza" && tipo !== "movilidad";
   $("detMedida").hidden = tipo !== "fuerza"; $("detMedidaInfo").hidden = tipo !== "fuerza";
   $("detLado").checked = ladoDe(e.id);
+  pintarLadoAplicar(e.id);   // v271
   if (tipo === "fuerza") {
     $("detMedida").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.m === medida)));
     const puesta = MEDIDAS[(db.personales[e.id] || {}).medida];
@@ -5792,13 +6238,51 @@ function tablaBilbo(ses) {
   caja.appendChild(t);
   return caja;
 }
-$("detLado").addEventListener("change", () => {
-  if (!detalleId) return;
-  const p = db.personales[detalleId] || { ejercicio_id: detalleId, rm: 0 };
-  cambiar("personales", { ...p, ejercicio_id: detalleId, rm: n0(p.rm), lado: $("detLado").checked });
-  // Las series pendientes de este ejercicio pasan a «por lado» (o dejan de serlo); las hechas no se tocan
-  Object.values(db.series).filter(x => x.ejercicio_id === detalleId && !x.borrado && !hecha(x)).forEach(x => cambiar("series", { ...x, por_lado: $("detLado").checked }, true));
+// ---------- v271: «Se hace por lado» también en las series HECHAS ----------
+// Al cambiar la casilla, las pendientes se actualizan como siempre y, si hay hechas que no coinciden, se pide confirmación (con cuántas son) antes de
+// tocarlas. Si la ficha ya estaba como se quiere pero quedan series con otro valor, un botón en la ficha lo aplica. Solo cambia «por_lado»: reps, peso,
+// tiempo, fecha, orden, completado y el resto de datos no se tocan. Las series nuevas siguen tomándolo de la ficha. Con Deshacer.
+const seriesLadoDistinto = id => { const v = ladoDe(id); return Object.values(db.series).filter(x => x.ejercicio_id === id && !x.borrado && !!x.por_lado !== v); };
+function pintarLadoAplicar(id) {
+  const dif = id ? seriesLadoDistinto(id) : [], caja = $("detLadoAviso");
+  caja.hidden = !dif.length;
+  if (!dif.length) return;
+  const h = dif.filter(hecha).length, v = ladoDe(id);
+  $("detLadoTxt").textContent = dif.length + (dif.length === 1 ? " serie de este ejercicio no coincide" : " series de este ejercicio no coinciden") + " con la ficha (" + (v ? "«por lado»" : "sin «por lado»") + ")" + (h ? " · " + h + (h === 1 ? " hecha" : " hechas") : "") + ".";
+  $("detLadoAplicar").textContent = v ? "Marcar «por lado» en esas series" : "Quitar «por lado» de esas series";
+}
+async function aplicarLadoFicha(id) {
+  let dif = seriesLadoDistinto(id);
+  if (!dif.length) return;
+  const v = ladoDe(id), hechas = dif.filter(hecha);
+  if (hechas.length) {
+    const ok = await confirmar("¿Actualizar " + hechas.length + (hechas.length === 1 ? " serie hecha" : " series hechas") + "?",
+      "Se " + (v ? "marcará «por lado» en " : "quitará la marca «por lado» de ") + (dif.length === 1 ? "1 serie" : dif.length + " series") + " de «" + nombreEj(id) + "» (" + hechas.length + (hechas.length === 1 ? " hecha" : " hechas") + ", " + (dif.length - hechas.length) + " pendientes) para que coincidan con la ficha. Solo cambia la marca «por lado»: repeticiones, peso, tiempo, fecha, orden y estado de completado se conservan.", "Actualizar");
+    if (!ok) return;
+    dif = seriesLadoDistinto(id);   // por si algo cambió mientras estaba abierta la confirmación
+  }
+  const antes = dif.map(x => ["series", { ...x }]);
+  dif.forEach(x => cambiar("series", { ...x, por_lado: v }, true));
   persistir(); pintarBloques(true);
+  avisoDeshacer("«Por lado» " + (v ? "marcado" : "quitado") + " en " + dif.length + (dif.length === 1 ? " serie" : " series") + " de " + nombreEj(id), antes);
+}
+$("detLado").addEventListener("change", async () => {
+  if (!detalleId) return;
+  const id = detalleId, nuevo = $("detLado").checked;
+  const p = db.personales[id] || { ejercicio_id: id, rm: 0 };
+  cambiar("personales", { ...p, ejercicio_id: id, rm: n0(p.rm), lado: nuevo });
+  // Las series pendientes pasan a «por lado» (o dejan de serlo) sin preguntar, como siempre; las hechas, solo si se confirma
+  Object.values(db.series).filter(x => x.ejercicio_id === id && !x.borrado && !hecha(x) && !!x.por_lado !== nuevo).forEach(x => cambiar("series", { ...x, por_lado: nuevo }, true));
+  persistir(); pintarBloques(true);
+  pintarLadoAplicar(id);
+  await aplicarLadoFicha(id);
+  if (detalleId === id) pintarLadoAplicar(id);
+});
+$("detLadoAplicar").addEventListener("click", async () => {
+  if (!detalleId) return;
+  const id = detalleId;
+  await aplicarLadoFicha(id);
+  if (detalleId === id) pintarLadoAplicar(id);
 });
 $("detMedida").addEventListener("click", ev => {
   const x = ev.target.closest("button[data-m]");
@@ -5943,8 +6427,27 @@ $("detBorrar").addEventListener("click", () => {
     $("detalle").close();
   });
 });
+// v271: «Ver ficha» desde el modo entreno: la misma ficha, solo para consultar (todo desactivado) y sin repintar el entreno al cerrarla,
+// para que sigan la serie, lo escrito en los campos y el progreso tal como estaban.
+let fichaLectura = null;
+function abrirFichaSoloLectura(id) {
+  if (!ejercicioVivo(id)) return;
+  abrirDetalle(id);
+  const dlg = $("detalle");
+  fichaLectura = [];
+  dlg.querySelectorAll("input, textarea, select, button").forEach(x => { if (x.classList.contains("cerrar") || x.closest("#detEmbed") || x.disabled) return; x.disabled = true; fichaLectura.push(x); });
+  dlg.classList.add("ficha-lectura");
+  $("detAvisoLectura").hidden = false;
+}
 $("detalle").addEventListener("close", () => {
   $("detEmbed").textContent = "";   // para que el vídeo deje de sonar
+  if (fichaLectura) {
+    fichaLectura.forEach(x => { x.disabled = false; });
+    fichaLectura = null;
+    $("detalle").classList.remove("ficha-lectura");
+    $("detAvisoLectura").hidden = true;
+    return;   // consulta: no se ha cambiado nada, no se repinta
+  }
   pintarTodo();
 });
 
@@ -6687,7 +7190,7 @@ function pintarPlan() {
   if (!todas.length) lp.innerHTML = '<p class="vacio-lista">Monta un entrenamiento en un día de la semana (por ejemplo, Pierna) y en su menú ⋯ elige «Guardar ejercicios como plantilla».</p>';
   else if (!ps.length) { const v = document.createElement("p"); v.className = "vacio-lista"; v.textContent = "Ninguna plantilla tiene «" + $("buscarPlantilla").value.trim() + "» en su nombre ni en sus ejercicios."; lp.appendChild(v); }
   ps.forEach(p => {
-    const t = tarjeta(p.nombre, [resumenItems(p.items || []), nombresItems(p.items || [])], () => { if (pulsacionLarga) { pulsacionLarga = false; return; } if (selPlant) marcarPlant(p.id); else menuPlantilla(p); });
+    const t = tarjeta(p.nombre, [resumenItems(p.items || []) + (esPlantillaCalentamiento(p) ? " · calentamiento" : ""), nombresItems(p.items || [])], () => { if (pulsacionLarga) { pulsacionLarga = false; return; } if (selPlant) marcarPlant(p.id); else menuPlantilla(p); });
     if (selPlant) { t.classList.add("seleccionable"); t.setAttribute("aria-pressed", String(selPlant.has(p.id))); }
     mantenerPulsado(t, () => { if (!selPlant) { selPlant = new Set(); } selPlant.add(p.id); pintarPlan(); });
     lp.appendChild(t);
@@ -6768,8 +7271,13 @@ function pintarPlan() {
   aplicarGrupoPlan();
 }
 function menuPlantilla(p) {
-  abrirMenu(p.nombre, resumenItems(p.items || []) + ": " + nombresItems(p.items || []), [
-    { texto: "Añadir a un día de esta semana…", accion: () => abrirMenu("¿A qué día?", "", dias.map(d => ({ texto: NOMBRES[d.i] + " " + fmt(deIso(d.id)), accion: () => { aplicarPlantilla(d, p); verPestana("semana"); } }))) },
+  abrirMenu(p.nombre, (esPlantillaCalentamiento(p) ? "Calentamiento · " : "") + resumenItems(p.items || []) + ": " + nombresItems(p.items || []), [
+    { texto: "Añadir a un día de esta semana…", accion: () => {
+      // v277 (corrección): dias[].id solo se rellena al pintar la pestaña Semana; si se llega aquí antes salía «NaN undefined» y se guardaba con fecha vacía. Se asignan desde la semana visible (misma fórmula que pintarSemana).
+      dias.forEach(d => { d.id = iso(sumarDias(lunesVista(), d.i)); });
+      // v278: «Elegir otra fecha…» (mismo diálogo que la selección múltiple) además de los siete días de la semana visible
+      abrirMenu("¿A qué día?", "", [{ texto: "📅 Elegir otra fecha…", accion: () => abrirFechaPlantillas([p]) }].concat(dias.map(d => ({ texto: NOMBRES[d.i] + " " + fmt(deIso(d.id)), accion: () => { aplicarPlantilla(d, p); verPestana("semana"); } }))));
+    } },
     { texto: "Compartir con un amigo…", accion: () => compartir(p.nombre, p.items || []) },
     { texto: "Cambiar nombre…", accion: async () => { const n = await pedirNombre("Nombre de la plantilla", p.nombre); if (n) { cambiar("plantillas", { ...p, nombre: n }); pintarPlan(); } } },
     { texto: "Eliminar plantilla", peligro: true, accion: () => { cambiar("plantillas", { ...p, borrado: true }); pintarPlan(); } }
@@ -6922,6 +7430,9 @@ function aplicarMeso(m, rehacer) {
     if (pid) (hay[pid] = hay[pid] || []).push({ w, d: (deIso(f).getDay() + 6) % 7 });
   });
   let total = 0;
+  // v276 (INC-SEM-003, orden): las sesiones se recogen primero y se añaden en el orden previsto del plan (semana, día y orden en que las plantillas están asignadas a ese día);
+  // antes se añadían por plantilla en el orden interno de la base de datos, y varias plantillas del mismo día salían en otro orden
+  const tareas = [];
   Object.keys(db.plantillas).forEach(pid => {
     const p = db.plantillas[pid];
     if (p.borrado) return;
@@ -6936,10 +7447,14 @@ function aplicarMeso(m, rehacer) {
       for (let k = 0; k < dias.length - Math.min(dias.length, enSemana.length); k++) faltan.push({ w, d: libres[k] !== undefined ? libres[k] : dias[k] });
     }
     faltan.slice(sesiones.length).forEach(({ w, d }) => {
-      const items = esDescarga(m, w) ? descargarItems(p.items || [], m.descarga, w * n0(m.progresion)) : p.items || [];
-      pegarItems(iso(sumarDias(lunes, w * 7 + d)), items, p.nombre, m.id, esDescarga(m, w) ? 0 : w * n0(m.progresion));
-      total += contarSeries(items);
+      const lista = (((m.dias || {})["s" + (w + 1)] || m.dias || {})[d] || []);
+      tareas.push({ w, d, pos: Math.max(0, lista.indexOf(pid)), p });
     });
+  });
+  tareas.sort((a, b) => a.w - b.w || a.d - b.d || a.pos - b.pos).forEach(({ w, d, p }) => {
+    const items = esDescarga(m, w) ? descargarItems(p.items || [], m.descarga, w * n0(m.progresion)) : p.items || [];
+    pegarItems(iso(sumarDias(lunes, w * 7 + d)), items, p.nombre, m.id, esDescarga(m, w) ? 0 : w * n0(m.progresion));
+    total += contarSeries(items);
   });
   return total;
 }
@@ -7126,7 +7641,7 @@ function pintarTodo() {
   pintarBloques(false);
   pintarBanda();
   pintarResumen();
-  if (!$("vistaEjercicios").hidden) pintarCatalogo();
+  if (!$("vistaEjercicios").hidden) { pintarCatalogo(); if (ejVista === "calentamientos") pintarCalentamientos(); }
   if (!$("vistaPlan").hidden) pintarPlan();
   if (!$("vistaMarcas").hidden) pintarMarcas();
   if (!$("vistaListas").hidden) pintarListas();
@@ -7518,7 +8033,7 @@ function abrirPrsSemana(inicio) {
     nombre.textContent = nombreEj(s.ejercicio_id);
     marca.className = "pr-semana-marca"; marca.textContent = serieTexto(s);
     contexto.className = "pr-semana-fecha";
-    contexto.textContent = NOMBRES[(deIso(s.fecha).getDay() + 6) % 7] + " " + fmt(deIso(s.fecha)) + (s.grupo ? " · " + s.grupo : "");
+    contexto.textContent = NOMBRES[(deIso(s.fecha).getDay() + 6) % 7] + " " + fmt(deIso(s.fecha)) + (nombreEntrenoHist(s) ? " · " + nombreEntrenoHist(s) : "");
     li.append(nombre, marca, contexto); lista.appendChild(li);
   });
   if (!filas.length) { const li = document.createElement("li"); li.textContent = "No hay nuevos récords personales en esta semana."; lista.appendChild(li); }
@@ -7615,7 +8130,7 @@ function exportarSeries() {
   const filas = [["Fecha", "Día", "Sesión", "Ejercicio", "Tipo", "Estado", "Peso (kg)", "% 1RM", "Reps", "Distancia (m)", "Tiempo", "Ritmo", "Descanso", "Recuperación (m)", "Bloque", "Esfuerzo del día (RPE)", "Sensaciones del día"]];
   seriesVivas().sort(ordenSerie).forEach(s => {
     const tipo = tipoDe(s.ejercicio_id), e = db.entrenos[s.fecha] || {};
-    filas.push([s.fecha, diaSemana(s.fecha), s.grupo || "", nombreEj(s.ejercicio_id), TIPOS[tipo].nombre, (s.calentamiento ? "Calentamiento · " : "") + (hecha(s) ? "Hecha" : "Planificada"),
+    filas.push([s.fecha, diaSemana(s.fecha), nombreEntrenoHist(s), nombreEj(s.ejercicio_id), TIPOS[tipo].nombre, (s.calentamiento ? "Calentamiento · " : "") + (hecha(s) ? "Hecha" : "Planificada"),
       decimal(pesoMostrado(s)), decimal(n0(s.pct)), n0(s.reps) || "", decimal(n0(s.distancia)), n0(s.tiempo) ? fmtTiempo(s.tiempo) : "",
       esDistancia(tipo) && conMarca(s) ? ritmo(s, tipo) : "", n0(s.descanso) ? fmtTiempo(s.descanso) : "", decimal(n0(s.rec_dist)),
       s.bloque_id ? "Ronda " + n0(s.ronda) : "", n0(e.rpe) || "", e.sensacion || ""]);
@@ -8987,11 +9502,22 @@ function reordenar(conjuntos, texto) {
 }
 // Ejercicios añadidos y aún sin series: delante de qué elemento del día quedan (solo en este dispositivo)
 let esperaAntes = leer("espera-antes-v1") || {};
+// v269 (INC-SEM-008): momento en que se añadió cada ejercicio todavía sin series (fecha|id -> ms). La primera serie lo hereda como «orden» y, mientras espera,
+// el ejercicio se pinta en ese sitio entre los que ya tienen series: así el orden en que se añaden varios no depende de cuál se confirma primero.
+// Solo en este dispositivo (como esperaAntes); una posición puesta a mano (arrastre) lo sustituye y, sin él, todo funciona como antes.
+let esperaOrden = leer("espera-orden-v1") || {};
+// v272: nombre del entreno original de las series COMPLETADAS que «Vaciar día» conserva como ejercicios sueltos (fecha|id de serie -> nombre). Va en el extra del día
+// (entrenos.extra.hn, columna que ya existe; sin esquema nuevo), no en la serie ni en sus notas. Solo se usa para IDENTIFICAR en el historial (PR de la semana y
+// exportación); no crea ningún entrenamiento activo. Quien tenga el entreno asignado en la serie (grupo) manda sobre este dato.
+let nombresHist = leer("nombres-hist-v1") || {};
+const nombreEntrenoHist = s => s.grupo || nombresHist[s.fecha + "|" + s.id] || "";
+const guardarEsperaOrden = () => escribir("espera-orden-v1", esperaOrden);
 // Al recibir su primera serie, el ejercicio se queda donde estaba en vez de irse al final
 function colocarPrimeraSerie(fecha, id, grupo, eraEspera) {
   const k = fecha + "|" + id, antes = esperaAntes[k];
   delete esperaAntes[k];
   escribir("espera-antes-v1", esperaAntes);
+  if (esperaOrden[k] !== undefined) { delete esperaOrden[k]; guardarEsperaOrden(); }   // v269
   if (!eraEspera || !antes) return;
   const g = estructuraDia(fecha).find(x => x.nombre === (grupo || ""));
   if (!g) return;
@@ -9641,13 +10167,15 @@ function pintarEntreno() {
   if (ent.calent) $("enCalentT").textContent = "¿Calentamiento? " + ent.calent.map(p => (p.barra ? "barra" : num(p.peso) + " kg") + " × " + p.reps).join(" · ");
   // Campos para apuntar lo que de verdad se hizo
   const mov = tipo === "movilidad";
-  ent.campos = dist ? (n0(s.distancia) > 0 ? ["m", "t"] : ["t", "m"]) : !mov && ((n0(s.tiempo) > 0 || s.max_tiempo) && !(n0(s.reps) > 0) || conDistFuerza(s) && !(n0(s.reps) > 0)) ? ["kg", "s"] : mov ? (n0(s.reps) > 0 || !(n0(s.tiempo) > 0) ? ["reps", "s"] : ["s", "reps"]) : ["kg", "reps"];
+  // v271: un ejercicio sin carga (ver sinCarga) no pide kg si la serie no tiene ninguno guardado; si ya lo tiene, el campo se muestra para no ocultar el dato
+  const sc = !dist && !mov && sinCarga(s.ejercicio_id) && !(n0(s.peso) > 0);
+  ent.campos = sc ? (!(n0(s.reps) > 0) && (n0(s.tiempo) > 0 || s.max_tiempo) ? ["s", "reps"] : ["reps", "s"]) : dist ? (n0(s.distancia) > 0 ? ["m", "t"] : ["t", "m"]) : !mov && ((n0(s.tiempo) > 0 || s.max_tiempo) && !(n0(s.reps) > 0) || conDistFuerza(s) && !(n0(s.reps) > 0)) ? ["kg", "s"] : mov ? (n0(s.reps) > 0 || !(n0(s.tiempo) > 0) ? ["reps", "s"] : ["s", "reps"]) : ["kg", "reps"];
   const etiqueta = { kg: "Peso (kg)", reps: "Repeticiones" + (s.por_lado ? " por lado" : ""), m: enKm() ? "Kilómetros" : "Metros", t: "Tiempo", s: "Tiempo" + (s.por_lado ? " por lado" : "") + " (45 = segundos)" };
   const valor = c => c === "kg" ? (kg ? num(kg) : "") : c === "reps" ? ((s.ciclo_id === "auto" || esRango(s)) && !hecha(s) ? "" : n0(s.reps) || "")
     : c === "m" ? distCampo(s.distancia) : c === "s" ? (n0(s.tiempo) > 0 ? (n0(s.tiempo) < 60 ? String(n0(s.tiempo)) : fmtTiempo(s.tiempo)) : "") : n0(s.tiempo) ? fmtTiempo(s.tiempo) : "";
   [["enA", "enEtA"], ["enB", "enEtB"]].forEach(([inp, et], k) => {
     const c = ent.campos[k];
-    $(et).textContent = etiqueta[c] + ((dist || mov || conDistFuerza(s)) && k === 1 ? " (opcional)" : "");
+    $(et).textContent = etiqueta[c] + ((dist || mov || sc || conDistFuerza(s)) && k === 1 ? " (opcional)" : "");
     $(inp).value = valor(c);
     $(inp).inputMode = c === "reps" ? "numeric" : "decimal";
     // En carrera, el ejemplo del tiempo es el objetivo de la serie (si lo hay), no un número cualquiera
@@ -9755,6 +10283,10 @@ $("enMenos").addEventListener("click", () => moverDescanso(-15));
 $("enMas").addEventListener("click", () => moverDescanso(15));
 $("enSaltarD").addEventListener("click", () => { clearInterval(ent.timer); ent.timer = null; ent.fin = 0; $("enDescanso").hidden = true; });
 // Abre el mismo visor de la ficha sin cerrar ni repintar el entrenamiento.
+$("enFicha").addEventListener("click", () => {   // v271
+  const s = serieEnt();
+  if (s) abrirFichaSoloLectura(s.ejercicio_id);
+});
 $("enVideo").addEventListener("click", () => {
   const s = serieEnt(), e = s && ejercicioVivo(s.ejercicio_id);
   if ($("dlgEntreno").open && e && idYoutube(e.video_url)) verVideo(e);
@@ -9787,7 +10319,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v266" + (BETA ? " beta" : "");
+const VERSION_APP = "v278" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";
@@ -10507,14 +11039,57 @@ $("selPlantEntrar").addEventListener("click", () => { selPlant = new Set(); pint
 $("selPlantCancelar").addEventListener("click", salirSeleccion);
 // Añadir todas a un día de la semana (cada una como su propia sesión)
 $("selPlantDia").addEventListener("click", () => {
-  const ps = plantillasSel();
-  abrirMenu("Añadir " + ps.length + " plantillas", ps.map(p => p.nombre).join(", "), dias.map(d => ({ texto: NOMBRES[d.i] + " " + fmt(deIso(d.id)), accion: () => {
-    ps.forEach(p => pegarItems(d.id, p.items || [], p.nombre));
-    persistir();
-    salirSeleccion();
-    abrirDia(d.id);
-    setEstado(ps.length + " plantillas añadidas al " + NOMBRES[d.i]);
-  } })));
+  // v276: los entrenos quedan en el orden en que se SELECCIONARON (selPlant es un Set: conserva el orden de inserción), no en orden alfabético
+  const ps = [...selPlant].map(id => db.plantillas[id]).filter(p => p && !p.borrado);
+  abrirMenu("Añadir " + ps.length + (ps.length === 1 ? " plantilla" : " plantillas"), ps.map(p => p.nombre).join(", "), [
+    // v277: cualquier fecha del calendario (el selector de fecha del navegador), sin tener que avanzar semana a semana
+    { texto: "📅 Elegir otra fecha…", accion: () => abrirFechaPlantillas(ps) },
+    // v277 (corrección): las fechas de la semana visible se calculan aquí (dias[].id solo se rellena al pintar la pestaña Semana; si aún no se ha pintado estaba vacío → «NaN undefined»)
+    ...Array.from({ length: 7 }, (_, i) => {
+      const f = sumarDias(lunesVista(), i), fi = iso(f);
+      return { texto: NOMBRES[i] + " " + fmt(f), accion: () => {
+        ps.forEach(p => pegarItems(fi, p.items || [], p.nombre));
+        persistir();
+        salirSeleccion();
+        abrirDia(fi);
+        setEstado(ps.length + (ps.length === 1 ? " plantilla añadida" : " plantillas añadidas") + " al " + NOMBRES[i]);
+      } };
+    })
+  ]);
+});
+// v277: «Añadir a un día» con cualquier fecha. Mismo comportamiento que los días de la semana visible (mismo pegarItems, mismo orden de selección, mismo contenido
+// existente conservado). v278: sirve también a la plantilla individual y, al confirmar, SIEMPRE abre ese día (abrirDia lleva la vista a su semana; no cambia la fecha del sistema).
+const fechaLargaPlant = f => deIso(f).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+let fpPlantillas = null;
+function abrirFechaPlantillas(ps) {
+  fpPlantillas = ps;
+  $("fpResumen").textContent = ps.length + (ps.length === 1 ? " plantilla" : " plantillas") + " (en este orden): " + ps.map(p => p.nombre).join(" → ");
+  $("fpFecha").value = ""; $("fpAviso").textContent = ""; $("fpElegida").textContent = "Elige una fecha: se mostrará aquí antes de añadir.";
+  $("fpAnadir").disabled = true;
+  $("dlgFechaPlant").showModal();
+}
+function fpValidar() {
+  const f = $("fpFecha").value;
+  if (!fechaSerieValida(f)) { $("fpElegida").textContent = f ? "Fecha no válida." : "Elige una fecha: se mostrará aquí antes de añadir."; $("fpAnadir").disabled = true; return; }
+  const hoyIso = iso(new Date()), visible = iso(lunesDe(deIso(f))) === iso(lunesVista());
+  const rel = f === hoyIso ? "hoy" : f < hoyIso ? "fecha pasada" : "fecha futura";
+  $("fpElegida").textContent = "Se añadirá el " + fechaLargaPlant(f) + " (" + rel + (visible ? ", en la semana que estás viendo" : ", de otra semana: al confirmar se abrirá ese día") + ").";
+  const hay = seriesDelDia(f).length;
+  if (hay) $("fpElegida").textContent += " Ese día ya tiene " + hay + (hay === 1 ? " serie" : " series") + ": se conservan y las nuevas se añaden detrás.";
+  $("fpAnadir").disabled = false;
+}
+$("fpFecha").addEventListener("input", fpValidar);
+$("fpFecha").addEventListener("change", fpValidar);
+$("fpCancelar").addEventListener("click", () => $("dlgFechaPlant").close());
+$("fpAnadir").addEventListener("click", () => {
+  const f = $("fpFecha").value, ps = fpPlantillas;
+  if (!ps || !fechaSerieValida(f)) { $("fpAviso").textContent = "Elige una fecha válida."; return; }
+  $("dlgFechaPlant").close();
+  ps.forEach(p => pegarItems(f, p.items || [], p.nombre));
+  persistir();
+  if (selPlant) salirSeleccion();
+  abrirDia(f);
+  setEstado(ps.length + (ps.length === 1 ? " plantilla añadida" : " plantillas añadidas") + " al " + fechaLargaPlant(f));
 });
 // Mesociclo: crear uno nuevo repartiéndolas por la semana, o añadirlas a un día de uno existente
 const REPARTO = [0, 2, 4, 1, 3, 5, 6];

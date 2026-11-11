@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="connect-src 'self' https://qtdvehlewuuljolistlw.supabase.co blob: data:">
+<meta http-equiv="Content-Security-Policy" content="connect-src 'self' https://qqyedigitphvitejquxo.supabase.co blob: data:">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Fuerza y Ritmo</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -27,7 +27,7 @@
   window.addEventListener("pageshow", actualizar);
 })();
 </script>
-<link rel="stylesheet" href="estilos.css?v=v266">
+<link rel="stylesheet" href="estilos.css?v=v278">
 </head>
 <body>
 
@@ -123,12 +123,23 @@
   </div>
 
   <div id="vistaEjercicios" hidden>
-    <div class="barra">
-      <input id="filtroEj" type="search" placeholder="Buscar ejercicio" aria-label="Buscar ejercicio" autocomplete="off">
-      <button type="button" class="nav-btn" id="nuevoEj">+ Nuevo</button>
+    <div class="tabs seg ej-sel" id="ejSel" role="group" aria-label="Ejercicios o calentamientos">
+      <button type="button" data-ejv="ejercicios" aria-pressed="true">Ejercicios</button>
+      <button type="button" data-ejv="calentamientos" aria-pressed="false">Calentamientos</button>
     </div>
-    <div class="filtro-clasif" id="filtroClasif" role="group" aria-label="Filtrar por clasificación" hidden></div>
-    <div id="catalogo"></div>
+    <div id="ejPanelEj">
+      <div class="barra">
+        <input id="filtroEj" type="search" placeholder="Buscar ejercicio" aria-label="Buscar ejercicio" autocomplete="off">
+        <button type="button" class="nav-btn" id="nuevoEj">+ Nuevo</button>
+      </div>
+      <div class="filtro-clasif" id="filtroClasif" role="group" aria-label="Filtrar por clasificación" hidden></div>
+      <div id="catalogo"></div>
+    </div>
+    <div id="ejPanelCal" hidden>
+      <div class="barra"><input id="filtroCal" type="search" placeholder="Buscar calentamiento" aria-label="Buscar calentamiento por nombre o ejercicio" autocomplete="off"></div>
+      <p class="menu-det" id="calAyuda">Calentamientos guardados (son plantillas: también salen en Entrenos → Plantillas). Se guardan desde ⋯ de una parte «Calentamiento» y se añaden desde ⋯ del entreno.</p>
+      <div class="lista-tarjetas" id="listaCalent"></div>
+    </div>
   </div>
 
   <div id="vistaPlan" hidden>
@@ -300,6 +311,7 @@
     <button class="cerrar" aria-label="Cerrar" autofocus>✕</button>
   </form>
   <div class="d-cuerpo">
+    <p id="detAvisoLectura" class="aviso-estim" hidden>Ficha en modo consulta: se abre desde el entrenamiento y aquí no se edita. Al cerrarla vuelves a la misma serie.</p>
     <p id="detAvisoComun" class="aviso-estim" hidden>Ejercicio del catálogo común: solo lo editan el administrador y quien él autorice. Tus series y tu 1RM son solo tuyos.</p>
     <label id="detCompSec" class="permiso" hidden><input type="checkbox" id="detComp"> En el catálogo común (lo ven todos los usuarios aprobados)</label>
     <section>
@@ -339,6 +351,7 @@
       </div>
       <p class="menu-det" id="detMedidaInfo"></p>
       <label class="permiso"><input type="checkbox" id="detLado"> Se hace por lado (izquierda y derecha): todas sus series salen «por lado»</label>
+      <div class="lado-aplicar" id="detLadoAviso" hidden><p class="menu-det" id="detLadoTxt"></p><button type="button" class="nav-btn" id="detLadoAplicar">Aplicar la configuración de la ficha</button></div>
     </section>
     <section id="detRmSec">
       <h3>1RM de referencia</h3>
@@ -425,6 +438,39 @@
       <button type="button" class="anadir" id="blqCrear">Crear bloque</button>
     </div>
   </div>
+</dialog>
+
+<dialog id="dlgCalent" aria-label="Calentamiento guardado">
+  <form method="dialog" class="d-cab">
+    <h3 class="d-tit" id="calTit">Calentamiento</h3>
+    <button class="cerrar" aria-label="Cerrar">✕</button>
+  </form>
+  <div class="d-cuerpo" id="calCuerpo"></div>
+</dialog>
+
+<dialog id="dlgFechaPlant" aria-label="Elegir fecha">
+  <form method="dialog" class="d-cab">
+    <h3 class="d-tit">Añadir a una fecha</h3>
+    <button class="cerrar" aria-label="Cerrar">✕</button>
+  </form>
+  <div class="d-cuerpo">
+    <p class="menu-det" id="fpResumen" style="padding:0"></p>
+    <label class="campo">Fecha <input id="fpFecha" type="date" min="1000-01-01" max="9999-12-31" aria-describedby="fpElegida"></label>
+    <p class="eb-nota" id="fpElegida" role="status"></p>
+    <p class="aviso" id="fpAviso" role="status"></p>
+    <div class="d-botones">
+      <button type="button" class="nav-btn" id="fpCancelar">Cancelar</button>
+      <button type="button" class="anadir" id="fpAnadir" disabled>Añadir</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="dlgEditBloque" aria-label="Editar bloque">
+  <form method="dialog" class="d-cab">
+    <h3 class="d-tit">Editar bloque</h3>
+    <button class="cerrar" aria-label="Cerrar">✕</button>
+  </form>
+  <div class="d-cuerpo" id="ebCuerpo"></div>
 </dialog>
 
 <dialog id="dlgMeso" aria-label="Mesociclo">
@@ -958,7 +1004,8 @@
   <div class="en-cuerpo">
     <p class="en-grupo" id="enGrupo"></p>
     <h2 class="en-ej" id="enEj"></h2>
-    <button type="button" class="nav-btn en-video" id="enVideo" aria-haspopup="dialog" hidden>▶ Ver vídeo del ejercicio</button>
+    <div class="en-accesos"><button type="button" class="nav-btn en-video" id="enVideo" aria-haspopup="dialog" hidden>▶ Ver vídeo del ejercicio</button>
+    <button type="button" class="nav-btn en-ficha" id="enFicha" aria-haspopup="dialog">ⓘ Ver ficha</button></div>
     <p class="en-nota" id="enNota" hidden></p>
     <p class="en-serie" id="enSerie"></p>
     <p class="en-valor" id="enValor"></p>
@@ -1001,6 +1048,6 @@
 <div class="toast" id="toast" role="status" hidden><span id="toastTxt"></span><button type="button" id="toastBtn">Deshacer</button></div>
 <div class="fiesta" id="fiesta" aria-hidden="true"></div>
 
-<script src="app.js?v=v266"></script>
+<script src="app.js?v=v278"></script>
 </body>
 </html>

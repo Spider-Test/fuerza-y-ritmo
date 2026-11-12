@@ -5414,7 +5414,47 @@ function crearEjercicio(nombre, tipo) {
 }
 let grupoSel = "";
 let parteSel = "";
+// Buscador móvil: seguir el área visible al aparecer el teclado, sin alterar el zoom de la barra.
+const vistaSelector = (() => {
+  const d = $("selector"), vv = window.visualViewport, movil = matchMedia("(max-width: 760px)");
+  let origen = null, elegido = false, turno = 0, pendientes = [];
+  const cancelar = () => { turno++; pendientes.forEach(clearTimeout); pendientes = []; };
+  const ajustar = () => {
+    const activo = movil.matches;
+    d.classList.toggle("selector-visible", activo);
+    if (activo) {
+      d.style.setProperty("--selector-top", Math.max(0, vv?.offsetTop || 0) + "px");
+      d.style.setProperty("--selector-alto", (vv?.height || innerHeight) + "px");
+    } else {
+      d.style.removeProperty("--selector-top"); d.style.removeProperty("--selector-alto");
+    }
+  };
+  const alCambiar = () => { if (d.open) ajustar(); };
+  vv?.addEventListener("resize", alCambiar, { passive: true });
+  vv?.addEventListener("scroll", alCambiar, { passive: true });
+  window.addEventListener("resize", alCambiar, { passive: true });
+  // Una interacción nueva cancela cualquier restauración pendiente de un cierre anterior.
+  ["touchstart", "pointerdown", "wheel", "keydown"].forEach(t => document.addEventListener(t, cancelar, { passive: true, capture: true }));
+  d.addEventListener("close", () => {
+    const volver = origen; origen = null;
+    d.classList.remove("selector-visible");
+    d.style.removeProperty("--selector-top"); d.style.removeProperty("--selector-alto");
+    cancelar();
+    // Elegir conserva el desplazamiento/foco propios de la inserción. Otros diálogos tampoco se desplazan.
+    if (!volver || elegido || document.querySelector("dialog[open]")) return;
+    const actual = turno;
+    const restaurar = () => { if (turno === actual && !d.open && !document.querySelector("dialog[open]")) scrollTo(volver.x, volver.y); };
+    restaurar();
+    pendientes = [200, 700].map(ms => setTimeout(restaurar, ms));
+  });
+  return {
+    abrir(dia) { cancelar(); elegido = false; origen = movil.matches && dia ? { x: scrollX, y: scrollY } : null; ajustar(); },
+    elegir() { elegido = true; }
+  };
+})();
+
 function abrirSelector(dia, alElegir, grupoDestino, parteDestino) {
+  vistaSelector.abrir(dia);
   diaSelector = dia;
   alElegirSel = alElegir || null;
   grupoSel = grupoDestino || "";
@@ -5430,6 +5470,7 @@ function abrirSelector(dia, alElegir, grupoDestino, parteDestino) {
   $("buscarEj").focus();
 }
 function elegir(id) {
+  vistaSelector.elegir();
   const dia = diaSelector;
   $("selector").close();
   if (alElegirSel) { const f = alElegirSel; alElegirSel = null; f(id); return; }
@@ -10528,7 +10569,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v287" + (BETA ? " beta" : "");
+const VERSION_APP = "v288" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

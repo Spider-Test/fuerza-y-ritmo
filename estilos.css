@@ -2723,3 +2723,22 @@ dialog#dlgAviso { margin: auto; }
    botones no caben a su lado (anchos estrechos), pasan a una segunda línea alineados a la derecha, en vez de recortar nada */
 .plan-sec[data-sec="mesociclos"] .sec-cab { flex-wrap: wrap; column-gap: 4px; row-gap: 2px; }
 .plan-sec[data-sec="mesociclos"] .sec-cab > .sec-toggle { flex: 0 0 auto; gap: 6px; }
+
+/* v280: arrastrar una parte a otro entreno: TODA la tarjeta del entreno destino se resalta (sin transformaciones ni cambios de tamaño: nada salta) y una indicación fija, sobre la barra de pestañas, dice qué va a pasar */
+.grupo.zona-destino, .grupo.zona-invalida { position: relative; outline: 3px solid var(--accent); outline-offset: -3px; }
+.grupo.zona-destino::after, .grupo.zona-invalida::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: color-mix(in srgb, var(--accent) 14%, transparent); pointer-events: none; z-index: 6; }
+.grupo.zona-invalida { outline-color: var(--error, #c0392b); }
+.grupo.zona-invalida::after { background: color-mix(in srgb, var(--error, #c0392b) 12%, transparent); }
+.banner-destino { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 78px); z-index: 31; max-width: calc(100vw - 24px); width: max-content; padding: 10px 16px; border-radius: 14px;
+  background: var(--toast-bg); color: var(--toast-fg); border: 3px solid var(--accent); font-size: 15px; font-weight: 700; line-height: 1.3; text-align: center; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28); pointer-events: none; }
+.banner-destino.invalido { border-color: var(--error, #c0392b); }
+.banner-destino[hidden] { display: none; }
+
+/* v281: marcador de inserción al arrastrar una parte a otro entreno: línea fija (no mueve la página) entre las partes del destino, antes de la primera o después de la última */
+.marca-insercion { position: fixed; height: 4px; border-radius: 3px; background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); z-index: 32; pointer-events: none; }
+.marca-insercion.invalido { background: var(--error, #c0392b); }
+.marca-insercion[hidden] { display: none; }
+
+/* v283: partes que se arrastran entre entrenos: la escala va en el transform (JS, suavizada y desde el punto agarrado), no en la propiedad scale; solo la opacidad se anima con CSS */
+.arrastrando.entre-entrenos { transition: opacity .14s ease-out !important; }
+.arrastrando.entre-entrenos.sobre-zona { scale: none; }

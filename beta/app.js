@@ -3626,13 +3626,21 @@ function pintarDiaSinAncla(dia) {
         // un entreno). Responde casi al instante (120 ms), resalta la tarjeta y una indicación fija avisa de que la parte se añadirá al final de sus partes (o de que no se puede
         // porque ya tiene una con ese nombre). El asa se muestra aunque sea la única parte si existe otro entreno destino: se calcula con los datos del día, no con el DOM aún a medio pintar
         const hayDestinoParte = grupos.some(x => x.nombre && x.nombre !== g.nombre);
-        let objetivo = null, indiceAnt = null, textoAnt = "";   // v281: posición de inserción calculada en el último fotograma (la usa alSoltar)
-        const zonasEntreno = { espera: 120,
+        let objetivo = null, indiceAnt = null, textoAnt = "", abiertas = [], zonaAct = null, tAbrir = 0, notaArriba = false;   // v281: posición de inserción calculada en el último fotograma (la usa alSoltar); v282: entrenos plegados desplegados solo mientras se arrastra
+        const zonasEntreno = { espera: 120, layoutVivo: true,
           lista: () => [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].filter(x => (x.dataset.grupo || "") !== g.nombre && !x.classList.contains("grupo-sueltos")),
           alCambiar: z => {
             const b = $("bannerDestino"), m = $("marcaInsercion");
             document.querySelectorAll(".grupo.zona-invalida").forEach(x => x.classList.remove("zona-invalida"));
-            indiceAnt = null; textoAnt = "";
+            indiceAnt = null; textoAnt = ""; notaArriba = false; b.style.top = ""; b.style.bottom = "";
+            // v282: un entreno destino PLEGADO se despliega (solo en pantalla, sin tocar el estado guardado) si la parte se mantiene un instante encima, para elegir la posición en el mismo
+            // arrastre. Al salir de él, al cancelar o al soltar (el traslado, si se hace, lo deja desplegado de forma persistente) vuelve a plegarse
+            clearTimeout(tAbrir); zonaAct = z;
+            abiertas.filter(x => x !== z).forEach(x => x.classList.add("g-plegado"));
+            abiertas = abiertas.filter(x => x === z);
+            if (z && z.classList.contains("g-plegado")) tAbrir = setTimeout(() => {
+              if (zonaAct === z && z.classList.contains("g-plegado")) { z.classList.remove("g-plegado"); abiertas.push(z); if (zonasEntreno.repintar) zonasEntreno.repintar(); }
+            }, 300);
             if (!z) { b.hidden = true; m.hidden = true; return; }   // «objetivo» se conserva: alSoltar se llama justo después
             const destino = z.dataset.grupo || "", etq = (z.querySelector(".gn-txt") || {}).textContent || destino, dup = parteDuplicadaEnEntreno(dia, destino, p.nombre);
             z.classList.toggle("zona-invalida", dup);
@@ -3660,6 +3668,13 @@ function pintarDiaSinAncla(dia) {
             }
             indiceAnt = idx; objetivo = { destino, etq, nombres, indice: idx };
             if (texto !== textoAnt) { b.textContent = texto; textoAnt = texto; }
+            // v282: la nota va abajo (sobre la barra de pestañas); si la posición de inserción o el dedo quedan en su zona, pasa ARRIBA (bajo la cabecera) y se queda ahí hasta cambiar de entreno,
+            // para no tapar el marcador ni las partes del destino desplegado y sin saltar de un lado a otro
+            if (!notaArriba && Math.max(marcaY === null ? 0 : marcaY, y) > innerHeight - 190) {
+              notaArriba = true;
+              let cab = 0; document.querySelectorAll(".cabecera").forEach(x => { const p = getComputedStyle(x).position, r = x.getBoundingClientRect(); if ((p === "sticky" || p === "fixed") && r.height && r.top < innerHeight / 2) cab = Math.max(cab, r.bottom); });
+              b.style.top = Math.round(cab + 8) + "px"; b.style.bottom = "auto";
+            }
             b.hidden = false;
             if (marcaY === null) { m.hidden = true; return; }
             const zr = z.getBoundingClientRect(), zf = z.offsetHeight > 0 ? zr.height / z.offsetHeight || 1 : 1;   // zoom del ordenador, como en asaArrastre
@@ -9728,9 +9743,11 @@ function asaArrastre(el, hermanos, alSoltar, nombre, zonas) {
     arrastreActivo = true;
     const y0 = scrollY, cajas = lista.map(x => { const r = x.getBoundingClientRect(); return { top: r.top + y0, alto: r.height }; });
     const hueco = idx + 1 < cajas.length ? cajas[idx + 1].top - cajas[idx].top - cajas[idx].alto : idx > 0 ? cajas[idx].top - cajas[idx - 1].top - cajas[idx - 1].alto : 0;
-    const paso = cajas[idx].alto + Math.max(0, hueco), inicioY = e.clientY + y0;
+    const paso = cajas[idx].alto + Math.max(0, hueco);
+    let inicioY = e.clientY + y0;
     const zf = el.offsetHeight > 0 ? cajas[idx].alto / el.offsetHeight || 1 : 1;   // zoom del ordenador
-    let dedoY = e.clientY, destino = idx, pendiente = false, vivo = true;
+    let dedoY = e.clientY, destino = idx, pendiente = false, vivo = true, dyAplicado = 0;
+    const aplicadoSib = new Map();   // v282: desplazamiento que lleva puesto cada hermano (para medir de nuevo si el diseño cambia)
     el.classList.add("arrastrando");
     lista.forEach(x => { if (x !== el) x.classList.add("apartandose"); });
     const bordes = () => {
@@ -9750,8 +9767,6 @@ function asaArrastre(el, hermanos, alSoltar, nombre, zonas) {
       const { arriba, abajo } = bordes();
       if (dedoY < arriba + 48) scrollBy(0, -Math.min(14, arriba + 48 - dedoY));
       else if (dedoY > abajo - 48) scrollBy(0, Math.min(14, dedoY - (abajo - 48)));
-      // Cambia de sitio cuando el borde de lo arrastrado (el de abajo al bajar, el de arriba al subir) pasa la mitad del otro: igual de fácil en los dos sentidos
-      const dy = dedoY + scrollY - inicioY, arribaEl = cajas[idx].top + dy, abajoEl = arribaEl + cajas[idx].alto;
       destino = idx;
       // ¿El dedo está encima de una zona? Entonces se resalta y los demás no se apartan
       const zc = zl.find(x => { const r = x.getBoundingClientRect(); return dedoY >= r.top && dedoY <= r.bottom; }) || null;
@@ -9761,19 +9776,33 @@ function asaArrastre(el, hermanos, alSoltar, nombre, zonas) {
       if (cand && !z) { clearTimeout(tZona); tZona = setTimeout(pedir, esperaZona + 20 - (Date.now() - candDesde)); }
       if (z !== zona) { if (zona) zona.classList.remove("zona-destino"); zona = z; if (zona) zona.classList.add("zona-destino"); el.classList.toggle("sobre-zona", !!zona); if (zonas && zonas.alCambiar) zonas.alCambiar(zona); }
       if (zona && zonas.alMoverDentro) zonas.alMoverDentro(zona, dedoY);   // v281: posición de inserción dentro de la zona (cada fotograma, también al desplazarse la vista)
+      // v282: si una zona cambia el diseño (un entreno plegado que se despliega al mantener encima, o que se vuelve a plegar), lo arrastrado sigue bajo el dedo y las posiciones
+      // de sus hermanos se miden de nuevo. Solo con zonas que lo piden (partes); los demás arrastres no cambian
+      if (zonas && zonas.layoutVivo) {
+        const s = el.getBoundingClientRect().top + scrollY - dyAplicado - cajas[idx].top;
+        if (Math.abs(s) > 0.5) {
+          inicioY += s;
+          lista.forEach((x, k) => { const r = x.getBoundingClientRect(); cajas[k] = { top: r.top + scrollY - (k === idx ? dyAplicado : (aplicadoSib.get(x) || 0)), alto: r.height }; });
+        }
+      }
+      // Cambia de sitio cuando el borde de lo arrastrado (el de abajo al bajar, el de arriba al subir) pasa la mitad del otro: igual de fácil en los dos sentidos
+      const dy = dedoY + scrollY - inicioY, arribaEl = cajas[idx].top + dy, abajoEl = arribaEl + cajas[idx].alto;
+      dyAplicado = dy;
       lista.forEach((x, k) => {
         if (k === idx) return;
-        if (zona) { x.style.transform = ""; return; }
+        if (zona) { x.style.transform = ""; aplicadoSib.set(x, 0); return; }
         const medio = cajas[k].top + cajas[k].alto / 2;
         let mueve = 0;
         if (k < idx && arribaEl < medio) { mueve = paso; destino--; }
         else if (k > idx && abajoEl > medio) { mueve = -paso; destino++; }
         x.style.transform = mueve ? "translate3d(0," + mueve / zf + "px,0)" : "";
+        aplicadoSib.set(x, mueve);
       });
       el.style.transform = "translate3d(0," + dy / zf + "px,0)";
       if (dedoY < arriba + 48 || dedoY > abajo - 48) pedir();
     };
     const pedir = () => { if (!pendiente) { pendiente = true; requestAnimationFrame(pintar); } };
+    if (zonas) zonas.repintar = pedir;   // v282: la zona puede pedir un fotograma (p. ej. al desplegar un entreno con el dedo quieto)
     const mover = ev => { dedoY = ev.clientY; pedir(); };
     const fin = ev => {
       vivo = false;
@@ -10441,7 +10470,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v281" + (BETA ? " beta" : "");
+const VERSION_APP = "v282" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

@@ -2378,8 +2378,7 @@ function cabeceraParte(dia, grupo, p, color, nNombradas, partes, seriesItem) {
       { texto: "Cambiar nombre", accion: () => cambiarNombreParte(dia, grupo, p.nombre) },
       esNombreCalentamiento(p.nombre) && ss.length > 0 && { texto: "Guardar calentamiento…", accion: () => guardarCalentamientoParte(dia, grupo, p.nombre) },   // v274
       // v262: sin «+ Ejercicio en esta parte» en este menú; se añade con los botones visibles de la propia parte
-      ...(() => { const otros = [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].map(x => x.dataset.grupo || "").filter(x => x !== grupo);
-        return otros.length ? [{ texto: "Mover la parte a otro entreno…", accion: () => abrirMenu("¿A qué entreno?", "La parte «" + p.nombre + "» pasa entera, con sus ejercicios y bloques", otros.map(x => ({ texto: x || "Entreno 1", accion: () => moverParteAEntreno(dia, grupo, p.nombre, x, ss) }))) }] : []; })(),
+      // v284: sin «Mover la parte a otro entreno…»; la parte se reordena y se traslada a otro entreno con el asa ≡ (un solo arrastre)
       plegada && { texto: "+ Bloque en esta parte", accion: () => abrirBloque(dia, grupo, p.nombre) },
       { texto: "Quitar la parte (sus ejercicios quedan sin parte)", accion: () => {
         ss.forEach(x => cambiar("series", { ...x, seccion: "" }, true));
@@ -10490,7 +10489,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v283" + (BETA ? " beta" : "");
+const VERSION_APP = "v284" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

@@ -3364,7 +3364,7 @@ async function abrirCompartido(texto) {
   const listaEj = itemsDeLista(c);
   // Varias plantillas juntas: vista previa y guardarlas (o añadirlas a un día)
   if (c.items[0] && c.items[0].paquete) {
-    const x = c.items[0], lunesP = lunesVista();
+    const x = c.items[0], lunesP = lunesDe(new Date());
     const vista = document.createElement("div");
     x.plantillas.forEach(p => vista.appendChild(desplegableItems(p.nombre, p.items)));
     abrirMenu("«" + c.nombre + "»", de + ". Solo lo estás viendo: toca cada plantilla para ver sus ejercicios. No se añade nada hasta que tú quieras.",
@@ -3386,7 +3386,7 @@ async function abrirCompartido(texto) {
     return;
   }
   // Un entrenamiento: primero solo se ve; «Añadir a mi rutina» deja elegir día o guardarlo como plantilla
-  const lunes = lunesVista();
+  const lunes = lunesDe(new Date());
   abrirMenu("«" + c.nombre + "»", de + " · " + contarSeries(c.items) + " series. Solo lo estás viendo: no se añade nada hasta que tú quieras.",
     [{ texto: "+ Añadir a mi rutina…", accion: () => abrirMenu("¿Cómo lo añado?", "«" + c.nombre + "»", [
       { texto: "Ponerlo en un día…", accion: () => elegirDiaDestino(lunes, "¿En qué día pongo «" + c.nombre + "»?", async f => {
@@ -5854,7 +5854,7 @@ function ponerEnDia(l, p, k, f) {
   persistir();
   irADia(f, "«" + nf + "» puesto el " + NOMBRES[(deIso(f).getDay() + 6) % 7].toLowerCase() + " " + fmt(deIso(f)) + (nf !== p.nombre ? " (ya había un entreno «" + p.nombre + "»)" : ""));
 }
-const ponerEntrenoDeLista = (l, p, k) => elegirDiaDestino(lunesVista(), "¿En qué día pongo «" + p.nombre + "»?", f => ponerEnDia(l, p, k, f));
+const ponerEntrenoDeLista = (l, p, k) => elegirDiaDestino(lunesDe(new Date()), "¿En qué día pongo «" + p.nombre + "»?", f => ponerEnDia(l, p, k, f));
 function pintarListas() {
   const cont = $("listasCont");
   if (!cont) return;
@@ -7521,13 +7521,15 @@ function pintarPlan() {
   }
   aplicarGrupoPlan();
 }
+// Los selectores generales parten del calendario real; no mutan la semana navegada ni dias[].id.
+const fechasGenerales = () => Array.from({ length: 7 }, (_, i) => ({ i, id: iso(sumarDias(lunesDe(new Date()), i)) }));
 function menuPlantilla(p) {
   abrirMenu(p.nombre, (esPlantillaCalentamiento(p) ? "Calentamiento · " : "") + resumenItems(p.items || []) + ": " + nombresItems(p.items || []), [
     { texto: "Añadir a un día de esta semana…", accion: () => {
-      // v277 (corrección): dias[].id solo se rellena al pintar la pestaña Semana; si se llega aquí antes salía «NaN undefined» y se guardaba con fecha vacía. Se asignan desde la semana visible (misma fórmula que pintarSemana).
-      dias.forEach(d => { d.id = iso(sumarDias(lunesVista(), d.i)); });
-      // v278: «Elegir otra fecha…» (mismo diálogo que la selección múltiple) además de los siete días de la semana visible
-      abrirMenu("¿A qué día?", "", [{ texto: "📅 Elegir otra fecha…", accion: () => abrirFechaPlantillas([p]) }].concat(dias.map(d => ({ texto: NOMBRES[d.i] + " " + fmt(deIso(d.id)), accion: () => { aplicarPlantilla(d, p); verPestana("semana"); } }))));
+      // v291: fechas propias desde el calendario real, también al entrar antes de visitar Semana; no se modifica dias[].id.
+      const fechas = fechasGenerales();
+      // v278/v291: «Elegir otra fecha…» además de los siete días de la semana actual del calendario.
+      abrirMenu("¿A qué día?", "", [{ texto: "📅 Elegir otra fecha…", accion: () => abrirFechaPlantillas([p]) }].concat(fechas.map(d => ({ texto: NOMBRES[d.i] + " " + fmt(deIso(d.id)), accion: () => { abrirDia(d.id); aplicarPlantilla(dias.find(x => x.id === d.id), p); } }))));
     } },
     { texto: "Compartir con un amigo…", accion: () => compartir(p.nombre, p.items || []) },
     { texto: "Cambiar nombre…", accion: async () => { const n = await pedirNombre("Nombre de la plantilla", p.nombre); if (!n) return;
@@ -10622,7 +10624,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v290" + (BETA ? " beta" : "");
+const VERSION_APP = "v291" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";
@@ -11347,9 +11349,9 @@ $("selPlantDia").addEventListener("click", () => {
   abrirMenu("Añadir " + ps.length + (ps.length === 1 ? " plantilla" : " plantillas"), ps.map(p => p.nombre).join(", "), [
     // v277: cualquier fecha del calendario (el selector de fecha del navegador), sin tener que avanzar semana a semana
     { texto: "📅 Elegir otra fecha…", accion: () => abrirFechaPlantillas(ps) },
-    // v277 (corrección): las fechas de la semana visible se calculan aquí (dias[].id solo se rellena al pintar la pestaña Semana; si aún no se ha pintado estaba vacío → «NaN undefined»)
+    // v291: siete fechas de la semana real, independientes de la semana navegada y de dias[].id.
     ...Array.from({ length: 7 }, (_, i) => {
-      const f = sumarDias(lunesVista(), i), fi = iso(f);
+      const f = sumarDias(lunesDe(new Date()), i), fi = iso(f);
       return { texto: NOMBRES[i] + " " + fmt(f), accion: () => {
         const renom = [];   // v281: nombres repetidos → «Nombre (1)»…
         ps.forEach(p => { const nf = nombreEntrenoLibre(fi, p.nombre); pegarItems(fi, p.items || [], nf); if (nf !== p.nombre) renom.push("«" + nf + "»"); });

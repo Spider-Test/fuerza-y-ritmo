@@ -2498,6 +2498,18 @@ function moverEntreEntrenos(dia, origen, clave, espera, destino, destParte, orde
   avisoDeshacer("Movido al entreno «" + (destino || "Entreno 1") + "»", antes.length ? antes : null);
 }
 // Pasar una parte entera (con sus ejercicios, bloques y bloques vacíos) a otro entreno del día
+// v270: el aviso y el marcador del arrastre de partes viven en index.html (#bannerDestino, #marcaInsercion). Si la página es de una versión anterior (HTML sin actualizar o en caché)
+// no existen y el arrastre lanzaba un error en cada fotograma, de modo que NO se trasladaba nada (v269). Ahora se crean al vuelo con las mismas clases si faltan
+function elementoDestino(id) {
+  let el = $(id);
+  if (el) return el;
+  el = document.createElement("div");
+  el.id = id; el.hidden = true;
+  if (id === "bannerDestino") { el.className = "banner-destino"; el.setAttribute("role", "status"); el.setAttribute("aria-live", "polite"); }
+  else { el.className = "marca-insercion"; el.setAttribute("aria-hidden", "true"); }
+  document.body.appendChild(el);
+  return el;
+}
 // v279/v280: ¿el entreno destino ya tiene una parte con el mismo nombre? Mismo criterio que «Cambiar nombre»: norm() (sin mayúsculas ni acentos), contando partes con
 // series, partes vacías y ejercicios en espera. Lo usan el traslado (menú y arrastre) y la indicación del destino mientras se arrastra
 function parteDuplicadaEnEntreno(dia, destino, parte) {
@@ -3637,7 +3649,7 @@ function pintarDiaSinAncla(dia) {
         const zonasEntreno = { espera: 120, layoutVivo: true,
           lista: () => [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].filter(x => (x.dataset.grupo || "") !== g.nombre && !x.classList.contains("grupo-sueltos")),
           alCambiar: z => {
-            const b = $("bannerDestino"), m = $("marcaInsercion");
+            const b = elementoDestino("bannerDestino"), m = elementoDestino("marcaInsercion");
             document.querySelectorAll(".grupo.zona-invalida").forEach(x => x.classList.remove("zona-invalida"));
             indiceAnt = null; textoAnt = ""; notaArriba = false; b.style.top = ""; b.style.bottom = ""; idxMarca = null; scrollMarca = null;
             // v282: un entreno destino PLEGADO se despliega (solo en pantalla, sin tocar el estado guardado) si la parte se mantiene un instante encima, para elegir la posición en el mismo
@@ -3658,7 +3670,7 @@ function pintarDiaSinAncla(dia) {
           // de la última: al final. Destino plegado o sin partes: al final. El marcador es un elemento fijo (no mueve nada de la página): solo cambia de sitio
           alMoverDentro: (z, y) => {
             if (z.classList.contains("zona-invalida")) return;
-            const b = $("bannerDestino"), m = $("marcaInsercion");
+            const b = elementoDestino("bannerDestino"), m = elementoDestino("marcaInsercion");
             const destino = z.dataset.grupo || "", etq = (z.querySelector(".gn-txt") || {}).textContent || destino;
             const partes = [...z.querySelectorAll(":scope > .parte-caja")], rs = partes.map(x => x.getBoundingClientRect());
             const visibles = !z.classList.contains("g-plegado") && partes.length > 0 && rs.every(r => r.height > 0);
@@ -9829,7 +9841,7 @@ function asaArrastre(el, hermanos, alSoltar, nombre, zonas) {
     const paso = cajas[idx].alto + Math.max(0, hueco);
     let inicioY = e.clientY + y0;
     const zf = el.offsetHeight > 0 ? cajas[idx].alto / el.offsetHeight || 1 : 1;   // zoom del ordenador
-    let dedoY = e.clientY, destino = idx, pendiente = false, vivo = true, dyAplicado = 0;
+    let dedoX = e.clientX, dedoY = e.clientY, destino = idx, pendiente = false, vivo = true, dyAplicado = 0;
     // v283 (partes entre entrenos): lo arrastrado se reduce con suavidad al estar sobre un entreno destino y lo hace desde el punto que agarra el dedo (antes saltaba: la escala era la de CSS,
     // sobre el centro y de golpe, y desplazaba el asa hasta ~29 px respecto al dedo). Solo para zonas que lo piden (las partes); el resto de arrastres no cambia
     let escala = 1, escalaAplicada = 1, gy = 0;
@@ -9859,9 +9871,9 @@ function asaArrastre(el, hermanos, alSoltar, nombre, zonas) {
       else if (dedoY > abajo - 48) scrollBy(0, Math.min(14, dedoY - (abajo - 48)));
       destino = idx;
       // ¿El dedo está encima de una zona? Entonces se resalta y los demás no se apartan
-      let zc = zl.find(x => { const r = x.getBoundingClientRect(); return dedoY >= r.top && dedoY <= r.bottom; }) || null;
+      let zc = zl.find(x => { const r = x.getBoundingClientRect(); return dedoX >= r.left && dedoX <= r.right && dedoY >= r.top && dedoY <= r.bottom; }) || null;
       // v283: la zona en la que ya estás no se pierde al pasar por el hueco entre tarjetas (18 px de margen): evita parpadeos y que lo arrastrado vuelva a ser grande de golpe
-      if (!zc && zona && zonas.layoutVivo) { const r = zona.getBoundingClientRect(); if (dedoY >= r.top - 18 && dedoY <= r.bottom + 18) zc = zona; }
+      if (!zc && zona && zonas.layoutVivo) { const r = zona.getBoundingClientRect(); if (dedoX >= r.left - 18 && dedoX <= r.right + 18 && dedoY >= r.top - 18 && dedoY <= r.bottom + 18) zc = zona; }
       if (zc !== cand) { cand = zc; candDesde = Date.now(); }
       const esperaZona = zonas && zonas.espera !== undefined ? zonas.espera : 450;   // v280: las zonas «entreno entero» (partes) responden casi al instante
       const z = cand && Date.now() - candDesde >= esperaZona ? cand : null;
@@ -9902,7 +9914,7 @@ function asaArrastre(el, hermanos, alSoltar, nombre, zonas) {
     };
     const pedir = () => { if (!pendiente) { pendiente = true; requestAnimationFrame(pintar); } };
     if (zonas) zonas.repintar = pedir;   // v282: la zona puede pedir un fotograma (p. ej. al desplegar un entreno con el dedo quieto)
-    const mover = ev => { dedoY = ev.clientY; pedir(); };
+    const mover = ev => { dedoX = ev.clientX; dedoY = ev.clientY; pedir(); };
     const fin = ev => {
       vivo = false;
       clearTimeout(tZona);
@@ -9910,12 +9922,29 @@ function asaArrastre(el, hermanos, alSoltar, nombre, zonas) {
       asa.removeEventListener("pointermove", mover);
       asa.removeEventListener("pointerup", fin);
       asa.removeEventListener("pointercancel", fin);
+      // Validar siempre la suelta contra el rectángulo actual, incluso si había resaltado.
+      // clientX/clientY y getBoundingClientRect comparten coordenadas de viewport, también tras scroll.
+      let fueraDelOrigen = false;
+      if (ev.type === "pointerup" && zonas && zl.length) {
+        const xS = Number.isFinite(ev.clientX) ? ev.clientX : dedoX;
+        const yS = Number.isFinite(ev.clientY) ? ev.clientY : dedoY;
+        const dentro = r => xS >= r.left && xS <= r.right && yS >= r.top && yS <= r.bottom;
+        const zc = zl.find(x => dentro(x.getBoundingClientRect())) || null;
+        if (zona !== zc) {
+          if (zona) zona.classList.remove("zona-destino");
+          zona = zc;
+          if (zonas.alCambiar) zonas.alCambiar(zc);
+        }
+        if (zc && zonas.alMoverDentro) zonas.alMoverDentro(zc, yS);
+        const origen = zonas.layoutVivo && el.closest(".grupo");
+        fueraDelOrigen = !!origen && !zc && !dentro(origen.getBoundingClientRect());
+      }
       lista.forEach(x => { x.style.transform = ""; x.classList.remove("apartandose"); });
       el.classList.remove("arrastrando", "sobre-zona", "entre-entrenos"); el.style.transformOrigin = "";
       if (zona) zona.classList.remove("zona-destino");
       if (zonas && zonas.alCambiar) zonas.alCambiar(null);   // v280: oculta la indicación del destino (también al cancelar)
       if (ev.type !== "pointercancel" && zona) { el.style.transform = ""; zonas.alSoltar(zona); return; }
-      if (ev.type === "pointercancel" || destino === idx) { if (repintarLuego) pintarBloques(true); return; }
+      if (ev.type === "pointercancel" || fueraDelOrigen || destino === idx) { if (repintarLuego) pintarBloques(true); return; }
       const nuevo = lista.slice();
       nuevo.splice(idx, 1);
       nuevo.splice(destino, 0, el);
@@ -10569,7 +10598,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v288" + (BETA ? " beta" : "");
+const VERSION_APP = "v289" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

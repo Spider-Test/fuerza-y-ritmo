@@ -2742,3 +2742,17 @@ dialog#dlgAviso { margin: auto; }
 /* v283: partes que se arrastran entre entrenos: la escala va en el transform (JS, suavizada y desde el punto agarrado), no en la propiedad scale; solo la opacidad se anima con CSS */
 .arrastrando.entre-entrenos { transition: opacity .14s ease-out !important; }
 .arrastrando.entre-entrenos.sobre-zona { scale: none; }
+
+/* Solo el buscador móvil: cabecera y filtros fuera del desplazamiento de resultados. */
+@media (max-width: 760px) {
+  #selector.selector-visible {
+    top: var(--selector-top, 0px); bottom: auto;
+    max-height: calc(var(--selector-alto, 100dvh) - max(8px, env(safe-area-inset-top, 0px)) - max(8px, env(safe-area-inset-bottom, 0px)));
+    overflow: hidden;
+  }
+  #selector.selector-visible[open] { display: flex; flex-direction: column; }
+  #selector.selector-visible > .d-cab,
+  #selector.selector-visible > .filtro-tipo,
+  #selector.selector-visible > .filtro-clasif { flex-shrink: 0; }
+  #selector.selector-visible #listaEj { min-height: 0; max-height: none; flex: 1 1 auto; overflow-y: auto; }
+}

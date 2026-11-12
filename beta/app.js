@@ -2252,9 +2252,16 @@ function nombresEntrenoDia(fecha) {
 // «Entreno (2)»… (el primero libre). No se rechaza ni se mezcla con el existente. «reservados»: nombres ya elegidos en esta misma operación
 function nombreEntrenoLibre(fecha, nombre, reservados) {
   if (!nombre) return nombre;
-  const usados = nombresEntrenoDia(fecha).concat(reservados || []).map(norm);
-  let n = nombre, k = 1;
-  while (usados.includes(norm(n))) n = nombre + " (" + k++ + ")";
+  return nombreLibreEn(nombre, nombresEntrenoDia(fecha).concat(reservados || []));
+}
+// v285: primer «Nombre», «Nombre (1)», «Nombre (2)»… libre frente a «usados» (mismo criterio de nombres que el resto: norm(), sin mayúsculas ni acentos). Si el nombre ya lleva un
+// sufijo «(n)» y choca, se parte de su base («Torso (1)» → «Torso (2)», no «Torso (1) (1)»). Si no choca, se devuelve tal cual
+function nombreLibreEn(nombre, usados) {
+  const u = (usados || []).map(norm);
+  if (!nombre || !u.includes(norm(nombre))) return nombre;
+  const base = nombre.replace(/\s*\(\d+\)\s*$/, "").trim() || nombre;
+  let k = 1, n;
+  do { n = base + " (" + k++ + ")"; } while (u.includes(norm(n)));
   return n;
 }
 const avisoNombreEntreno = (original, final) => original === final ? "" : "«" + original + "» se ha añadido como «" + final + "» porque ya había un entreno con ese nombre";
@@ -5728,6 +5735,17 @@ function elegirDeLista(l, alElegir) {
     texto: (x.k === sig ? "▶ " : "") + (x.sep ? x.sep.titulo + " · " : "") + x.p.nombre + " · " + resumenItems(x.p.items || []), accion: () => alElegir(x.p, x.k) })));
 }
 // Inserta en la lista (al final o detrás de una posición de items)
+// v285: añadir una plantilla a una lista. La misma plantilla otra vez es la misma entrada repetida (como «Repetir debajo»). Una plantilla DISTINTA cuyo nombre ya existe en la lista
+// entra como copia independiente con el siguiente sufijo libre; la plantilla de origen, su nombre y las demás listas no cambian
+function anadirPlantillaALista(l, p, tras) {
+  const rec = recorrerLista(db.listas[l.id]);
+  if (rec.some(x => x.p.id === p.id) || !rec.some(x => norm(x.p.nombre) === norm(p.nombre))) { insertarEnLista(l, p.id, tras); return; }
+  const nombre = nombreLibreEn(p.nombre, rec.map(x => x.p.nombre).concat(vivos("plantillas").map(x => x.nombre)));
+  const id = nuevoId();
+  cambiar("plantillas", { ...p, id, nombre, items: copiaJson(p.items || []), borrado: false });
+  insertarEnLista(l, id, tras);
+  avisoDeshacer("«" + p.nombre + "» ya estaba en «" + l.nombre + "»: se ha añadido como «" + nombre + "» (copia independiente)", null);
+}
 function insertarEnLista(l, valor, tras) {
   const fresca = db.listas[l.id], items = (fresca.items || []).slice();
   if (tras === undefined || tras < 0) items.push(valor); else items.splice(tras + 1, 0, valor);
@@ -5738,11 +5756,15 @@ async function guardarEnLista(nombreSugerido, series) {
     const nombre = await pedirNombre("Nombre del entrenamiento", nombreSugerido, "Se guarda también en tus plantillas. Si ya hay una con este nombre, se reemplaza.");
     if (!nombre) return;
     const items = itemsDe(series).map(it => it.bloque ? { bloque: true, seccion: it.seccion || "", tramos: it.tramos } : { ejercicio_id: it.ejercicio_id, seccion: it.seccion || "", series: it.series });
-    const existe = vivos("plantillas").find(p => norm(p.nombre) === norm(nombre));
+    // v285: si la lista ya tiene una entrada con ese nombre, esta es OTRA entrada: se guarda como plantilla nueva con el siguiente sufijo libre («Nombre (1)»…) y no se reemplaza
+    // (antes se reutilizaba la plantilla del mismo nombre: la primera entrada perdía su contenido y la lista acababa con dos entradas iguales)
+    const enLista = recorrerLista(db.listas[l.id]).map(x => x.p.nombre);
+    const final = nombreLibreEn(nombre, enLista.some(n => norm(n) === norm(nombre)) ? enLista.concat(vivos("plantillas").map(p => p.nombre)) : []);
+    const existe = final === nombre ? vivos("plantillas").find(p => norm(p.nombre) === norm(nombre)) : null;
     const id = existe ? existe.id : nuevoId();
-    cambiar("plantillas", { id, nombre, items, borrado: false });
+    cambiar("plantillas", { id, nombre: final, items, borrado: false });
     insertarEnLista(l, id);
-    avisoDeshacer("«" + nombre + "» guardado en la lista «" + l.nombre + "»", null);
+    avisoDeshacer("«" + nombre + "» guardado en la lista «" + l.nombre + "»" + (final !== nombre ? " como «" + final + "» porque ya había una entrada con ese nombre" : ""), null);
   });
 }
 // Pone el entrenamiento k de la lista en un día; el siguiente pasa a ser el de después
@@ -5781,7 +5803,7 @@ function pintarListas() {
       sec.classList.toggle("cerrada", !abrir); boton.setAttribute("aria-expanded", String(abrir)); cuerpo.inert = !abrir;
       listasAbiertas[l.id] = abrir; escribir("listas-abiertas-v1", listasAbiertas);
     });
-    const anadir = tras => elegirPlantilla("Añadir a «" + l.nombre + "»", p => insertarEnLista(l, p.id, tras));
+    const anadir = tras => elegirPlantilla("Añadir a «" + l.nombre + "»", p => anadirPlantillaALista(l, p, tras));
     const nuevaSemana = async tras => {
       const n = await pedirNombre("Nombre del bloque", "Semana " + (nSem + 1), "Por ejemplo «Semana 1», «Semana 4 · descarga», «Bloque de fuerza» o «Pretemporada». Dentro pondrás sus entrenamientos.");
       if (n) insertarEnLista(l, { sep: nuevoId(), titulo: n }, tras);
@@ -5992,7 +6014,18 @@ function pintarListas() {
         { texto: "Poner en un día…", accion: () => ponerEntrenoDeLista(l, p, kk) },
         kk !== sig && { texto: "Marcar como el siguiente", accion: () => guardarLista(db.listas[l.id], { siguiente: kk }) },
         { texto: "Repetir debajo", accion: () => insertarEnLista(l, p.id, i) },
-        { texto: "Añadir también a otra lista…", accion: () => elegirLista("¿A qué lista?", l2 => insertarEnLista(l2, p.id)) },
+        // v285: corrección explícita (nunca automática) de listas antiguas con la misma plantilla repetida: esta entrada pasa a ser una copia independiente con nombre libre
+        rec.filter(x => x.p.id === p.id).length > 1 && { texto: "Hacer esta entrada independiente", accion: () => {
+          const fresca = db.listas[l.id], antes = [["listas", { ...fresca }]];
+          const nombre = nombreLibreEn(p.nombre, recorrerLista(fresca).map(x => x.p.nombre).concat(vivos("plantillas").map(x => x.nombre)));
+          const id = nuevoId();
+          cambiar("plantillas", { ...p, id, nombre, items: copiaJson(p.items || []), borrado: false });
+          antes.push(["plantillas", { ...db.plantillas[id], borrado: true }]);
+          const its = (fresca.items || []).slice(); its[i] = id;
+          guardarLista(fresca, { items: its });
+          avisoDeshacer("Entrada independiente: «" + nombre + "»", antes);
+        } },
+        { texto: "Añadir también a otra lista…", accion: () => elegirLista("¿A qué lista?", l2 => anadirPlantillaALista(l2, p)) },
         { texto: "Quitar de la lista", accion: () => {
           const fresca = db.listas[l.id], antes = [["listas", { ...fresca }]];
           const its = (fresca.items || []).slice(); its.splice(i, 1);
@@ -7419,7 +7452,12 @@ function menuPlantilla(p) {
       abrirMenu("¿A qué día?", "", [{ texto: "📅 Elegir otra fecha…", accion: () => abrirFechaPlantillas([p]) }].concat(dias.map(d => ({ texto: NOMBRES[d.i] + " " + fmt(deIso(d.id)), accion: () => { aplicarPlantilla(d, p); verPestana("semana"); } }))));
     } },
     { texto: "Compartir con un amigo…", accion: () => compartir(p.nombre, p.items || []) },
-    { texto: "Cambiar nombre…", accion: async () => { const n = await pedirNombre("Nombre de la plantilla", p.nombre); if (n) { cambiar("plantillas", { ...p, nombre: n }); pintarPlan(); } } },
+    { texto: "Cambiar nombre…", accion: async () => { const n = await pedirNombre("Nombre de la plantilla", p.nombre); if (!n) return;
+      // v285: en cada lista donde está esta plantilla no puede haber otra entrada con el mismo nombre; si lo hay, se usa el siguiente sufijo libre y se avisa
+      const usados = []; vivos("listas").forEach(l => { const rec = recorrerLista(l); if (rec.some(x => x.p.id === p.id)) rec.forEach(x => { if (x.p.id !== p.id) usados.push(x.p.nombre); }); });
+      const final = nombreLibreEn(n, usados);
+      cambiar("plantillas", { ...p, nombre: final }); pintarPlan();
+      if (final !== n) avisoDeshacer("«" + n + "» ya existe en una lista de esta plantilla: se ha guardado como «" + final + "»", null); } },
     { texto: "Eliminar plantilla", peligro: true, accion: () => { cambiar("plantillas", { ...p, borrado: true }); pintarPlan(); } }
   ]);
 }
@@ -10489,7 +10527,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v284" + (BETA ? " beta" : "");
+const VERSION_APP = "v285" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

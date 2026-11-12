@@ -2119,6 +2119,16 @@ function menuDia(dia) {
   ]);
 }
 // ---------- Partes de un entreno (opcionales): cabecera de color con su progreso y su menú ----------
+// Secuencia visual compartida por el marcador y la persistencia de partes/ejercicios sueltos.
+function elementoMixtoParte(el, dia, grupo) {
+  const nombre = el.classList.contains("parte-caja") ? el.dataset.parte : "";
+  const tarjetas = nombre ? [...el.querySelectorAll(".bloque[data-clave]")] : [el];
+  return { nombre, items: tarjetas.map(x => ({ clave: x.dataset.clave, ids: seriesDeItem(dia.id, grupo, x.dataset.clave).map(s => s.id) })) };
+}
+function datosMixtosParte(secuencia) {
+  const tokens = secuencia.flatMap(p => (p.nombre ? [{ t: "p", nombre: p.nombre }] : []).concat(p.items.map(e => ({ t: "e", clave: e.clave, dentro: p.nombre, conSeries: e.ids.length > 0 }))));
+  return { nombres: secuencia.filter(p => p.nombre).map(p => p.nombre), pos: calcPosPartes(tokens), series: secuencia.flatMap(p => p.items.map(e => e.ids.map(id => db.series[id]).filter(Boolean))) };
+}
 function cabeceraParte(dia, grupo, p, color, nNombradas, partes, seriesItem) {
   const cab = document.createElement("div");
   cab.className = "parte-cab" + color;
@@ -2266,21 +2276,22 @@ function parteDuplicadaEnEntreno(dia, destino, parte) {
   const nomDestino = nombresPartes(dia.id, destino).concat((enEspera[dia.id] || []).filter(id => (esperaGrupo[dia.id + "|" + id] || "") === destino).map(id => esperaParte[dia.id + "|" + id] || ""));
   return nomDestino.some(p => norm(p) === norm(parte));
 }
-function moverParteAEntreno(dia, origen, parte, destino, seriesParte, etiqueta, abrirDestino, nombresDestino, indice) {
+function moverParteAEntreno(dia, origen, parte, destino, seriesParte, etiqueta, abrirDestino, nombresDestino, indice, secuenciaDestino) {
   // v279: NO se fusionan partes. Si el entreno destino ya tiene una parte con el mismo nombre se cancela sin tocar nada: ni series, ni estructura, ni orden, ni plegados
   if (parteDuplicadaEnEntreno(dia, destino, parte)) {
     const m = "Ese entrenamiento ya tiene una parte con este nombre. Renómbrala o elige otro destino.";
     setEstado(m, true); avisoDeshacer(m, null);
     return false;
   }
+  const idsParte = new Set(seriesParte.map(sr => sr.id));
   const antes = seriesParte.map(sr => ["series", { ...sr }]);
   // v281: «Deshacer» también devuelve el «orden» de las series del destino, que se realinea para el modo entreno
-  seriesDelDia(dia.id).filter(x => (x.grupo || "") === destino && !seriesParte.includes(x)).forEach(x => antes.push(["series", { ...x }]));
+  seriesDelDia(dia.id).filter(x => (x.grupo || "") === destino && !idsParte.has(x.id)).forEach(x => antes.push(["series", { ...x }]));
   // v279: «Deshacer» también devuelve la estructura (partes vacías, esperas, bloques vacíos, orden y posición de partes), no solo las series
   const estr = JSON.stringify({ eg: esperaGrupo, bv: bloquesVacios, pv: partesVacias, op: ordenPartes, pp: posPartes, og: ordenGrupos, sv: sesionesVacias, gp: gruposPlegados });
   const ordenG0 = [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].map(x => x.dataset.grupo || "");   // orden actual de los entrenos del día: no debe cambiar al sacar la parte del origen
   // v279: la parte pasa al FINAL de las partes del entreno destino y no cambia el orden de los entrenos: sus series se renumeran (misma secuencia relativa) detrás de las del destino
-  const enDestino = seriesDelDia(dia.id).filter(x => !seriesParte.includes(x) && (x.grupo || "") === destino);
+  const enDestino = seriesDelDia(dia.id).filter(x => !idsParte.has(x.id) && (x.grupo || "") === destino);
   const ordenBase = enDestino.length ? Math.max(...enDestino.map(x => n0(x.orden))) : null;
   const ordenNuevo = new Map(seriesParte.slice().sort((a, b) => n0(a.orden) - n0(b.orden)).map((sr, k) => [sr, ordenBase === null ? sr.orden : ordenBase + 1 + k]));
   antes.push(["fn", () => { const e = JSON.parse(estr); esperaGrupo = e.eg; bloquesVacios = e.bv; partesVacias = e.pv; ordenPartes = e.op; posPartes = e.pp; ordenGrupos = e.og; sesionesVacias = e.sv; gruposPlegados = e.gp; escribir("grupos-plegados-v1", gruposPlegados); guardarSesiones(); guardarVacios(); }]);
@@ -2288,7 +2299,7 @@ function moverParteAEntreno(dia, origen, parte, destino, seriesParte, etiqueta, 
     let extra = {};
     if (!sr.bloque_id) {
       const mia = n0(sr.copia) > 1 ? n0(sr.copia) : 1;
-      const usadas = seriesDelDia(dia.id).filter(x => !seriesParte.includes(x) && x.ejercicio_id === sr.ejercicio_id && !x.bloque_id && (x.grupo || "") === destino && (x.seccion || "") === parte).map(x => n0(x.copia) > 1 ? n0(x.copia) : 1);
+      const usadas = seriesDelDia(dia.id).filter(x => !idsParte.has(x.id) && x.ejercicio_id === sr.ejercicio_id && !x.bloque_id && (x.grupo || "") === destino && (x.seccion || "") === parte).map(x => n0(x.copia) > 1 ? n0(x.copia) : 1);
       if (usadas.includes(mia)) extra = { copia: Math.max(...usadas) + 1 };
     }
     cambiar("series", { ...sr, grupo: destino, orden: ordenNuevo.get(sr), ...extra }, true);
@@ -2301,12 +2312,17 @@ function moverParteAEntreno(dia, origen, parte, destino, seriesParte, etiqueta, 
   if (ordenPartes[ko]) { const r = ordenPartes[ko].filter(x => x !== parte); if (r.length) ordenPartes[ko] = r; else delete ordenPartes[ko]; }   // v249: ya no pertenece al orden del entreno de origen
   if (posPartes[ko] && Object.hasOwn(posPartes[ko], parte)) { delete posPartes[ko][parte]; if (!Object.keys(posPartes[ko]).length) delete posPartes[ko]; }   // v250: ni su posición (en el destino va al final, como antes)
   // v280: si la parte era lo único del entreno de origen, el entreno NO desaparece: queda como entreno vacío (se puede borrar desde su ⋯)
-  if (origen && !seriesDelDia(dia.id).some(x => (x.grupo || "") === origen && !seriesParte.includes(x)) && !(sesionesVacias[dia.id] || []).includes(origen)) (sesionesVacias[dia.id] = sesionesVacias[dia.id] || []).push(origen);
+  if (origen && !seriesDelDia(dia.id).some(x => (x.grupo || "") === origen && !idsParte.has(x.id)) && !(sesionesVacias[dia.id] || []).includes(origen)) (sesionesVacias[dia.id] = sesionesVacias[dia.id] || []).push(origen);
   if (ordenG0.length > 1) ordenGrupos[dia.id] = ordenG0;   // v279: el origen pierde sus series más antiguas y, sin esto, su entreno saltaba de sitio
   // v281: posición elegida en el mismo arrastre. nombresDestino = partes con nombre del destino en el orden en que se veían; indice = dónde entra. Al final (o sin posición)
   // queda como en v279 (detrás de todo). Al principio o en medio: orden explícito de partes del destino y «orden» de sus series realineado (los mismos huecos de «orden»
   // reasignados en el orden visual; las series sin parte no se tocan) para que el modo entreno siga el orden que ves
-  {
+  if (secuenciaDestino) {
+    const datos = datosMixtosParte(secuenciaDestino);
+    ordenPartes[kd] = datos.nombres;
+    ponerPosPartes(kd, datos.pos);
+    reordenar(datos.series, "");
+  } else {
     const cajaD = [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].find(x => (x.dataset.grupo || "") === destino);
     const base = Array.isArray(nombresDestino) ? nombresDestino : cajaD ? [...cajaD.querySelectorAll(":scope > .parte-caja")].map(x => x.dataset.parte || "") : [];   // sin posición (menú): al final
     const nombres2 = base.filter(x => x !== parte); nombres2.splice(indice === undefined ? nombres2.length : Math.min(indice, nombres2.length), 0, parte);
@@ -3385,8 +3401,13 @@ function pintarDiaSinAncla(dia) {
         // porque ya tiene una con ese nombre). El asa se muestra aunque sea la única parte si existe otro entreno destino: se calcula con los datos del día, no con el DOM aún a medio pintar
         const hayDestinoParte = grupos.some(x => x.nombre && x.nombre !== g.nombre);
         let objetivo = null, indiceAnt = null, textoAnt = "", abiertas = [], zonaAct = null, tAbrir = 0, notaArriba = false, idxMarca = null, scrollMarca = null;   // v281: posición de inserción calculada en el último fotograma (la usa alSoltar); v282: entrenos plegados desplegados solo mientras se arrastra
+        cabP.ordenarMixto = secuencia => {
+          const datos = datosMixtosParte(secuencia), kp = dia.id + "|" + g.nombre;
+          const vacias = partesVacias[kp] || [];
+          fijarOrden("p", kp, datos.nombres, datos.series, "Parte movida", datos.nombres.filter(n => vacias.includes(n)), datos.pos);
+        };
         const zonasEntreno = { espera: 120, layoutVivo: true,
-          lista: () => [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].filter(x => (x.dataset.grupo || "") !== g.nombre && !x.classList.contains("grupo-sueltos")),
+          lista: () => [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].filter(x => !x.classList.contains("grupo-sueltos")),
           alCambiar: z => {
             const b = elementoDestino("bannerDestino"), m = elementoDestino("marcaInsercion");
             document.querySelectorAll(".grupo.zona-invalida").forEach(x => x.classList.remove("zona-invalida"));
@@ -3400,7 +3421,7 @@ function pintarDiaSinAncla(dia) {
               if (zonaAct === z && z.classList.contains("g-plegado")) { z.classList.remove("g-plegado"); abiertas.push(z); if (zonasEntreno.repintar) zonasEntreno.repintar(); }
             }, 300);
             if (!z) { b.hidden = true; m.hidden = true; return; }   // «objetivo» se conserva: alSoltar se llama justo después
-            const destino = z.dataset.grupo || "", etq = (z.querySelector(".gn-txt") || {}).textContent || destino, dup = parteDuplicadaEnEntreno(dia, destino, p.nombre);
+            const destino = z.dataset.grupo || "", etq = (z.querySelector(".gn-txt") || {}).textContent || destino, dup = destino !== g.nombre && parteDuplicadaEnEntreno(dia, destino, p.nombre);
             z.classList.toggle("zona-invalida", dup);
             b.classList.toggle("invalido", dup); m.classList.toggle("invalido", dup);
             if (dup) { b.textContent = "«" + etq + "» ya tiene una parte con el nombre «" + p.nombre + "»: no se puede mover aquí"; b.hidden = false; m.hidden = true; objetivo = null; }
@@ -3411,9 +3432,9 @@ function pintarDiaSinAncla(dia) {
             if (z.classList.contains("zona-invalida")) return;
             const b = elementoDestino("bannerDestino"), m = elementoDestino("marcaInsercion");
             const destino = z.dataset.grupo || "", etq = (z.querySelector(".gn-txt") || {}).textContent || destino;
-            const partes = [...z.querySelectorAll(":scope > .parte-caja")], rs = partes.map(x => x.getBoundingClientRect());
+            const partes = [...z.querySelectorAll(":scope > .parte-caja, :scope > .bloque[data-clave]")].filter(x => x !== dest), rs = partes.map(x => x.getBoundingClientRect());
             const visibles = !z.classList.contains("g-plegado") && partes.length > 0 && rs.every(r => r.height > 0);
-            const nombres = partes.map(x => x.dataset.parte || "");
+            const nombres = partes.map(x => x.dataset.parte || (x.querySelector(".ej-nombre, .br-tit") || {}).textContent || "Ejercicio suelto");
             let idx = nombres.length, marcaY = null, texto;
             if (!visibles) { texto = "Suelta aquí: «" + p.nombre + "» se añadirá al final de las partes de «" + etq + "»"; }
             else {
@@ -3424,7 +3445,9 @@ function pintarDiaSinAncla(dia) {
               const dentro = h >= 0 ? (idx === h ? "antes de «" + nombres[h] + "»" : "después de «" + nombres[h] + "»") : idx === 0 ? "al principio, antes de «" + nombres[0] + "»" : idx === rs.length ? "al final, después de «" + nombres[nombres.length - 1] + "»" : "entre «" + nombres[idx - 1] + "» y «" + nombres[idx] + "»";
               texto = "Suelta aquí: «" + p.nombre + "» se insertará " + dentro + " (" + etq + ")";
             }
-            indiceAnt = idx; objetivo = { destino, etq, nombres, indice: idx };
+            const secuencia = partes.map(x => elementoMixtoParte(x, dia, destino));
+            secuencia.splice(idx, 0, elementoMixtoParte(dest, dia, g.nombre));
+            indiceAnt = idx; objetivo = { destino, etq, nombres, indice: idx, secuencia };
             if (texto !== textoAnt) { b.textContent = texto; textoAnt = texto; }
             // v282: la nota va abajo (sobre la barra de pestañas); si la posición de inserción o el dedo quedan en su zona, pasa ARRIBA (bajo la cabecera) y se queda ahí hasta cambiar de entreno,
             // para no tapar el marcador ni las partes del destino desplegado y sin saltar de un lado a otro
@@ -3445,10 +3468,11 @@ function pintarDiaSinAncla(dia) {
           alSoltar: z => {
             const destino = z.dataset.grupo || "", etq = (z.querySelector(".gn-txt") || {}).textContent || destino;
             const o = objetivo && objetivo.destino === destino ? objetivo : null;
-            moverParteAEntreno(dia, g.nombre, p.nombre, destino, p.ids.flatMap(seriesItem), etq, true, o ? o.nombres : undefined, o ? o.indice : undefined);
+            if (destino === g.nombre) { if (o) cabP.ordenarMixto(o.secuencia); }
+            else moverParteAEntreno(dia, g.nombre, p.nombre, destino, p.ids.flatMap(seriesItem), etq, true, o ? o.nombres : undefined, o ? o.indice : undefined, o ? o.secuencia : undefined);
             objetivo = null;
           } };
-        if (conNombre.length > 1 || hayDestinoParte) cabP.appendChild(asaArrastre(dest, () => [...caja.querySelectorAll(":scope > .parte-caja")], n => cabP.ordenarPartes(n.map(x => x.dataset.parte || "")), "parte " + p.nombre, zonasEntreno));
+        if (conNombre.length > 1 || hayDestinoParte || partes.some(x => !x.nombre && x.ids.length)) cabP.appendChild(asaArrastre(dest, () => [...caja.querySelectorAll(":scope > .parte-caja")], n => cabP.ordenarPartes(n.map(x => x.dataset.parte || "")), "parte " + p.nombre, zonasEntreno));
         const claveP = "p|" + dia.id + "|" + g.nombre + "|" + p.nombre, tg = cabP.querySelector(".p-toggle");
         const ponerP = pl => { dest.classList.toggle("p-plegada", pl); tg.setAttribute("aria-expanded", String(!pl)); };
         ponerP(gruposPlegados[claveP] !== 0);
@@ -9312,7 +9336,7 @@ function asaArrastre(el, hermanos, alSoltar, nombre, zonas) {
     const paso = cajas[idx].alto + Math.max(0, hueco);
     let inicioY = e.clientY + y0;
     const zf = el.offsetHeight > 0 ? cajas[idx].alto / el.offsetHeight || 1 : 1;   // zoom del ordenador
-    let dedoY = e.clientY, destino = idx, pendiente = false, vivo = true, dyAplicado = 0;
+    let dedoX = e.clientX, dedoY = e.clientY, destino = idx, pendiente = false, vivo = true, dyAplicado = 0;
     // v283 (partes entre entrenos): lo arrastrado se reduce con suavidad al estar sobre un entreno destino y lo hace desde el punto que agarra el dedo (antes saltaba: la escala era la de CSS,
     // sobre el centro y de golpe, y desplazaba el asa hasta ~29 px respecto al dedo). Solo para zonas que lo piden (las partes); el resto de arrastres no cambia
     let escala = 1, escalaAplicada = 1, gy = 0;
@@ -9342,9 +9366,9 @@ function asaArrastre(el, hermanos, alSoltar, nombre, zonas) {
       else if (dedoY > abajo - 48) scrollBy(0, Math.min(14, dedoY - (abajo - 48)));
       destino = idx;
       // ¿El dedo está encima de una zona? Entonces se resalta y los demás no se apartan
-      let zc = zl.find(x => { const r = x.getBoundingClientRect(); return dedoY >= r.top && dedoY <= r.bottom; }) || null;
+      let zc = zl.find(x => { const r = x.getBoundingClientRect(); return dedoX >= r.left && dedoX <= r.right && dedoY >= r.top && dedoY <= r.bottom; }) || null;
       // v283: la zona en la que ya estás no se pierde al pasar por el hueco entre tarjetas (18 px de margen): evita parpadeos y que lo arrastrado vuelva a ser grande de golpe
-      if (!zc && zona && zonas.layoutVivo) { const r = zona.getBoundingClientRect(); if (dedoY >= r.top - 18 && dedoY <= r.bottom + 18) zc = zona; }
+      if (!zc && zona && zonas.layoutVivo) { const r = zona.getBoundingClientRect(); if (dedoX >= r.left - 18 && dedoX <= r.right + 18 && dedoY >= r.top - 18 && dedoY <= r.bottom + 18) zc = zona; }
       if (zc !== cand) { cand = zc; candDesde = Date.now(); }
       const esperaZona = zonas && zonas.espera !== undefined ? zonas.espera : 450;   // v280: las zonas «entreno entero» (partes) responden casi al instante
       const z = cand && Date.now() - candDesde >= esperaZona ? cand : null;
@@ -9385,7 +9409,7 @@ function asaArrastre(el, hermanos, alSoltar, nombre, zonas) {
     };
     const pedir = () => { if (!pendiente) { pendiente = true; requestAnimationFrame(pintar); } };
     if (zonas) zonas.repintar = pedir;   // v282: la zona puede pedir un fotograma (p. ej. al desplegar un entreno con el dedo quieto)
-    const mover = ev => { dedoY = ev.clientY; pedir(); };
+    const mover = ev => { dedoX = ev.clientX; dedoY = ev.clientY; pedir(); };
     const fin = ev => {
       vivo = false;
       clearTimeout(tZona);
@@ -9393,20 +9417,29 @@ function asaArrastre(el, hermanos, alSoltar, nombre, zonas) {
       asa.removeEventListener("pointermove", mover);
       asa.removeEventListener("pointerup", fin);
       asa.removeEventListener("pointercancel", fin);
-      // v271: la espera de 120 ms solo gobierna el RESALTADO del destino. Soltar sobre un entreno destino válido completa el traslado aunque se suelte antes de que se haya confirmado
-      // (antes, soltar a menos de ~150 ms de llegar a la tarjeta no hacía nada: sin error, sin aviso y sin resaltado previo, la parte seguía en su sitio). Se recalcula el destino y la posición
-      // con la posición del puntero al soltar; si no está sobre ningún destino, no cambia nada
-      if (ev.type === "pointerup" && !zona && zonas && zl.length) {
-        const yS = typeof ev.clientY === "number" ? ev.clientY : dedoY;
-        const zc = zl.find(x => { const r = x.getBoundingClientRect(); return yS >= r.top && yS <= r.bottom; });
-        if (zc) { zona = zc; if (zonas.alCambiar) zonas.alCambiar(zc); if (zonas.alMoverDentro) zonas.alMoverDentro(zc, yS); }
+      // Validar siempre la suelta contra el rectángulo actual, incluso si había resaltado.
+      // clientX/clientY y getBoundingClientRect comparten coordenadas de viewport, también tras scroll.
+      let fueraDelOrigen = false;
+      if (ev.type === "pointerup" && zonas && zl.length) {
+        const xS = Number.isFinite(ev.clientX) ? ev.clientX : dedoX;
+        const yS = Number.isFinite(ev.clientY) ? ev.clientY : dedoY;
+        const dentro = r => xS >= r.left && xS <= r.right && yS >= r.top && yS <= r.bottom;
+        const zc = zl.find(x => dentro(x.getBoundingClientRect())) || null;
+        if (zona !== zc) {
+          if (zona) zona.classList.remove("zona-destino");
+          zona = zc;
+          if (zonas.alCambiar) zonas.alCambiar(zc);
+        }
+        if (zc && zonas.alMoverDentro) zonas.alMoverDentro(zc, yS);
+        const origen = zonas.layoutVivo && el.closest(".grupo");
+        fueraDelOrigen = !!origen && !zc && !dentro(origen.getBoundingClientRect());
       }
       lista.forEach(x => { x.style.transform = ""; x.classList.remove("apartandose"); });
       el.classList.remove("arrastrando", "sobre-zona", "entre-entrenos"); el.style.transformOrigin = "";
       if (zona) zona.classList.remove("zona-destino");
       if (zonas && zonas.alCambiar) zonas.alCambiar(null);   // v280: oculta la indicación del destino (también al cancelar)
       if (ev.type !== "pointercancel" && zona) { el.style.transform = ""; zonas.alSoltar(zona); return; }
-      if (ev.type === "pointercancel" || destino === idx) { if (repintarLuego) pintarBloques(true); return; }
+      if (ev.type === "pointercancel" || fueraDelOrigen || destino === idx) { if (repintarLuego) pintarBloques(true); return; }
       const nuevo = lista.slice();
       nuevo.splice(idx, 1);
       nuevo.splice(destino, 0, el);
@@ -10054,7 +10087,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v273" + (BETA ? " beta" : "");
+const VERSION_APP = "v274" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

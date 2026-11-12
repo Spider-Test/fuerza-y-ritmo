@@ -2808,3 +2808,7 @@ dialog#dlgAviso { margin: auto; }
 .marca-insercion { position: fixed; height: 4px; border-radius: 3px; background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); z-index: 32; pointer-events: none; }
 .marca-insercion.invalido { background: var(--error, #c0392b); }
 .marca-insercion[hidden] { display: none; }
+
+/* v283: partes que se arrastran entre entrenos: la escala va en el transform (JS, suavizada y desde el punto agarrado), no en la propiedad scale; solo la opacidad se anima con CSS */
+.arrastrando.entre-entrenos { transition: opacity .14s ease-out !important; }
+.arrastrando.entre-entrenos.sobre-zona { scale: none; }

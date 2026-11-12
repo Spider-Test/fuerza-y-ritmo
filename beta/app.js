@@ -5753,18 +5753,18 @@ function insertarEnLista(l, valor, tras) {
 }
 async function guardarEnLista(nombreSugerido, series) {
   elegirLista("¿En qué lista lo guardo?", async l => {
-    const nombre = await pedirNombre("Nombre del entrenamiento", nombreSugerido, "Se guarda también en tus plantillas. Si ya hay una con este nombre, se reemplaza.");
+    const nombre = await pedirNombre("Nombre del entrenamiento", nombreSugerido, "Se guarda también en tus plantillas. Si ya hay una plantilla o una entrada con este nombre, se guarda como copia nueva con sufijo («Nombre (1)»); no se reemplaza nada.");
     if (!nombre) return;
     const items = itemsDe(series).map(it => it.bloque ? { bloque: true, seccion: it.seccion || "", tramos: it.tramos } : { ejercicio_id: it.ejercicio_id, seccion: it.seccion || "", series: it.series });
-    // v285: si la lista ya tiene una entrada con ese nombre, esta es OTRA entrada: se guarda como plantilla nueva con el siguiente sufijo libre («Nombre (1)»…) y no se reemplaza
-    // (antes se reutilizaba la plantilla del mismo nombre: la primera entrada perdía su contenido y la lista acababa con dos entradas iguales)
-    const enLista = recorrerLista(db.listas[l.id]).map(x => x.p.nombre);
-    const final = nombreLibreEn(nombre, enLista.some(n => norm(n) === norm(nombre)) ? enLista.concat(vivos("plantillas").map(p => p.nombre)) : []);
-    const existe = final === nombre ? vivos("plantillas").find(p => norm(p.nombre) === norm(nombre)) : null;
-    const id = existe ? existe.id : nuevoId();
+    // v286: guardar en una lista SIEMPRE crea una plantilla nueva e independiente y enlaza solo esta entrada. Si el nombre ya existe en cualquier plantilla (puede estar en otras listas) o
+    // en esta lista, se usa el siguiente sufijo libre («Nombre (1)»…). Nunca se reemplaza ni se modifica una plantilla existente (eso queda para su acción explícita de edición). Repetir la
+    // acción crea otra entrada independiente (v284 y anteriores reutilizaban la plantilla del mismo nombre; v285 solo lo evitaba si el nombre estaba en esta lista)
+    const usados = recorrerLista(db.listas[l.id]).map(x => x.p.nombre).concat(vivos("plantillas").map(p => p.nombre));
+    const final = nombreLibreEn(nombre, usados);
+    const id = nuevoId();
     cambiar("plantillas", { id, nombre: final, items, borrado: false });
     insertarEnLista(l, id);
-    avisoDeshacer("«" + nombre + "» guardado en la lista «" + l.nombre + "»" + (final !== nombre ? " como «" + final + "» porque ya había una entrada con ese nombre" : ""), null);
+    avisoDeshacer("«" + nombre + "» guardado en la lista «" + l.nombre + "»" + (final !== nombre ? " como «" + final + "» porque ya existía una plantilla o entrada con ese nombre" : ""), null);
   });
 }
 // Pone el entrenamiento k de la lista en un día; el siguiente pasa a ser el de después
@@ -10527,7 +10527,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v285" + (BETA ? " beta" : "");
+const VERSION_APP = "v286" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

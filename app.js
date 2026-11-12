@@ -3111,7 +3111,7 @@ async function abrirCompartido(texto) {
   const listaEj = itemsDeLista(c);
   // Varias plantillas juntas: vista previa y guardarlas (o añadirlas a un día)
   if (c.items[0] && c.items[0].paquete) {
-    const x = c.items[0], lunesP = lunesVista();
+    const x = c.items[0], lunesP = lunesDe(new Date());
     const vista = document.createElement("div");
     x.plantillas.forEach(p => vista.appendChild(desplegableItems(p.nombre, p.items)));
     abrirMenu("«" + c.nombre + "»", de + ". Solo lo estás viendo: toca cada plantilla para ver sus ejercicios. No se añade nada hasta que tú quieras.",
@@ -3133,7 +3133,7 @@ async function abrirCompartido(texto) {
     return;
   }
   // Un entrenamiento: primero solo se ve; «Añadir a mi rutina» deja elegir día o guardarlo como plantilla
-  const lunes = lunesVista();
+  const lunes = lunesDe(new Date());
   abrirMenu("«" + c.nombre + "»", de + " · " + contarSeries(c.items) + " series. Solo lo estás viendo: no se añade nada hasta que tú quieras.",
     [{ texto: "+ Añadir a mi rutina…", accion: () => abrirMenu("¿Cómo lo añado?", "«" + c.nombre + "»", [
       { texto: "Ponerlo en un día…", accion: () => elegirDiaDestino(lunes, "¿En qué día pongo «" + c.nombre + "»?", async f => {
@@ -5403,7 +5403,7 @@ function ponerEnDia(l, p, k, f) {
   persistir();
   irADia(f, "«" + nf + "» puesto el " + NOMBRES[(deIso(f).getDay() + 6) % 7].toLowerCase() + " " + fmt(deIso(f)) + (nf !== p.nombre ? " (ya había un entreno «" + p.nombre + "»)" : ""));
 }
-const ponerEntrenoDeLista = (l, p, k) => elegirDiaDestino(lunesVista(), "¿En qué día pongo «" + p.nombre + "»?", f => ponerEnDia(l, p, k, f));
+const ponerEntrenoDeLista = (l, p, k) => elegirDiaDestino(lunesDe(new Date()), "¿En qué día pongo «" + p.nombre + "»?", f => ponerEnDia(l, p, k, f));
 function pintarListas() {
   const cont = $("listasCont");
   if (!cont) return;
@@ -7012,11 +7012,13 @@ function pintarPlan() {
   }
   aplicarGrupoPlan();
 }
+// Los selectores generales parten del calendario real; no mutan la semana navegada ni dias[].id.
+const fechasGenerales = () => Array.from({ length: 7 }, (_, i) => ({ i, id: iso(sumarDias(lunesDe(new Date()), i)) }));
 function menuPlantilla(p) {
   abrirMenu(p.nombre, resumenItems(p.items || []) + ": " + nombresItems(p.items || []), [
     { texto: "Añadir a un día de esta semana…", accion: () => {
-      asegurarFechasSemana();
-      abrirMenu("¿A qué día?", p.nombre, [{ texto: "📅 Elegir otra fecha…", accion: () => abrirFechaPlantillas([p]) }].concat(dias.map(d => ({ texto: NOMBRES[d.i] + " " + fmt(deIso(d.id)), accion: () => abrirFechaPlantillas([p], d.id) }))));
+      const fechas = fechasGenerales();
+      abrirMenu("¿A qué día?", p.nombre, [{ texto: "📅 Elegir otra fecha…", accion: () => abrirFechaPlantillas([p]) }].concat(fechas.map(d => ({ texto: NOMBRES[d.i] + " " + fmt(deIso(d.id)), accion: () => abrirFechaPlantillas([p], d.id) }))));
     } },
     { texto: "Compartir con un amigo…", accion: () => compartir(p.nombre, p.items || []) },
     { texto: "Cambiar nombre…", accion: async () => { const n = await pedirNombre("Nombre de la plantilla", p.nombre); if (!n) return;
@@ -10090,7 +10092,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v275" + (BETA ? " beta" : "");
+const VERSION_APP = "v276" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";
@@ -10812,10 +10814,10 @@ $("selPlantCancelar").addEventListener("click", salirSeleccion);
 $("selPlantDia").addEventListener("click", () => {
   // O-3: Set conserva el orden de selección; otros usos de plantillasSel no cambian.
   const ps = [...(selPlant || [])].map(id => db.plantillas[id]).filter(p => p && !p.borrado);
-  asegurarFechasSemana();
+  const fechas = fechasGenerales();
   abrirMenu("Añadir " + ps.length + (ps.length === 1 ? " plantilla" : " plantillas"), ps.map(p => p.nombre).join(" → "), [
     { texto: "📅 Elegir otra fecha…", accion: () => abrirFechaPlantillas(ps) },
-    ...dias.map(d => ({ texto: NOMBRES[d.i] + " " + fmt(deIso(d.id)), accion: () => abrirFechaPlantillas(ps, d.id) }))
+    ...fechas.map(d => ({ texto: NOMBRES[d.i] + " " + fmt(deIso(d.id)), accion: () => abrirFechaPlantillas(ps, d.id) }))
   ]);
 });
 const fechaLargaPlant = f => deIso(f).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long", year: "numeric" });

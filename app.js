@@ -2137,7 +2137,8 @@ function cabeceraParte(dia, grupo, p, color, nNombradas, partes, seriesItem) {
       // v262: el nombre de la parte vuelve a cambiarse aquí, con una acción deliberada (antes, v259, tocando su texto en la cabecera)
       { texto: "Cambiar nombre", accion: () => cambiarNombreParte(dia, grupo, p.nombre) },
       // v262: sin «+ Ejercicio en esta parte» en este menú; se añade con los botones visibles de la propia parte
-      // v284: sin «Mover la parte a otro entreno…»; la parte se reordena y se traslada a otro entreno con el asa ≡ (un solo arrastre)
+      ...(() => { const otros = [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].map(x => x.dataset.grupo || "").filter(x => x !== grupo);
+        return otros.length ? [{ texto: "Mover la parte a otro entreno…", accion: () => abrirMenu("¿A qué entreno?", "La parte «" + p.nombre + "» pasa entera, con sus ejercicios y bloques", otros.map(x => ({ texto: x || "Entreno 1", accion: () => moverParteAEntreno(dia, grupo, p.nombre, x, ss) }))) }] : []; })(),
       plegada && { texto: "+ Bloque en esta parte", accion: () => abrirBloque(dia, grupo, p.nombre) },
       { texto: "Quitar la parte (sus ejercicios quedan sin parte)", accion: () => {
         ss.forEach(x => cambiar("series", { ...x, seccion: "" }, true));
@@ -2248,42 +2249,8 @@ function moverEntreEntrenos(dia, origen, clave, espera, destino, destParte, orde
   avisoDeshacer("Movido al entreno «" + (destino || "Entreno 1") + "»", antes.length ? antes : null);
 }
 // Pasar una parte entera (con sus ejercicios, bloques y bloques vacíos) a otro entreno del día
-// v270: el aviso y el marcador del arrastre de partes viven en index.html (#bannerDestino, #marcaInsercion). Si la página es de una versión anterior (HTML sin actualizar o en caché)
-// no existen y el arrastre lanzaba un error en cada fotograma, de modo que NO se trasladaba nada (v269). Ahora se crean al vuelo con las mismas clases si faltan
-function elementoDestino(id) {
-  let el = $(id);
-  if (el) return el;
-  el = document.createElement("div");
-  el.id = id; el.hidden = true;
-  if (id === "bannerDestino") { el.className = "banner-destino"; el.setAttribute("role", "status"); el.setAttribute("aria-live", "polite"); }
-  else { el.className = "marca-insercion"; el.setAttribute("aria-hidden", "true"); }
-  document.body.appendChild(el);
-  return el;
-}
-// v279/v280: ¿el entreno destino ya tiene una parte con el mismo nombre? Mismo criterio que «Cambiar nombre»: norm() (sin mayúsculas ni acentos), contando partes con
-// series, partes vacías y ejercicios en espera. Lo usan el traslado (menú y arrastre) y la indicación del destino mientras se arrastra
-function parteDuplicadaEnEntreno(dia, destino, parte) {
-  const nomDestino = nombresPartes(dia.id, destino).concat((enEspera[dia.id] || []).filter(id => (esperaGrupo[dia.id + "|" + id] || "") === destino).map(id => esperaParte[dia.id + "|" + id] || ""));
-  return nomDestino.some(p => norm(p) === norm(parte));
-}
-function moverParteAEntreno(dia, origen, parte, destino, seriesParte, etiqueta, abrirDestino, nombresDestino, indice) {
-  // v279: NO se fusionan partes. Si el entreno destino ya tiene una parte con el mismo nombre se cancela sin tocar nada: ni series, ni estructura, ni orden, ni plegados
-  if (parteDuplicadaEnEntreno(dia, destino, parte)) {
-    const m = "Ese entrenamiento ya tiene una parte con este nombre. Renómbrala o elige otro destino.";
-    setEstado(m, true); avisoDeshacer(m, null);
-    return false;
-  }
+function moverParteAEntreno(dia, origen, parte, destino, seriesParte) {
   const antes = seriesParte.map(sr => ["series", { ...sr }]);
-  // v281: «Deshacer» también devuelve el «orden» de las series del destino, que se realinea para el modo entreno
-  seriesDelDia(dia.id).filter(x => (x.grupo || "") === destino && !seriesParte.includes(x)).forEach(x => antes.push(["series", { ...x }]));
-  // v279: «Deshacer» también devuelve la estructura (partes vacías, esperas, bloques vacíos, orden y posición de partes), no solo las series
-  const estr = JSON.stringify({ eg: esperaGrupo, bv: bloquesVacios, pv: partesVacias, op: ordenPartes, pp: posPartes, og: ordenGrupos, sv: sesionesVacias, gp: gruposPlegados });
-  const ordenG0 = [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].map(x => x.dataset.grupo || "");   // orden actual de los entrenos del día: no debe cambiar al sacar la parte del origen
-  // v279: la parte pasa al FINAL de las partes del entreno destino y no cambia el orden de los entrenos: sus series se renumeran (misma secuencia relativa) detrás de las del destino
-  const enDestino = seriesDelDia(dia.id).filter(x => !seriesParte.includes(x) && (x.grupo || "") === destino);
-  const ordenBase = enDestino.length ? Math.max(...enDestino.map(x => n0(x.orden))) : null;
-  const ordenNuevo = new Map(seriesParte.slice().sort((a, b) => n0(a.orden) - n0(b.orden)).map((sr, k) => [sr, ordenBase === null ? sr.orden : ordenBase + 1 + k]));
-  antes.push(["fn", () => { const e = JSON.parse(estr); esperaGrupo = e.eg; bloquesVacios = e.bv; partesVacias = e.pv; ordenPartes = e.op; posPartes = e.pp; ordenGrupos = e.og; sesionesVacias = e.sv; gruposPlegados = e.gp; escribir("grupos-plegados-v1", gruposPlegados); guardarSesiones(); guardarVacios(); }]);
   seriesParte.forEach(sr => {
     let extra = {};
     if (!sr.bloque_id) {
@@ -2291,7 +2258,7 @@ function moverParteAEntreno(dia, origen, parte, destino, seriesParte, etiqueta, 
       const usadas = seriesDelDia(dia.id).filter(x => !seriesParte.includes(x) && x.ejercicio_id === sr.ejercicio_id && !x.bloque_id && (x.grupo || "") === destino && (x.seccion || "") === parte).map(x => n0(x.copia) > 1 ? n0(x.copia) : 1);
       if (usadas.includes(mia)) extra = { copia: Math.max(...usadas) + 1 };
     }
-    cambiar("series", { ...sr, grupo: destino, orden: ordenNuevo.get(sr), ...extra }, true);
+    cambiar("series", { ...sr, grupo: destino, ...extra }, true);
   });
   Object.keys(esperaParte).forEach(k => { if (k.startsWith(dia.id + "|") && esperaParte[k] === parte && (esperaGrupo[k] || "") === origen) { if (destino) esperaGrupo[k] = destino; else delete esperaGrupo[k]; } });
   Object.keys(bloquesVacios).forEach(k => { if (k.startsWith(dia.id + "|") && (bloquesVacios[k].p || "") === parte && (bloquesVacios[k].g || "") === origen) bloquesVacios[k] = { ...bloquesVacios[k], g: destino }; });
@@ -2300,28 +2267,9 @@ function moverParteAEntreno(dia, origen, parte, destino, seriesParte, etiqueta, 
   if (!seriesParte.length && !(partesVacias[kd] || []).includes(parte)) (partesVacias[kd] = partesVacias[kd] || []).push(parte);
   if (ordenPartes[ko]) { const r = ordenPartes[ko].filter(x => x !== parte); if (r.length) ordenPartes[ko] = r; else delete ordenPartes[ko]; }   // v249: ya no pertenece al orden del entreno de origen
   if (posPartes[ko] && Object.hasOwn(posPartes[ko], parte)) { delete posPartes[ko][parte]; if (!Object.keys(posPartes[ko]).length) delete posPartes[ko]; }   // v250: ni su posición (en el destino va al final, como antes)
-  // v280: si la parte era lo único del entreno de origen, el entreno NO desaparece: queda como entreno vacío (se puede borrar desde su ⋯)
-  if (origen && !seriesDelDia(dia.id).some(x => (x.grupo || "") === origen && !seriesParte.includes(x)) && !(sesionesVacias[dia.id] || []).includes(origen)) (sesionesVacias[dia.id] = sesionesVacias[dia.id] || []).push(origen);
-  if (ordenG0.length > 1) ordenGrupos[dia.id] = ordenG0;   // v279: el origen pierde sus series más antiguas y, sin esto, su entreno saltaba de sitio
-  // v281: posición elegida en el mismo arrastre. nombresDestino = partes con nombre del destino en el orden en que se veían; indice = dónde entra. Al final (o sin posición)
-  // queda como en v279 (detrás de todo). Al principio o en medio: orden explícito de partes del destino y «orden» de sus series realineado (los mismos huecos de «orden»
-  // reasignados en el orden visual; las series sin parte no se tocan) para que el modo entreno siga el orden que ves
-  {
-    const cajaD = [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].find(x => (x.dataset.grupo || "") === destino);
-    const base = Array.isArray(nombresDestino) ? nombresDestino : cajaD ? [...cajaD.querySelectorAll(":scope > .parte-caja")].map(x => x.dataset.parte || "") : [];   // sin posición (menú): al final
-    const nombres2 = base.filter(x => x !== parte); nombres2.splice(indice === undefined ? nombres2.length : Math.min(indice, nombres2.length), 0, parte);
-    if (nombres2.length > 1) {
-      ordenPartes[kd] = nombres2;
-      const conj = nombres2.map(nm => seriesDelDia(dia.id).filter(x => (x.grupo || "") === destino && (x.seccion || "") === nm)).filter(c => c.length);
-      const huecos = conj.flat().map(x => n0(x.orden)).sort((a, b) => a - b); let q = 0;
-      conj.forEach(c => c.slice().sort((a, b) => n0(a.orden) - n0(b.orden)).forEach(x => { const o = huecos[q++]; if (n0(x.orden) !== o) cambiar("series", { ...x, orden: o }, true); }));
-    }
-  }
-  if (abrirDestino) { gruposPlegados[dia.id + "|" + destino] = 0; escribir("grupos-plegados-v1", gruposPlegados); }   // el entreno destino se despliega para ver el resultado
   guardarSesiones(); guardarVacios(); persistir();
   pintarDia(dia);
-  avisoDeshacer("Parte «" + parte + "» movida al entreno «" + (etiqueta || destino || "Entreno 1") + "»", antes);
-  return true;
+  avisoDeshacer("Parte «" + parte + "» movida al entreno «" + (destino || "Entreno 1") + "»", antes.length ? antes : null);
 }
 // «+ Parte»: Calentamiento, Parte principal, Vuelta a la calma… (o el nombre que quieras)
 async function nuevaParte(dia, grupo) {
@@ -3379,75 +3327,7 @@ function pintarDiaSinAncla(dia) {
         dest.appendChild(cabP);
         caja.appendChild(dest);
         // v249: asa para arrastrar la parte entera (con o sin ejercicios) dentro de su entreno; usa el orden persistente de cab.ordenarPartes
-        // v280: la misma asa mueve la parte a OTRO entreno del día: TODA la tarjeta del entreno destino es zona de soltado (cabecera, cuerpo y pie; no «Ejercicios sueltos», que no es
-        // un entreno). Responde casi al instante (120 ms), resalta la tarjeta y una indicación fija avisa de que la parte se añadirá al final de sus partes (o de que no se puede
-        // porque ya tiene una con ese nombre). El asa se muestra aunque sea la única parte si existe otro entreno destino: se calcula con los datos del día, no con el DOM aún a medio pintar
-        const hayDestinoParte = grupos.some(x => x.nombre && x.nombre !== g.nombre);
-        let objetivo = null, indiceAnt = null, textoAnt = "", abiertas = [], zonaAct = null, tAbrir = 0, notaArriba = false, idxMarca = null, scrollMarca = null;   // v281: posición de inserción calculada en el último fotograma (la usa alSoltar); v282: entrenos plegados desplegados solo mientras se arrastra
-        const zonasEntreno = { espera: 120, layoutVivo: true,
-          lista: () => [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].filter(x => (x.dataset.grupo || "") !== g.nombre && !x.classList.contains("grupo-sueltos")),
-          alCambiar: z => {
-            const b = elementoDestino("bannerDestino"), m = elementoDestino("marcaInsercion");
-            document.querySelectorAll(".grupo.zona-invalida").forEach(x => x.classList.remove("zona-invalida"));
-            indiceAnt = null; textoAnt = ""; notaArriba = false; b.style.top = ""; b.style.bottom = ""; idxMarca = null; scrollMarca = null;
-            // v282: un entreno destino PLEGADO se despliega (solo en pantalla, sin tocar el estado guardado) si la parte se mantiene un instante encima, para elegir la posición en el mismo
-            // arrastre. Al salir de él, al cancelar o al soltar (el traslado, si se hace, lo deja desplegado de forma persistente) vuelve a plegarse
-            clearTimeout(tAbrir); zonaAct = z;
-            abiertas.filter(x => x !== z).forEach(x => x.classList.add("g-plegado"));
-            abiertas = abiertas.filter(x => x === z);
-            if (z && z.classList.contains("g-plegado")) tAbrir = setTimeout(() => {
-              if (zonaAct === z && z.classList.contains("g-plegado")) { z.classList.remove("g-plegado"); abiertas.push(z); if (zonasEntreno.repintar) zonasEntreno.repintar(); }
-            }, 300);
-            if (!z) { b.hidden = true; m.hidden = true; return; }   // «objetivo» se conserva: alSoltar se llama justo después
-            const destino = z.dataset.grupo || "", etq = (z.querySelector(".gn-txt") || {}).textContent || destino, dup = parteDuplicadaEnEntreno(dia, destino, p.nombre);
-            z.classList.toggle("zona-invalida", dup);
-            b.classList.toggle("invalido", dup); m.classList.toggle("invalido", dup);
-            if (dup) { b.textContent = "«" + etq + "» ya tiene una parte con el nombre «" + p.nombre + "»: no se puede mover aquí"; b.hidden = false; m.hidden = true; objetivo = null; }
-          },
-          // Cada fotograma: ¿antes o después de qué parte del destino? Por mitades de cada parte (con histéresis de 7 px para que no parpadee); por encima de la primera: al principio; por debajo
-          // de la última: al final. Destino plegado o sin partes: al final. El marcador es un elemento fijo (no mueve nada de la página): solo cambia de sitio
-          alMoverDentro: (z, y) => {
-            if (z.classList.contains("zona-invalida")) return;
-            const b = elementoDestino("bannerDestino"), m = elementoDestino("marcaInsercion");
-            const destino = z.dataset.grupo || "", etq = (z.querySelector(".gn-txt") || {}).textContent || destino;
-            const partes = [...z.querySelectorAll(":scope > .parte-caja")], rs = partes.map(x => x.getBoundingClientRect());
-            const visibles = !z.classList.contains("g-plegado") && partes.length > 0 && rs.every(r => r.height > 0);
-            const nombres = partes.map(x => x.dataset.parte || "");
-            let idx = nombres.length, marcaY = null, texto;
-            if (!visibles) { texto = "Suelta aquí: «" + p.nombre + "» se añadirá al final de las partes de «" + etq + "»"; }
-            else {
-              idx = 0;
-              rs.forEach((r, k) => { if (y >= r.top + r.height / 2 + (indiceAnt !== null && indiceAnt > k ? -7 : 7)) idx = k + 1; });
-              const h = rs.findIndex(r => y >= r.top && y <= r.bottom);
-              marcaY = idx === 0 ? rs[0].top - 4 : idx === rs.length ? rs[rs.length - 1].bottom + 4 : (rs[idx - 1].bottom + rs[idx].top) / 2;
-              const dentro = h >= 0 ? (idx === h ? "antes de «" + nombres[h] + "»" : "después de «" + nombres[h] + "»") : idx === 0 ? "al principio, antes de «" + nombres[0] + "»" : idx === rs.length ? "al final, después de «" + nombres[nombres.length - 1] + "»" : "entre «" + nombres[idx - 1] + "» y «" + nombres[idx] + "»";
-              texto = "Suelta aquí: «" + p.nombre + "» se insertará " + dentro + " (" + etq + ")";
-            }
-            indiceAnt = idx; objetivo = { destino, etq, nombres, indice: idx };
-            if (texto !== textoAnt) { b.textContent = texto; textoAnt = texto; }
-            // v282: la nota va abajo (sobre la barra de pestañas); si la posición de inserción o el dedo quedan en su zona, pasa ARRIBA (bajo la cabecera) y se queda ahí hasta cambiar de entreno,
-            // para no tapar el marcador ni las partes del destino desplegado y sin saltar de un lado a otro
-            if (!notaArriba && Math.max(marcaY === null ? 0 : marcaY, y) > innerHeight - 190) {
-              notaArriba = true;
-              let cab = 0; document.querySelectorAll(".cabecera").forEach(x => { const p = getComputedStyle(x).position, r = x.getBoundingClientRect(); if ((p === "sticky" || p === "fixed") && r.height && r.top < innerHeight / 2) cab = Math.max(cab, r.bottom); });
-              b.style.top = Math.round(cab + 8) + "px"; b.style.bottom = "auto";
-            }
-            b.hidden = false;
-            if (marcaY === null) { m.hidden = true; return; }
-            const zr = z.getBoundingClientRect(), zf = z.offsetHeight > 0 ? zr.height / z.offsetHeight || 1 : 1;   // zoom del ordenador, como en asaArrastre
-            // v283: el marcador se desliza (90 ms) al cambiar de posición con la vista quieta; con la vista desplazándose, o al aparecer, se coloca sin transición para no quedarse atrás
-            const cambioIdx = idxMarca !== null && idxMarca !== idx && scrollMarca === scrollY && !m.hidden;
-            m.style.transition = cambioIdx ? "top .09s ease-out, left .09s ease-out, width .09s ease-out" : "none";
-            idxMarca = idx; scrollMarca = scrollY;
-            m.style.top = Math.round((marcaY - 2) / zf) + "px"; m.style.left = Math.round((zr.left + 10) / zf) + "px"; m.style.width = Math.max(40, Math.round((zr.width - 20) / zf)) + "px"; m.hidden = false;
-          },
-          alSoltar: z => {
-            const destino = z.dataset.grupo || "", etq = (z.querySelector(".gn-txt") || {}).textContent || destino;
-            const o = objetivo && objetivo.destino === destino ? objetivo : null;
-            moverParteAEntreno(dia, g.nombre, p.nombre, destino, p.ids.flatMap(seriesItem), etq, true, o ? o.nombres : undefined, o ? o.indice : undefined);
-            objetivo = null;
-          } };
-        if (conNombre.length > 1 || hayDestinoParte) cabP.appendChild(asaArrastre(dest, () => [...caja.querySelectorAll(":scope > .parte-caja")], n => cabP.ordenarPartes(n.map(x => x.dataset.parte || "")), "parte " + p.nombre, zonasEntreno));
+        if (conNombre.length > 1) cabP.appendChild(asaArrastre(dest, () => [...caja.querySelectorAll(":scope > .parte-caja")], n => cabP.ordenarPartes(n.map(x => x.dataset.parte || "")), "parte " + p.nombre));
         const claveP = "p|" + dia.id + "|" + g.nombre + "|" + p.nombre, tg = cabP.querySelector(".p-toggle");
         const ponerP = pl => { dest.classList.toggle("p-plegada", pl); tg.setAttribute("aria-expanded", String(!pl)); };
         ponerP(gruposPlegados[claveP] !== 0);
@@ -9267,18 +9147,9 @@ function asaArrastre(el, hermanos, alSoltar, nombre, zonas) {
     arrastreActivo = true;
     const y0 = scrollY, cajas = lista.map(x => { const r = x.getBoundingClientRect(); return { top: r.top + y0, alto: r.height }; });
     const hueco = idx + 1 < cajas.length ? cajas[idx + 1].top - cajas[idx].top - cajas[idx].alto : idx > 0 ? cajas[idx].top - cajas[idx - 1].top - cajas[idx - 1].alto : 0;
-    const paso = cajas[idx].alto + Math.max(0, hueco);
-    let inicioY = e.clientY + y0;
+    const paso = cajas[idx].alto + Math.max(0, hueco), inicioY = e.clientY + y0;
     const zf = el.offsetHeight > 0 ? cajas[idx].alto / el.offsetHeight || 1 : 1;   // zoom del ordenador
-    let dedoY = e.clientY, destino = idx, pendiente = false, vivo = true, dyAplicado = 0;
-    // v283 (partes entre entrenos): lo arrastrado se reduce con suavidad al estar sobre un entreno destino y lo hace desde el punto que agarra el dedo (antes saltaba: la escala era la de CSS,
-    // sobre el centro y de golpe, y desplazaba el asa hasta ~29 px respecto al dedo). Solo para zonas que lo piden (las partes); el resto de arrastres no cambia
-    let escala = 1, escalaAplicada = 1, gy = 0;
-    if (zonas && zonas.layoutVivo) {
-      const er = el.getBoundingClientRect(), gx = (e.clientX - er.left) / zf; gy = (e.clientY - er.top) / zf;
-      el.style.transformOrigin = gx + "px " + gy + "px"; el.classList.add("entre-entrenos");
-    }
-    const aplicadoSib = new Map();   // v282: desplazamiento que lleva puesto cada hermano (para medir de nuevo si el diseño cambia)
+    let dedoY = e.clientY, destino = idx, pendiente = false, vivo = true;
     el.classList.add("arrastrando");
     lista.forEach(x => { if (x !== el) x.classList.add("apartandose"); });
     const bordes = () => {
@@ -9298,51 +9169,28 @@ function asaArrastre(el, hermanos, alSoltar, nombre, zonas) {
       const { arriba, abajo } = bordes();
       if (dedoY < arriba + 48) scrollBy(0, -Math.min(14, arriba + 48 - dedoY));
       else if (dedoY > abajo - 48) scrollBy(0, Math.min(14, dedoY - (abajo - 48)));
-      destino = idx;
-      // ¿El dedo está encima de una zona? Entonces se resalta y los demás no se apartan
-      let zc = zl.find(x => { const r = x.getBoundingClientRect(); return dedoY >= r.top && dedoY <= r.bottom; }) || null;
-      // v283: la zona en la que ya estás no se pierde al pasar por el hueco entre tarjetas (18 px de margen): evita parpadeos y que lo arrastrado vuelva a ser grande de golpe
-      if (!zc && zona && zonas.layoutVivo) { const r = zona.getBoundingClientRect(); if (dedoY >= r.top - 18 && dedoY <= r.bottom + 18) zc = zona; }
-      if (zc !== cand) { cand = zc; candDesde = Date.now(); }
-      const esperaZona = zonas && zonas.espera !== undefined ? zonas.espera : 450;   // v280: las zonas «entreno entero» (partes) responden casi al instante
-      const z = cand && Date.now() - candDesde >= esperaZona ? cand : null;
-      if (cand && !z) { clearTimeout(tZona); tZona = setTimeout(pedir, esperaZona + 20 - (Date.now() - candDesde)); }
-      if (z !== zona) { if (zona) zona.classList.remove("zona-destino"); zona = z; if (zona) zona.classList.add("zona-destino"); el.classList.toggle("sobre-zona", !!zona); if (zonas && zonas.alCambiar) zonas.alCambiar(zona); }
-      if (zona && zonas.alMoverDentro) zonas.alMoverDentro(zona, dedoY);   // v281: posición de inserción dentro de la zona (cada fotograma, también al desplazarse la vista)
-      // v282: si una zona cambia el diseño (un entreno plegado que se despliega al mantener encima, o que se vuelve a plegar), lo arrastrado sigue bajo el dedo y las posiciones
-      // de sus hermanos se miden de nuevo. Solo con zonas que lo piden (partes); los demás arrastres no cambian
-      if (zonas && zonas.layoutVivo) {
-        const s = el.getBoundingClientRect().top + scrollY - dyAplicado - gy * zf * (1 - escalaAplicada) - cajas[idx].top;
-        if (Math.abs(s) > 0.5) {
-          inicioY += s;
-          // v283: lo arrastrado lleva escala; su caja se mide sin ella (si no, el desfase se acumulaba fotograma a fotograma)
-          lista.forEach((x, k) => { const r = x.getBoundingClientRect(); cajas[k] = k === idx ? { top: r.top + scrollY - dyAplicado - gy * zf * (1 - escalaAplicada), alto: cajas[idx].alto } : { top: r.top + scrollY - (aplicadoSib.get(x) || 0), alto: r.height }; });
-        }
-      }
       // Cambia de sitio cuando el borde de lo arrastrado (el de abajo al bajar, el de arriba al subir) pasa la mitad del otro: igual de fácil en los dos sentidos
       const dy = dedoY + scrollY - inicioY, arribaEl = cajas[idx].top + dy, abajoEl = arribaEl + cajas[idx].alto;
-      dyAplicado = dy;
+      destino = idx;
+      // ¿El dedo está encima de una zona? Entonces se resalta y los demás no se apartan
+      const zc = zl.find(x => { const r = x.getBoundingClientRect(); return dedoY >= r.top && dedoY <= r.bottom; }) || null;
+      if (zc !== cand) { cand = zc; candDesde = Date.now(); }
+      const z = cand && Date.now() - candDesde >= 450 ? cand : null;
+      if (cand && !z) { clearTimeout(tZona); tZona = setTimeout(pedir, 470 - (Date.now() - candDesde)); }
+      if (z !== zona) { if (zona) zona.classList.remove("zona-destino"); zona = z; if (zona) zona.classList.add("zona-destino"); el.classList.toggle("sobre-zona", !!zona); }
       lista.forEach((x, k) => {
         if (k === idx) return;
-        if (zona) { x.style.transform = ""; aplicadoSib.set(x, 0); return; }
+        if (zona) { x.style.transform = ""; return; }
         const medio = cajas[k].top + cajas[k].alto / 2;
         let mueve = 0;
         if (k < idx && arribaEl < medio) { mueve = paso; destino--; }
         else if (k > idx && abajoEl > medio) { mueve = -paso; destino++; }
         x.style.transform = mueve ? "translate3d(0," + mueve / zf + "px,0)" : "";
-        aplicadoSib.set(x, mueve);
       });
-      if (zonas && zonas.layoutVivo) {
-        const objetivoEsc = zona ? 0.92 : 1;
-        escala += (objetivoEsc - escala) * 0.4;
-        if (Math.abs(objetivoEsc - escala) < 0.003) escala = objetivoEsc; else pedir();
-        escalaAplicada = escala;
-        el.style.transform = "translate3d(0," + dy / zf + "px,0)" + (escala !== 1 ? " scale(" + escala.toFixed(4) + ")" : "");
-      } else el.style.transform = "translate3d(0," + dy / zf + "px,0)";
+      el.style.transform = "translate3d(0," + dy / zf + "px,0)";
       if (dedoY < arriba + 48 || dedoY > abajo - 48) pedir();
     };
     const pedir = () => { if (!pendiente) { pendiente = true; requestAnimationFrame(pintar); } };
-    if (zonas) zonas.repintar = pedir;   // v282: la zona puede pedir un fotograma (p. ej. al desplegar un entreno con el dedo quieto)
     const mover = ev => { dedoY = ev.clientY; pedir(); };
     const fin = ev => {
       vivo = false;
@@ -9352,9 +9200,8 @@ function asaArrastre(el, hermanos, alSoltar, nombre, zonas) {
       asa.removeEventListener("pointerup", fin);
       asa.removeEventListener("pointercancel", fin);
       lista.forEach(x => { x.style.transform = ""; x.classList.remove("apartandose"); });
-      el.classList.remove("arrastrando", "sobre-zona", "entre-entrenos"); el.style.transformOrigin = "";
+      el.classList.remove("arrastrando", "sobre-zona");
       if (zona) zona.classList.remove("zona-destino");
-      if (zonas && zonas.alCambiar) zonas.alCambiar(null);   // v280: oculta la indicación del destino (también al cancelar)
       if (ev.type !== "pointercancel" && zona) { el.style.transform = ""; zonas.alSoltar(zona); return; }
       if (ev.type === "pointercancel" || destino === idx) { if (repintarLuego) pintarBloques(true); return; }
       const nuevo = lista.slice();
@@ -9676,7 +9523,7 @@ function avisoDeshacer(texto, deshacer, pr) {
 $("toastBtn").addEventListener("click", () => {
   if (deshacerSug) { const f = deshacerSug; deshacerSug = null; $("toast").hidden = true; f(); return; }
   if (!deshacerPend) return;
-  deshacerPend.forEach(([t, f]) => { if (t === "fn") { f(); return; } const c = { ...f }; delete c.sucio; cambiar(t, c, true); });   // v279: «fn» = paso de restauración propio
+  deshacerPend.forEach(([t, f]) => { const c = { ...f }; delete c.sucio; cambiar(t, c, true); });
   deshacerPend = null;
   persistir();
   $("toast").hidden = true;
@@ -10004,7 +9851,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v270" + (BETA ? " beta" : "");
+const VERSION_APP = "v268" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

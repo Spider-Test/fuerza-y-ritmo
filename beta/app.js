@@ -2614,6 +2614,7 @@ async function nuevoEntreno(dia) {
   if (!n) return;
   const nf = nombreEntrenoLibre(dia.id, n);   // v281: si ya hay un entreno con ese nombre, se crea otro aparte («Nombre (1)»…) en vez de reutilizar el existente
   (sesionesVacias[dia.id] = sesionesVacias[dia.id] || []).push(nf); guardarSesiones();
+  volcarExtra();   // Proteger ya el entreno vacío frente a una lectura remota en curso.
   if (dia.col.classList.contains("plegado")) plegarDia(dia);
   pintarDia(dia);
   if (nf !== n) avisoDeshacer(avisoNombreEntreno(n, nf), null);
@@ -10527,7 +10528,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v286" + (BETA ? " beta" : "");
+const VERSION_APP = "v287" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

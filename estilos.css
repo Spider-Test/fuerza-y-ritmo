@@ -2789,3 +2789,7 @@ dialog#dlgAviso { margin: auto; }
   #vistaSemana.solo-dia .dia-abrir { visibility: visible; }
 }
 .orden-barra { flex-wrap: wrap; }
+
+.en-ficha { align-self: flex-start; flex-shrink: 0; min-height: 44px; height: auto; padding: 8px 12px; border-radius: 10px; font-size: 14px; font-weight: 600; color: var(--muted); white-space: normal; text-align: left; }
+.ficha-lectura input:disabled, .ficha-lectura textarea:disabled, .ficha-lectura select:disabled { opacity: 1; -webkit-text-fill-color: currentColor; }
+.en-accesos { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; }

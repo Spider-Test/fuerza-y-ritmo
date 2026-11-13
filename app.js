@@ -6262,8 +6262,27 @@ $("detBorrar").addEventListener("click", () => {
     $("detalle").close();
   });
 });
+// v271: «Ver ficha» desde el modo entreno: la misma ficha, solo para consultar (todo desactivado) y sin repintar el entreno al cerrarla,
+// para que sigan la serie, lo escrito en los campos y el progreso tal como estaban.
+let fichaLectura = null;
+function abrirFichaSoloLectura(id) {
+  if (!ejercicioVivo(id)) return;
+  abrirDetalle(id);
+  const dlg = $("detalle");
+  fichaLectura = [];
+  dlg.querySelectorAll("input, textarea, select, button").forEach(x => { if (x.classList.contains("cerrar") || x.closest("#detEmbed") || x.disabled) return; x.disabled = true; fichaLectura.push(x); });
+  dlg.classList.add("ficha-lectura");
+  $("detAvisoLectura").hidden = false;
+}
 $("detalle").addEventListener("close", () => {
   $("detEmbed").textContent = "";   // para que el vídeo deje de sonar
+  if (fichaLectura) {
+    fichaLectura.forEach(x => { x.disabled = false; });
+    fichaLectura = null;
+    $("detalle").classList.remove("ficha-lectura");
+    $("detAvisoLectura").hidden = true;
+    return;   // consulta: no se ha cambiado nada, no se repinta
+  }
   pintarTodo();
 });
 
@@ -10198,6 +10217,10 @@ $("enMenos").addEventListener("click", () => moverDescanso(-15));
 $("enMas").addEventListener("click", () => moverDescanso(15));
 $("enSaltarD").addEventListener("click", () => { clearInterval(ent.timer); ent.timer = null; ent.fin = 0; $("enDescanso").hidden = true; });
 // Abre el mismo visor de la ficha sin cerrar ni repintar el entrenamiento.
+$("enFicha").addEventListener("click", () => {   // v271
+  const s = serieEnt();
+  if (s) abrirFichaSoloLectura(s.ejercicio_id);
+});
 $("enVideo").addEventListener("click", () => {
   const s = serieEnt(), e = s && ejercicioVivo(s.ejercicio_id);
   if ($("dlgEntreno").open && e && idYoutube(e.video_url)) verVideo(e);
@@ -10230,7 +10253,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v280" + (BETA ? " beta" : "");
+const VERSION_APP = "v281" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

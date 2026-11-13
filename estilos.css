@@ -2793,3 +2793,33 @@ dialog#dlgAviso { margin: auto; }
 .en-ficha { align-self: flex-start; flex-shrink: 0; min-height: 44px; height: auto; padding: 8px 12px; border-radius: 10px; font-size: 14px; font-weight: 600; color: var(--muted); white-space: normal; text-align: left; }
 .ficha-lectura input:disabled, .ficha-lectura textarea:disabled, .ficha-lectura select:disabled { opacity: 1; -webkit-text-fill-color: currentColor; }
 .en-accesos { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; }
+
+/* v270 (MEJ-BLQ-001): panel «Editar bloque» (rondas, ejercicios y descansos en un solo sitio); solo colores y tamaños ya usados en la app */
+#dlgEditBloque .d-cuerpo { gap: 16px; }
+.eb-sec { display: flex; flex-direction: column; gap: 8px; }
+.eb-h { margin: 0; font-family: var(--display); font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.eb-rondas { display: flex; align-items: center; gap: 12px; }
+.eb-paso { font-size: 22px; line-height: 1; min-width: 44px; height: 44px; }
+.eb-n { min-width: 56px; text-align: center; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.eb-nota { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.4; }
+.eb-aviso { padding: 10px 12px; border-radius: 10px; display: flex; flex-direction: column; gap: 8px; }
+.eb-peligro { background: var(--error-soft); border: 1px solid var(--error); }
+.eb-t { margin: 0; font-weight: 700; font-size: 14px; }
+.eb-lista { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+.eb-conf { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; font-weight: 600; min-height: 44px; }
+.eb-conf input { flex: none; width: 22px; height: 22px; margin-top: 1px; }
+.eb-ejs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.eb-ej { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; }
+.eb-ej-t { display: flex; flex-direction: column; flex: 1 1 150px; min-width: 0; gap: 2px; }
+.eb-ej-n { font-weight: 700; overflow-wrap: break-word; }
+.eb-ej-d { font-size: 13px; color: var(--muted); }
+.eb-quitado { background: var(--accent-soft); }
+.eb-nuevo { border-style: dashed; border-color: var(--accent); }
+.eb-bt { flex: none; padding: 0 12px; }
+.eb-sec .add-ej { min-height: 44px; margin: 0; }
+#ebCuerpo > .d-botones { position: sticky; bottom: 0; z-index: 1; margin: 0 -16px -18px; padding: 10px 16px; background: var(--card); border-top: 1px solid var(--line); }
+
+/* v272: repeticiones de cada ejercicio en el editor de bloque (solo series pendientes) */
+.eb-reps { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 14px; font-weight: 600; color: var(--muted); }
+.eb-reps input { width: 76px; min-height: 44px; text-align: center; font-size: 18px; font-weight: 700; color: var(--fg); }
+

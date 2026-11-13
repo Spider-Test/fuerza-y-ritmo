@@ -4587,6 +4587,232 @@ function meterEnVacio(dia, vid, ejercicioId, sueltas) {
   guardarVacios();
   meterEnBloque(dia, rondas, ejercicioId, sueltas);
 }
+// ---------- v270 (MEJ-BLQ-001): editor unificado del bloque ----------
+// Un solo panel («⋯ → Editar bloque…») para añadir/quitar rondas, ajustar los descansos y añadir/quitar ejercicios. Todo se prepara en un borrador y solo se
+// aplica al pulsar «Guardar cambios» (Cancelar, ✕ o Esc no cambian nada) y con UN solo «Deshacer» que restaura series, valores, orden y completado.
+// Modelo (sin cambios de esquema): una serie de un bloque lleva bloque_id + ronda + orden; el descanso va en la serie (descanso / rec_dist).
+//  · Añadir ronda: copia de la última ronda (sin hacer), al final. · Quitar rondas: borra las series de las últimas rondas (marca «borrado», recuperable con
+//    Deshacer); el panel las lista, avisa de las hechas y exige confirmación explícita.
+//  · Quitar un ejercicio: sus series NO se borran; pasan a sueltas en el mismo entreno y parte (mismos id, valores, orden y completado; sin ronda).
+//  · Añadir un ejercicio: una serie suya en cada ronda, al final de la ronda y en el orden en que se eligieron. NO se mueve ningún ejercicio entre bloques.
+let ebE = null;
+function abrirEditorBloque(dia, bloqueId) {
+  const base = seriesDelDia(dia.id).filter(x => x.bloque_id === bloqueId).sort((a, b) => n0(a.ronda) - n0(b.ronda) || a.orden - b.orden);
+  if (!base.length) return;
+  const rondas = [...new Set(base.map(x => n0(x.ronda)))].sort((a, b) => a - b);
+  const ejs = [];
+  base.filter(x => n0(x.ronda) === rondas[0]).forEach(x => { if (!ejs.includes(x.ejercicio_id)) ejs.push(x.ejercicio_id); });
+  const grupos = lista => {   // series de cada tipo de descanso: entre ejercicios, entre rondas y al terminar
+    const por = [...new Set(lista.map(x => n0(x.ronda)))].sort((a, b) => a - b).map(r => lista.filter(x => n0(x.ronda) === r).sort((a, b) => a.orden - b.orden));
+    return { ej: por.flatMap(l => l.slice(0, -1)), ron: por.slice(0, -1).map(l => l[l.length - 1]), fin: por.length ? [por[por.length - 1][por[por.length - 1].length - 1]] : [] };
+  };
+  const actual = l => { const t = l.map(recTexto); return t.length && t.every(x => x === t[0]) ? t[0] : ""; };
+  const g0 = grupos(base), mixto = l => new Set(l.map(recTexto)).size > 1;
+  ebE = { dia, bloqueId, base, rondas, ejs, n: rondas.length, quitar: new Set(), nuevos: [], conf: false, grupos, actual, mixto: { ej: mixto(g0.ej), ron: mixto(g0.ron), fin: mixto(g0.fin) },
+    ini: { ej: actual(g0.ej), ron: actual(g0.ron), fin: actual(g0.fin) }, desc: { ej: actual(g0.ej), ron: actual(g0.ron), fin: actual(g0.fin) } };
+  // v272: repeticiones de cada ejercicio del bloque (solo series PENDIENTES): valor común si todas coinciden; vacío = sin cambios
+  ebE.reps = {}; ebE.repsIni = {}; ebE.repsInfo = {};
+  ejs.forEach(id => {
+    const pend = base.filter(x => x.ejercicio_id === id && !hecha(x) && !x.calentamiento);
+    const porTiempo = !pend.length || pend.every(x => n0(x.tiempo) > 0 && !(n0(x.reps) > 0)) || esDistancia(tipoDe(id)) || pend.some(x => n0(x.distancia) > 0);
+    const vals = [...new Set(pend.map(x => n0(x.reps)))];
+    ebE.repsInfo[id] = { editable: !porTiempo, pend: pend.length, hechas: base.filter(x => x.ejercicio_id === id && hecha(x)).length, mixto: vals.length > 1, rango: pend.some(esRango) };
+    ebE.repsIni[id] = vals.length === 1 && vals[0] > 0 ? String(vals[0]) : ""; ebE.reps[id] = ebE.repsIni[id];
+  });
+  pintarEditorBloque();
+  $("dlgEditBloque").showModal();
+}
+// Qué series se borrarían al bajar de rondas (las de los ejercicios que se quedan en el bloque)
+function ebAfectadas() {
+  const e = ebE, fuera = e.rondas.slice(e.n);
+  return e.base.filter(x => fuera.includes(n0(x.ronda)) && !e.quitar.has(x.ejercicio_id));
+}
+function ebDescanso(txt) {   // → {descanso, rec_dist} | null si no se entiende
+  const t = (txt || "").trim();
+  if (!t || /^\s*0\s*$/.test(t)) return { descanso: 0, rec_dist: 0 };
+  return leerRecuperacion(t);
+}
+function pintarEditorBloque() {
+  const e = ebE, cuerpo = $("ebCuerpo");
+  const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt !== undefined) x.textContent = txt; return x; };
+  const boton = (txt, cls, fn, aria) => { const b = el("button", cls, txt); b.type = "button"; if (aria) b.setAttribute("aria-label", aria); b.addEventListener("click", fn); return b; };
+  cuerpo.textContent = "";
+  const R = e.rondas.length;
+  // Rondas
+  const sr = el("section", "eb-sec");
+  sr.appendChild(el("h4", "eb-h", "Rondas"));
+  const fr = el("div", "eb-rondas");
+  const menos = boton("−", "nav-btn eb-paso", () => { e.n = Math.max(1, e.n - 1); e.conf = false; pintarEditorBloque(); }, "Quitar la última ronda");
+  menos.disabled = e.n <= 1;
+  const mas = boton("+", "nav-btn eb-paso", () => { e.n = Math.min(50, e.n + 1); e.conf = false; pintarEditorBloque(); }, "Añadir una ronda");
+  mas.disabled = e.n >= 50;
+  fr.append(menos, el("output", "eb-n", "×" + e.n), mas);
+  sr.appendChild(fr);
+  if (e.n > R) sr.appendChild(el("p", "eb-nota", (e.n - R === 1 ? "Se añadirá 1 ronda" : "Se añadirán " + (e.n - R) + " rondas") + " al final, copia de la última y sin marcar como hechas. Las rondas actuales no cambian."));
+  if (e.n < R) {
+    const af = ebAfectadas(), hechas = af.filter(hecha).length;
+    const caja = el("div", "eb-aviso eb-peligro");
+    caja.appendChild(el("p", "eb-t", "Se borrarán " + af.length + (af.length === 1 ? " serie" : " series") + " de la" + (R - e.n === 1 ? " última ronda" : "s últimas " + (R - e.n) + " rondas") + (hechas ? " · " + hechas + " ya " + (hechas === 1 ? "hecha" : "hechas") : "") + ":"));
+    const ul = el("ul", "eb-lista");
+    e.rondas.slice(e.n).forEach(r => {
+      const l = af.filter(x => n0(x.ronda) === r);
+      if (l.length) ul.appendChild(el("li", "", "Ronda " + r + ": " + l.map(x => nombreEj(x.ejercicio_id) + " " + serieTexto(x) + (hecha(x) ? " ✓" : "")).join(" · ")));
+    });
+    caja.appendChild(ul);
+    const lab = el("label", "eb-conf"), ck = document.createElement("input");
+    ck.type = "checkbox"; ck.checked = e.conf;
+    ck.addEventListener("change", () => { e.conf = ck.checked; pintarEditorBloque(); });
+    lab.append(ck, el("span", "", "Entiendo que se borran estas series (Deshacer las recupera enteras durante unos segundos)"));
+    caja.appendChild(lab);
+    sr.appendChild(caja);
+  }
+  cuerpo.appendChild(sr);
+  // Ejercicios
+  const se = el("section", "eb-sec");
+  se.appendChild(el("h4", "eb-h", "Ejercicios"));
+  const quedan = e.ejs.filter(x => !e.quitar.has(x)).length + e.nuevos.length;
+  const ul = el("ul", "eb-ejs");
+  e.ejs.forEach(id => {
+    const li = el("li", "eb-ej"), fuera = e.quitar.has(id), n = e.base.filter(x => x.ejercicio_id === id).length;
+    const t = el("div", "eb-ej-t");
+    t.appendChild(el("span", "eb-ej-n", nombreEj(id)));
+    t.appendChild(el("span", "eb-ej-d", fuera ? "Se quedará suelto en este entreno con sus " + n + " series, tal como están" : n + (n === 1 ? " serie" : " series")));
+    li.appendChild(t);
+    const inf = e.repsInfo[id];
+    if (!fuera && inf && inf.editable) {
+      const lr = el("label", "eb-reps"), ir = document.createElement("input");
+      ir.value = e.reps[id]; ir.inputMode = "numeric"; ir.autocomplete = "off"; ir.setAttribute("aria-label", "Repeticiones de " + nombreEj(id) + " en las series pendientes de todas las rondas");
+      ir.placeholder = inf.mixto ? "varias" : inf.rango ? "rango" : "reps";
+      ir.addEventListener("input", () => { e.reps[id] = ir.value; ebValidar(); });
+      lr.append("Reps ", ir); lr.title = inf.pend + (inf.pend === 1 ? " serie pendiente" : " series pendientes") + (inf.hechas ? " · " + (inf.hechas === 1 ? "la hecha no cambia" : "las " + inf.hechas + " hechas no cambian") : "");
+      t.appendChild(lr);
+      t.appendChild(el("span", "eb-ej-d", "Solo las " + inf.pend + (inf.pend === 1 ? " serie pendiente" : " series pendientes") + (inf.hechas ? " (" + inf.hechas + (inf.hechas === 1 ? " hecha" : " hechas") + " sin tocar)" : "") + (inf.rango ? " · sustituye el rango por reps fijas" : "")));
+    }
+    const b = fuera ? boton("Mantener", "nav-btn eb-bt", () => { e.quitar.delete(id); e.conf = false; pintarEditorBloque(); }) : boton("Quitar del bloque", "nav-btn eb-bt", () => { e.quitar.add(id); e.conf = false; pintarEditorBloque(); }, "Quitar " + nombreEj(id) + " del bloque (queda suelto)");
+    if (!fuera && quedan <= 1) { b.disabled = true; b.title = "Un bloque necesita al menos un ejercicio: usa «Desagrupar» en el menú del bloque"; }
+    li.appendChild(b);
+    if (fuera) li.classList.add("eb-quitado");
+    ul.appendChild(li);
+  });
+  e.nuevos.forEach((id, k) => {
+    const li = el("li", "eb-ej eb-nuevo"), t = el("div", "eb-ej-t");
+    t.appendChild(el("span", "eb-ej-n", nombreEj(id)));
+    t.appendChild(el("span", "eb-ej-d", "Nuevo · una serie en cada una de las " + e.n + " rondas"));
+    li.appendChild(t);
+    li.appendChild(boton("Quitar", "nav-btn eb-bt", () => { e.nuevos.splice(k, 1); pintarEditorBloque(); }, "No añadir " + nombreEj(id)));
+    ul.appendChild(li);
+  });
+  se.appendChild(ul);
+  if (e.quitar.size) se.appendChild(el("p", "eb-nota", "Un ejercicio quitado no se borra: queda suelto en el mismo entreno con todas sus series, valores y lo que ya hiciste."));
+  se.appendChild(boton("+ Añadir un ejercicio", "add-ej", () => abrirSelector(e.dia, id => { if (ebE === e) { e.nuevos.push(id); e.conf = false; pintarEditorBloque(); } }, e.base[0].grupo || "", e.base[0].seccion || "")));
+  cuerpo.appendChild(se);
+  // Descansos (se guardan en la serie de antes del descanso)
+  const sd = el("section", "eb-sec");
+  sd.appendChild(el("h4", "eb-h", "Descansos"));
+  const campo = (k, rotulo, visible) => {
+    if (!visible) return;
+    const lab = el("label", "campo"), inp = document.createElement("input");
+    inp.value = e.desc[k]; inp.placeholder = e.mixto[k] ? "varios valores · escribe uno para igualarlos" : "1,30 · 90 · 300 m"; inp.autocomplete = "off"; inp.setAttribute("enterkeyhint", "done");
+    inp.addEventListener("input", () => { e.desc[k] = inp.value; ebValidar(); });
+    lab.append(rotulo, inp); sd.appendChild(lab);
+  };
+  campo("ej", "Entre ejercicios (dentro de cada ronda)", quedan > 1);
+  campo("ron", "Entre rondas", e.n > 1);
+  campo("fin", "Al terminar el bloque", true);
+  sd.appendChild(el("p", "eb-nota", "Tiempo («1,30» o «90»), metros trotando («300 m») o ambos («300 m · 1:30»). Vacío o «0» lo quita. Sin tocar, no cambia."));
+  cuerpo.appendChild(sd);
+  cuerpo.appendChild(el("p", "aviso eb-err", ""));
+  const bt = el("div", "d-botones");
+  bt.append(boton("Cancelar", "nav-btn", () => $("dlgEditBloque").close()), boton("Guardar cambios", "anadir eb-guardar", () => guardarEditorBloque()));
+  cuerpo.appendChild(bt);
+  ebValidar();
+}
+// v272: ejercicios (no quitados) cuyas repeticiones se han escrito distintas de las actuales
+const ebRepsCambiadas = () => ebE.ejs.filter(id => !ebE.quitar.has(id) && ebE.repsInfo[id].editable && ebE.reps[id].trim() !== ebE.repsIni[id]);
+function ebCambios() {
+  const e = ebE;
+  return { rondas: e.n !== e.rondas.length, ejs: e.quitar.size > 0 || e.nuevos.length > 0, desc: ["ej", "ron", "fin"].some(k => e.desc[k].trim() !== e.ini[k]), reps: ebRepsCambiadas().length > 0 };
+}
+function ebValidar() {
+  const e = ebE, c = ebCambios(), err = document.querySelector("#ebCuerpo .eb-err"), g = document.querySelector("#ebCuerpo .eb-guardar");
+  if (!g) return;
+  let msg = "";
+  ["ej", "ron", "fin"].forEach(k => { if (!msg && e.desc[k].trim() !== e.ini[k] && !ebDescanso(e.desc[k])) msg = "No entiendo «" + e.desc[k].trim() + "»: prueba 1,30, 90 o 300 m"; });
+  ebRepsCambiadas().forEach(id => { const v = e.reps[id].trim(); if (!msg && !(/^\d+$/.test(v) && parseInt(v, 10) > 0 && parseInt(v, 10) <= 999)) msg = "Repeticiones de " + nombreEj(id) + ": escribe un número entero de 1 a 999."; });
+  if (!msg && e.n < e.rondas.length && !e.conf) msg = "Marca la casilla para confirmar que se borran esas series.";
+  err.textContent = msg;
+  g.disabled = !(c.rondas || c.ejs || c.desc || c.reps) || !!msg;
+}
+function guardarEditorBloque() {
+  const e = ebE, dia = e.dia;
+  // El bloque debe seguir tal como estaba al abrir el panel (p. ej. por una sincronización): si no, no se aplica nada
+  const fresco = seriesDelDia(dia.id).filter(x => x.bloque_id === e.bloqueId);
+  const igual = fresco.length === e.base.length && e.base.every(x => { const f = db.series[x.id]; return f && !f.borrado && f.bloque_id === e.bloqueId && JSON.stringify(f) === JSON.stringify(x); });
+  if (!igual) { $("dlgEditBloque").close(); setEstado("El bloque ha cambiado mientras lo editabas. Ábrelo de nuevo."); return; }
+  const b0 = e.base[0], orig = new Map(e.base.map(x => [x.id, { ...x }])), trab = new Map(e.base.map(x => [x.id, { ...x }]));
+  const vivas = () => [...trab.values()].filter(x => x.bloque_id === e.bloqueId && !x.borrado);
+  const rondasAct = () => [...new Set(vivas().map(x => n0(x.ronda)))].sort((a, b) => a - b);
+  let orden = Date.now(), nSueltas = 0, nBorradas = 0, nNuevas = 0;
+  // 1) ejercicios que se quitan: pasan a sueltos en el mismo entreno y parte, con todas sus series
+  e.ejs.filter(id => e.quitar.has(id)).forEach(id => {
+    const usadas = seriesDelDia(dia.id).filter(x => x.ejercicio_id === id && !x.bloque_id && (x.grupo || "") === (b0.grupo || "") && (x.seccion || "") === (b0.seccion || "")).map(x => n0(x.copia) > 1 ? n0(x.copia) : 1);
+    const copia = usadas.length ? Math.max(...usadas) + 1 : 0;   // si ya hay uno suelto igual en esa parte, otra tarjeta (no se mezclan)
+    [...trab.values()].filter(x => x.ejercicio_id === id && x.bloque_id === e.bloqueId).forEach(x => { x.bloque_id = ""; x.ronda = 0; x.letra_nueva = false; x.copia = copia; nSueltas++; });
+  });
+  // 2) rondas que se quitan
+  const act = rondasAct();
+  if (e.n < act.length) { const fuera = act.slice(e.n); vivas().filter(x => fuera.includes(n0(x.ronda))).forEach(x => { x.borrado = true; nBorradas++; }); }
+  // 2b) v272: repeticiones por ejercicio: solo las series PENDIENTES del bloque, en todas las rondas (las hechas no se tocan); sustituye marca «máx» y rango por reps fijas
+  let nReps = 0;
+  ebRepsCambiadas().forEach(id => {
+    const v = parseInt(e.reps[id].trim(), 10);
+    vivas().filter(x => x.ejercicio_id === id && !hecha(x) && !x.calentamiento).forEach(x => { x.reps = v; x.max_reps = false; x.rango_min = 0; x.rango_max = 0; nReps++; });
+  });
+  // 3) ejercicios que se añaden: una serie en cada ronda, al final de la ronda, en el orden en que se eligieron
+  e.nuevos.forEach(id => {
+    const hist = seriesDe(id), ult = hist[hist.length - 1];
+    const v = ult ? valores(ult) : { reps: tipoDe(id) === "fuerza" || tipoDe(id) === "movilidad" ? 10 : 0 };
+    rondasAct().forEach(r => {
+      const f = { id: nuevoId(), fecha: dia.id, ejercicio_id: id, meso_id: b0.meso_id || "", peso: n0(v.peso), reps: n0(v.reps), distancia: n0(v.distancia), tiempo: n0(v.tiempo), pct: n0(v.pct), por_lado: !!v.por_lado,
+        descanso: n0(v.descanso), rec_dist: n0(v.rec_dist), max_reps: !!v.max_reps, max_tiempo: !!v.max_tiempo, rango_min: n0(v.rango_min), rango_max: n0(v.rango_max),
+        ciclo_id: "", calentamiento: false, nota: v.nota || "", hecha: false, borrado: false, grupo: b0.grupo || "", seccion: b0.seccion || "", bloque_id: e.bloqueId, ronda: r, orden: orden++, letra_nueva: !!b0.letra_nueva, copia: 0 };
+      trab.set(f.id, f); nNuevas++;
+    });
+  });
+  // 4) rondas que se añaden: copia de la última (con lo añadido en el paso 3), al final y sin hacer
+  const act2 = rondasAct();
+  if (e.n > e.rondas.length) {
+    const ultima = vivas().filter(x => n0(x.ronda) === act2[act2.length - 1]).sort((a, b) => a.orden - b.orden);
+    for (let k = 1; k <= e.n - e.rondas.length; k++) ultima.forEach(x => { const f = { ...x, id: nuevoId(), orden: orden++, ronda: act2[act2.length - 1] + k, hecha: false }; delete f.sucio; trab.set(f.id, f); nNuevas++; });
+  }
+  // 5) descansos: solo los campos que se han tocado, sobre la estructura final
+  const gf = e.grupos(vivas());
+  [["ej", gf.ej], ["ron", gf.ron], ["fin", gf.fin]].forEach(([k, lista]) => {
+    if (e.desc[k].trim() === e.ini[k]) return;
+    const rec = ebDescanso(e.desc[k]);
+    if (rec) lista.forEach(x => { x.descanso = rec.descanso; x.rec_dist = rec.rec_dist; });
+  });
+  // 6) aplicar y preparar el Deshacer único (lo que ya existía vuelve como estaba; lo creado se marca borrado)
+  const antes = [], creadas = [];
+  trab.forEach((f, id) => {
+    const o = orig.get(id);
+    if (!o) { cambiar("series", f, true); creadas.push(["series", { ...f, borrado: true }]); }
+    else if (JSON.stringify(o) !== JSON.stringify(f)) { antes.push(["series", o]); cambiar("series", f, true); }
+  });
+  persistir();
+  $("dlgEditBloque").close();
+  pintarDia(dia);
+  const partes = [];
+  if (e.n > e.rondas.length) partes.push("+" + (e.n - e.rondas.length) + (e.n - e.rondas.length === 1 ? " ronda" : " rondas"));
+  if (nBorradas) partes.push(nBorradas + (nBorradas === 1 ? " serie borrada" : " series borradas") + " (" + (e.rondas.length - e.n) + (e.rondas.length - e.n === 1 ? " ronda" : " rondas") + ")");
+  if (e.quitar.size) partes.push(e.quitar.size + (e.quitar.size === 1 ? " ejercicio suelto" : " ejercicios sueltos"));
+  if (e.nuevos.length) partes.push(e.nuevos.length + (e.nuevos.length === 1 ? " ejercicio añadido" : " ejercicios añadidos"));
+  if (ebCambios().desc) partes.push("descansos");
+  if (nReps) partes.push("reps en " + nReps + (nReps === 1 ? " serie pendiente" : " series pendientes"));
+  ebE = null;
+  avisoDeshacer("Bloque editado" + (partes.length ? " · " + partes.join(" · ") : ""), antes.concat(creadas));
+}
+$("dlgEditBloque").addEventListener("close", () => { ebE = null; });
 function tarjetaBloqueVacio(dia, vid) {
   const k = dia.id + "|" + vid, bv = bloquesVacios[k];
   const c = document.createElement("div");
@@ -4632,28 +4858,12 @@ function tarjetaBloque(dia, bloqueId, series) {
   const menu = c.querySelector(".menu-btn");
   menu.setAttribute("aria-label", "Opciones del bloque");
   menu.addEventListener("click", () => {
-    const ultima = series.filter(s => n0(s.ronda) === rondas[rondas.length - 1]);
     abrirMenu("Bloque ×" + rondas.length, primera.map(s => nombreEj(s.ejercicio_id)).join(" + "), [
-      ...[...new Set(seriesDelDia(dia.id).map(s => s.grupo || ""))].filter(x => x !== (series[0].grupo || "")).map(x => ({ texto: "Mover al entreno «" + (x || "Entreno 1") + "»", accion: () => moverASesion(series, x) })),
-      { texto: "Añadir una ronda", accion: () => {
-        let orden = Date.now();
-        ultima.sort((a, b) => a.orden - b.orden).forEach(s => cambiar("series", { ...s, id: nuevoId(), orden: orden++, ronda: n0(s.ronda) + 1, hecha: false, meso_id: s.meso_id || "" }, true));
-        persistir(); pintarDia(dia);
-      } },
-      rondas.length > 1 && { texto: "Quitar la última ronda", accion: () => { ultima.forEach(s => cambiar("series", { ...s, borrado: true }, true)); persistir(); pintarDia(dia); } },
+      { texto: "Editar bloque…", accion: () => abrirEditorBloque(dia, bloqueId) },   // v270 (MEJ-BLQ-001): rondas, descansos y ejercicios en un solo panel
       c.dataset.puedeLetra && { texto: c.dataset.letraNueva ? "Seguir con la letra anterior" : "Empezar letra nueva aquí (" + String.fromCharCode(c.querySelector(".etq-orden").textContent.charCodeAt(0) + 1) + "1)", accion: () => ponerLetraNueva(dia, series[0].grupo || "", "b:" + bloqueId, false, !c.dataset.letraNueva) },
       (variosTramos || !notaDe(series)) && { texto: variosTramos ? "Descripción (del bloque o de un ejercicio)…" : "+ Descripción (tempo, banda, EEP…)", accion: () => !variosTramos ? editarNota(dia, series, "Descripción del bloque")
         : abrirMenu("¿Descripción de qué?", "", [{ texto: "De todo el bloque", accion: () => editarNota(dia, series, "Descripción del bloque") }]
           .concat(primera.map(s0 => ({ texto: nombreEj(s0.ejercicio_id), accion: () => editarNota(dia, series.filter(x => x.ejercicio_id === s0.ejercicio_id), "Descripción de " + nombreEj(s0.ejercicio_id)) })))) },
-      { texto: "⏱ Descansos del bloque…", accion: () => menuDescansos() },
-      { texto: "+ Añadir un ejercicio al bloque…", accion: () => abrirSelector(dia, id => meterEnBloque(dia, series, id, null), series[0].grupo || "", series[0].seccion || "") },
-      variosTramos && { texto: "Quitar un ejercicio del bloque…", accion: () => abrirMenu("¿Qué ejercicio quitas?", "Se borran sus series de todas las rondas", primera.map(s0 => ({ texto: nombreEj(s0.ejercicio_id), peligro: true, accion: () => {
-        const fuera = series.filter(x => x.ejercicio_id === s0.ejercicio_id);
-        const antes = fuera.map(x => ["series", { ...x }]);
-        fuera.forEach(x => cambiar("series", { ...x, borrado: true }, true));
-        persistir(); pintarDia(dia);
-        avisoDeshacer(nombreEj(s0.ejercicio_id) + " quitado del bloque", antes);
-      } }))) },
       { texto: "Desagrupar (series sueltas)", accion: () => desagruparBloque(dia, series) },
       { texto: "Compartir con un amigo…", accion: () => compartir("Bloque ×" + rondas.length + " · " + primera.map(s => nombreEj(s.ejercicio_id)).join(" + "), itemsDe(series, true)) },
       { texto: "Quitar bloque", peligro: true, confirmar: "Pulsa otra vez: se borran " + series.length + " series", accion: () => {
@@ -10272,7 +10482,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v282" + (BETA ? " beta" : "");
+const VERSION_APP = "v283" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

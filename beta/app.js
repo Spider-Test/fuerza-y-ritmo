@@ -2054,8 +2054,8 @@ function itemsDe(series, conOrigen) {   // conOrigen: añade _h (hecha o planifi
   return items;
 }
 // Pega ejercicios y bloques como series planificadas; el grupo es el nombre de la sesión (p. ej. «Pierna»)
-function pegarItems(fecha, items, grupo, mesoId, masKg) {
-  let orden = Date.now();
+function pegarItems(fecha, items, grupo, mesoId, masKg, ordenInicial) {
+  let orden = ordenInicial ?? Date.now();
   const nueva = (ejercicio_id, v, extra) => cambiar("series", Object.assign({
     id: nuevoId(), fecha, ejercicio_id, orden: orden++,
     peso: n0(v.peso) > 0 ? Math.max(0, n0(v.peso) + n0(masKg)) : 0, reps: n0(v.reps), distancia: n0(v.distancia), tiempo: n0(v.tiempo),
@@ -7786,7 +7786,10 @@ function aplicarMeso(m, rehacer) {
   });
   tareas.sort((a, b) => a.w - b.w || a.d - b.d || a.pos - b.pos).forEach(({ w, d, p }) => {
     const items = esDescarga(m, w) ? descargarItems(p.items || [], m.descarga, w * n0(m.progresion)) : p.items || [];
-    pegarItems(iso(sumarDias(lunes, w * 7 + d)), items, p.nombre, m.id, esDescarga(m, w) ? 0 : w * n0(m.progresion));
+    // Cada sesión nueva empieza después de todo lo existente: no empatar posiciones aunque Date.now() coincida.
+    const fecha = iso(sumarDias(lunes, w * 7 + d));
+    const inicio = Math.max(Date.now(), seriesDelDia(fecha).reduce((max, s) => Math.max(max, n0(s.orden)), 0) + 1);
+    pegarItems(fecha, items, p.nombre, m.id, esDescarga(m, w) ? 0 : w * n0(m.progresion), inicio);
     total += contarSeries(items);
   });
   return total;
@@ -10752,7 +10755,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v294" + (BETA ? " beta" : "");
+const VERSION_APP = "v295" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

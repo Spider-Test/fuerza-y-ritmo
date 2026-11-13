@@ -2724,76 +2724,6 @@ dialog#dlgAviso { margin: auto; }
 .plan-sec[data-sec="mesociclos"] .sec-cab { flex-wrap: wrap; column-gap: 4px; row-gap: 2px; }
 .plan-sec[data-sec="mesociclos"] .sec-cab > .sec-toggle { flex: 0 0 auto; gap: 6px; }
 
-/* v270 (MEJ-BLQ-001): panel «Editar bloque» (rondas, ejercicios y descansos en un solo sitio); solo colores y tamaños ya usados en la app */
-#dlgEditBloque .d-cuerpo { gap: 16px; }
-.eb-sec { display: flex; flex-direction: column; gap: 8px; }
-.eb-h { margin: 0; font-family: var(--display); font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
-.eb-rondas { display: flex; align-items: center; gap: 12px; }
-.eb-paso { font-size: 22px; line-height: 1; min-width: 44px; height: 44px; }
-.eb-n { min-width: 56px; text-align: center; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.eb-nota { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.4; }
-.eb-aviso { padding: 10px 12px; border-radius: 10px; display: flex; flex-direction: column; gap: 8px; }
-.eb-peligro { background: var(--error-soft); border: 1px solid var(--error); }
-.eb-t { margin: 0; font-weight: 700; font-size: 14px; }
-.eb-lista { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
-.eb-conf { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; font-weight: 600; min-height: 44px; }
-.eb-conf input { flex: none; width: 22px; height: 22px; margin-top: 1px; }
-.eb-ejs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.eb-ej { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; }
-.eb-ej-t { display: flex; flex-direction: column; flex: 1 1 150px; min-width: 0; gap: 2px; }
-.eb-ej-n { font-weight: 700; overflow-wrap: break-word; }
-.eb-ej-d { font-size: 13px; color: var(--muted); }
-.eb-quitado { background: var(--accent-soft); }
-.eb-nuevo { border-style: dashed; border-color: var(--accent); }
-.eb-bt { flex: none; padding: 0 12px; }
-.eb-sec .add-ej { min-height: 44px; margin: 0; }
-#ebCuerpo > .d-botones { position: sticky; bottom: 0; z-index: 1; margin: 0 -16px -18px; padding: 10px 16px; background: var(--card); border-top: 1px solid var(--line); }
-
-/* v271: «Ver ficha» en el modo entreno (discreto, separado del título y del vídeo) y ficha en modo consulta; aviso de «por lado» en la ficha */
-.en-ficha { align-self: flex-start; flex-shrink: 0; min-height: 44px; height: auto; padding: 8px 12px; border-radius: 10px; font-size: 14px; font-weight: 600; color: var(--muted); white-space: normal; text-align: left; }
-.ficha-lectura input:disabled, .ficha-lectura textarea:disabled, .ficha-lectura select:disabled { opacity: 1; -webkit-text-fill-color: currentColor; }
-.lado-aplicar { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-top: 8px; padding: 10px 12px; border-radius: 10px; background: var(--gold-soft); }
-.lado-aplicar .menu-det { margin: 0; color: var(--fg); }
-.en-accesos { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; }
-/* v271: en el modo entreno los dos cuadros (p. ej. repeticiones y tiempo) tienen siempre el mismo tamaño aunque una etiqueta ocupe más líneas: el cuadro no se
-   estira y los dos quedan alineados por abajo */
-.en-campo { justify-content: flex-end; }
-.en-campo .paso { flex: none; }
-
-/* v272: repeticiones de cada ejercicio en el editor de bloque (solo series pendientes) */
-.eb-reps { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 14px; font-weight: 600; color: var(--muted); }
-.eb-reps input { width: 76px; min-height: 44px; text-align: center; font-size: 18px; font-weight: 700; color: var(--fg); }
-
-/* v274: selector Ejercicios | Calentamientos y editor de calentamientos guardados */
-.ej-sel { margin: 0 0 10px; }
-.cal-acciones { display: flex; gap: 8px; flex-wrap: wrap; }
-.cal-items { display: flex; flex-direction: column; gap: 10px; }
-.cal-item { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; }
-.cal-item-cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-.cal-item-n { overflow-wrap: anywhere; }
-.cal-item-bs { display: inline-flex; gap: 6px; }
-.cal-item > .add-ej { min-height: 44px; margin: 0; }
-#calCuerpo > .add-ej { min-height: 44px; margin: 0; }
-#calCuerpo > .d-botones { position: sticky; bottom: 0; z-index: 1; margin: 0 -16px -18px; padding: 10px 16px; background: var(--card); border-top: 1px solid var(--line); }
-
-/* v275: campos del editor de calentamientos con etiqueta visible y cuadrícula adaptable (2 columnas en móvil, más en pantallas anchas), siempre dentro de la tarjeta */
-.cal-item { min-width: 0; }
-.cal-fila { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding-top: 8px; border-top: 1px dashed var(--line); }
-.cal-fila-cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.cal-n { font-weight: 700; font-size: 14px; color: var(--muted); }
-.cal-quitar { flex: none; min-width: 44px; min-height: 44px; }
-.cal-campos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 10px; min-width: 0; }
-.cal-campo { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: 13px; font-weight: 600; color: var(--muted); }
-.cal-et { line-height: 1.2; overflow-wrap: anywhere; }
-.cal-campo input { width: 100%; min-width: 0; box-sizing: border-box; min-height: 44px; padding: 8px; font-size: 16px; font-weight: 600; color: var(--fg); text-align: center; }
-.cal-ancho { grid-column: 1 / -1; }
-.cal-ancho input { text-align: left; }
-@media (min-width: 520px) { .cal-campos { grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); } .cal-ancho { grid-column: span 2; } }
-
-/* v277: diálogo «Añadir a una fecha» (plantillas): controles táctiles de 44 px */
-#dlgFechaPlant .d-botones button, #dlgFechaPlant input[type="date"] { min-height: 44px; }
-#dlgFechaPlant .d-botones { margin-top: 4px; }
-
 /* v280: arrastrar una parte a otro entreno: TODA la tarjeta del entreno destino se resalta (sin transformaciones ni cambios de tamaño: nada salta) y una indicación fija, sobre la barra de pestañas, dice qué va a pasar */
 .grupo.zona-destino, .grupo.zona-invalida { position: relative; outline: 3px solid var(--accent); outline-offset: -3px; }
 .grupo.zona-destino::after, .grupo.zona-invalida::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: color-mix(in srgb, var(--accent) 14%, transparent); pointer-events: none; z-index: 6; }
@@ -2826,6 +2756,10 @@ dialog#dlgAviso { margin: auto; }
   #selector.selector-visible > .filtro-clasif { flex-shrink: 0; }
   #selector.selector-visible #listaEj { min-height: 0; max-height: none; flex: 1 1 auto; overflow-y: auto; }
 }
+
+/* O-3: controles táctiles del diálogo de fecha ya existente en beta. */
+#dlgFechaPlant .d-botones button, #dlgFechaPlant input[type="date"] { min-height: 44px; }
+#dlgFechaPlant .d-botones { margin-top: 4px; }
 
 /* Reordenación local: el control pertenece a la cabecera del día o de la lista. */
 #vistaSemana .dia > .dia-cab, #vistaListas .lista-sec > .lista-cab { flex-wrap: wrap; }

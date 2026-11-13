@@ -1824,6 +1824,71 @@ function pedirNombre(titulo, valor, ayuda) {
   });
 }
 
+// Modo efímero de reordenación: un solo día o una sola lista, sin guardarlo ni sincronizarlo.
+let zonaReordenar = null, arrastreOrden = null, actualizandoOrden = false;
+const raizOrden = el => el?.closest?.("[data-zona-orden]") || null;
+const puedeReordenar = el => !!zonaReordenar && raizOrden(el)?.dataset.zonaOrden === zonaReordenar;
+const zonaOrdenPlegada = zona => zona.classList.contains(zona.classList.contains("dia") ? "plegado" : "cerrada");
+function terminarModoOrden() {
+  zonaReordenar = null;
+  if (arrastreOrden) arrastreOrden.cancelar();
+  actualizarModoOrden();
+}
+function instalarControlOrden(zona, cabecera, nombre) {
+  zona.dataset.zonaOrden = zona.dataset.zonaOrden || "";
+  zona.dataset.nombreOrden = nombre;
+  const barra = document.createElement("div"); barra.className = "orden-barra"; barra.hidden = true;
+  const estado = document.createElement("span"); estado.className = "orden-estado";
+  estado.textContent = "Reordenando"; estado.hidden = true; estado.setAttribute("role", "status");
+  const control = document.createElement("button"); control.type = "button";
+  control.className = "nav-btn modo-orden"; control.textContent = "Reordenar"; control.setAttribute("aria-pressed", "false");
+  control.addEventListener("click", () => {
+    if (puedeReordenar(zona)) terminarModoOrden();
+    else { terminarModoOrden(); zonaReordenar = zona.dataset.zonaOrden; actualizarModoOrden(); }
+  });
+  barra.append(control, estado); cabecera.appendChild(barra);
+}
+function actualizarModoOrden() {
+  if (actualizandoOrden) return;
+  actualizandoOrden = true;
+  try {
+    const zonas = [...document.querySelectorAll("[data-zona-orden]")];
+    const actual = zonas.find(z => z.dataset.zonaOrden === zonaReordenar && !z.closest("[hidden]"));
+    if (zonaReordenar && (!actual || zonaOrdenPlegada(actual) || !actual.querySelector(".asa") || document.querySelector("dialog[open]"))) terminarModoOrden();
+    else if (arrastreOrden && !arrastreOrden.asa.isConnected) arrastreOrden.cancelar();
+    zonas.forEach(z => {
+      const activo = puedeReordenar(z), barra = z.querySelector(":scope > .dia-cab > .orden-barra, :scope > .lista-cab > .orden-barra");
+      if (z.classList.contains("reordenando") !== activo) z.classList.toggle("reordenando", activo);
+      if (barra) {
+        const oculta = zonaOrdenPlegada(z) || !z.querySelector(".asa"), control = barra.querySelector(".modo-orden"), estado = barra.querySelector(".orden-estado");
+        if (barra.hidden !== oculta) barra.hidden = oculta;
+        if (estado.hidden === activo) estado.hidden = !activo;
+        const texto = activo ? "Hecho" : "Reordenar";
+        if (control.textContent !== texto) control.textContent = texto;
+        const pressed = String(activo), etiqueta = (activo ? "Terminar de reordenar " : "Reordenar ") + z.dataset.nombreOrden;
+        if (control.getAttribute("aria-pressed") !== pressed) control.setAttribute("aria-pressed", pressed);
+        if (control.getAttribute("aria-label") !== etiqueta) control.setAttribute("aria-label", etiqueta);
+      }
+      z.querySelectorAll(".asa").forEach(asa => {
+        if (asa.tabIndex !== (activo ? 0 : -1)) asa.tabIndex = activo ? 0 : -1;
+        if (asa.getAttribute("aria-disabled") !== String(!activo)) asa.setAttribute("aria-disabled", String(!activo));
+      });
+    });
+  } finally { actualizandoOrden = false; }
+}
+// Mantener la zona en los repintados, pero cancelar un arrastre cuyo nodo haya sido sustituido.
+let ordenPendiente = false;
+new MutationObserver(() => {
+  if (ordenPendiente) return;
+  ordenPendiente = true; queueMicrotask(() => { ordenPendiente = false; actualizarModoOrden(); });
+}).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["hidden", "open"] });
+document.addEventListener("pointerdown", e => {
+  const zona = raizOrden(e.target);
+  if (zonaReordenar && zona && zona.dataset.zonaOrden !== zonaReordenar) terminarModoOrden();
+}, true);
+window.addEventListener("blur", terminarModoOrden);
+document.addEventListener("visibilitychange", () => { if (document.hidden) terminarModoOrden(); });
+
 // ---------- Semana ----------
 const dias = DIAS.map((_, i) => {
   const col = document.createElement("section");
@@ -1838,7 +1903,7 @@ const dias = DIAS.map((_, i) => {
                   '<button type="button" class="dia-resumen"></button>' +
                   '<div class="dia-cuerpo"><div class="dia-cuerpo-in">' +
                   '<div class="editor vacio" role="textbox" aria-multiline="true" contenteditable="true"></div>' +
-                  '<div class="bloques"></div><div class="add-fila"><button type="button" class="add-ej">+ Ejercicio</button><button type="button" class="add-ej add-bloque">+ Bloque</button><button type="button" class="add-ej add-entreno">+ Entreno</button><button type="button" class="add-ej add-parte-btn">+ Parte</button></div>' +
+                  '<div class="bloques"></div><div class="add-fila"><button type="button" class="add-ej">+ Ejercicio</button><button type="button" class="add-ej add-bloque">+ Superserie</button><button type="button" class="add-ej add-entreno">+ Entreno</button><button type="button" class="add-ej add-parte-btn">+ Parte</button></div>' +
                   '<button type="button" class="primario empezar" hidden>▶ Empezar entreno</button>' +
                   '<button type="button" class="rpe-dia" hidden></button></div></div>';
   col.querySelector(".dia-nombre").textContent = NOMBRES[i];
@@ -1856,13 +1921,14 @@ const dias = DIAS.map((_, i) => {
   col.querySelector(".dia-abrir").addEventListener("click", () => plegarDia(dia));
   dia.resumenEl.addEventListener("click", () => plegarDia(dia));
   col.querySelector(".dia-max").addEventListener("click", () => abrirDia(dia.id));
+  instalarControlOrden(col, col.querySelector(".dia-cab"), NOMBRES[i]);
   dia.empezarEl.addEventListener("click", () => empezarEntreno(dia));
   ed.addEventListener("focus", () => col.classList.add("escribiendo"));
   ed.addEventListener("blur", () => col.classList.remove("escribiendo"));
   // v253: el «+ Ejercicio» general del día añade un ejercicio SUELTO (sin entreno, grupo ""), aunque el día ya tenga entrenos;
   // para meterlo en un entreno está el «+ Ejercicio» de dentro de ese entreno (o se arrastra/mueve después)
   col.querySelector(".add-ej").addEventListener("click", () => abrirSelector(dia, null, ""));
-  col.querySelector(".add-bloque").addEventListener("click", () => enQueEntreno(dia, "Añadir bloque", g => abrirBloque(dia, g)));
+  col.querySelector(".add-bloque").addEventListener("click", () => enQueEntreno(dia, "Añadir superserie", g => abrirBloque(dia, g)));
   col.querySelector(".add-entreno").addEventListener("click", () => elegirNuevoEntreno(dia));
   col.querySelector(".add-parte-btn").addEventListener("click", () => enQueEntreno(dia, "Nueva parte", g => nuevaParte(dia, g)));
   col.querySelector(".menu-btn").addEventListener("click", () => menuDia(dia));
@@ -1894,6 +1960,7 @@ function pintarBanda() {
 }
 function pintarSemana() {
   const lunes = lunesVista();
+  if (zonaReordenar?.startsWith("dia:") && !Array.from({ length: 7 }, (_, i) => "dia:" + iso(sumarDias(lunes, i))).includes(zonaReordenar)) terminarModoOrden();
   const hoyIso = iso(new Date());
   $("rango").textContent = fmt(lunes) + " – " + fmt(sumarDias(lunes, 6));
   const n = desplazamiento, rel = $("relativa");
@@ -1914,6 +1981,8 @@ function pintarSemana() {
   dias.forEach(d => {
     const f = sumarDias(lunes, d.i);
     d.id = iso(f);
+    d.col.dataset.zonaOrden = "dia:" + d.id;
+    d.col.dataset.nombreOrden = NOMBRES[d.i] + " " + fmt(f);
     d.fechaEl.textContent = fmt(f);
     d.col.classList.toggle("hoy", d.id === hoyIso);
     d.col.hidden = !!diaAbierto && d.id !== diaAbierto;
@@ -1985,8 +2054,8 @@ function itemsDe(series, conOrigen) {   // conOrigen: añade _h (hecha o planifi
   return items;
 }
 // Pega ejercicios y bloques como series planificadas; el grupo es el nombre de la sesión (p. ej. «Pierna»)
-function pegarItems(fecha, items, grupo, mesoId, masKg) {
-  let orden = Date.now();
+function pegarItems(fecha, items, grupo, mesoId, masKg, ordenInicial) {
+  let orden = ordenInicial ?? Date.now();
   const nueva = (ejercicio_id, v, extra) => cambiar("series", Object.assign({
     id: nuevoId(), fecha, ejercicio_id, orden: orden++,
     peso: n0(v.peso) > 0 ? Math.max(0, n0(v.peso) + n0(masKg)) : 0, reps: n0(v.reps), distancia: n0(v.distancia), tiempo: n0(v.tiempo),
@@ -2077,10 +2146,10 @@ const esPlantillaCalentamiento = p => { const it = (p && p.items) || []; return 
 async function guardarCalentamientoParte(dia, grupo, parte) {
   const todas = seriesDelDia(dia.id).filter(s => (s.grupo || "") === grupo && (s.seccion || "") === parte).sort((a, b) => a.orden - b.orden);
   const warm = todas.filter(s => !s.bloque_id), deBloque = todas.filter(s => s.bloque_id);
-  if (!warm.length) { avisoImportante("No se puede guardar", deBloque.length ? "Esta parte solo tiene bloques y el calentamiento guardado no admite bloques. Añade ejercicios sueltos a la parte para guardarla." : "Esta parte no tiene ejercicios con series que guardar."); return; }
+  if (!warm.length) { avisoImportante("No se puede guardar", deBloque.length ? "Esta parte solo tiene superseries y el calentamiento guardado no admite superseries. Añade ejercicios sueltos a la parte para guardarla." : "Esta parte no tiene ejercicios con series que guardar."); return; }
   if (deBloque.length) {
     const nB = new Set(deBloque.map(x => x.bloque_id)).size, nEj = new Set(warm.map(x => x.ejercicio_id)).size;
-    const ok = await confirmar("Esta parte incluye bloques", "El calentamiento guardado no admite bloques. Se guardarán las " + warm.length + (warm.length === 1 ? " serie suelta" : " series sueltas") + " (" + nEj + (nEj === 1 ? " ejercicio" : " ejercicios") + ") y NO se guardarán " + nB + (nB === 1 ? " bloque" : " bloques") + " con " + deBloque.length + (deBloque.length === 1 ? " serie" : " series") + ". La parte no cambia.", "Guardar sin los bloques");
+    const ok = await confirmar("Esta parte incluye superseries", "El calentamiento guardado no admite superseries. Se guardarán las " + warm.length + (warm.length === 1 ? " serie suelta" : " series sueltas") + " (" + nEj + (nEj === 1 ? " ejercicio" : " ejercicios") + ") y NO se guardarán " + nB + (nB === 1 ? " superserie" : " superseries") + " con " + deBloque.length + (deBloque.length === 1 ? " serie" : " series") + ". La parte no cambia.", "Guardar sin las superseries");
     if (!ok) return;
   }
   const nombre = await pedirNombre("Guardar calentamiento", parte + (grupo ? " · " + grupo : ""), "Se guarda una copia ordenada de esta parte con sus ejercicios, repeticiones, tiempo, distancia, peso, descansos y notas. Si ya tienes un calentamiento guardado con este nombre, se reemplaza.");
@@ -2089,7 +2158,7 @@ async function guardarCalentamientoParte(dia, grupo, parte) {
   if (existe && !esPlantillaCalentamiento(existe)) { setEstado("Ya hay una plantilla normal con ese nombre; elige otro para el calentamiento", true); return; }
   const items = itemsDe(warm).map(it => ({ ejercicio_id: it.ejercicio_id, seccion: "Calentamiento", series: it.series.map(v => ({ ...v, calentamiento: true })) }));
   cambiar("plantillas", { id: existe ? existe.id : nuevoId(), nombre, items, borrado: false });
-  setEstado("Calentamiento «" + nombre + "» guardado (" + contarSeries(items) + " series)" + (deBloque.length ? " · sin los bloques de la parte" : ""));
+  setEstado("Calentamiento «" + nombre + "» guardado (" + contarSeries(items) + " series)" + (deBloque.length ? " · sin las superseries de la parte" : ""));
 }
 function elegirCalentamientoGuardado(dia, grupo) {
   const ps = vivos("plantillas").filter(esPlantillaCalentamiento).sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
@@ -2355,7 +2424,7 @@ function menuDia(dia) {
     hayItemsCopiados() && { texto: "📋 Pegar «" + porta.nombre + "» en este día", accion: () => pegar(dia) },
     { texto: "Añadir plantilla…", accion: () => elegirPlantilla("Añadir plantilla al " + titulo, p => aplicarPlantilla(dia, p)) },
     // v263: sin «+ Bloque suelto (sin entreno)…» en este menú (los bloques se crean dentro de un entrenamiento: «＋ Añadir» › «+ Bloque»)
-    series.filter(s => !s.bloque_id).length > 1 && { texto: "Seleccionar series para agrupar en bloque", accion: () => empezarSelSeries(dia) },
+    series.filter(s => !s.bloque_id).length > 1 && { texto: "Seleccionar series para agrupar en superserie", accion: () => empezarSelSeries(dia) },
     series.length && { texto: "Guardar en una lista de entrenamientos…", accion: () => guardarEnLista(series[0].grupo || "Entrenamiento", series) },
     series.length && { texto: "Guardar ejercicios como plantilla…", accion: () => guardarPlantilla(series[0].grupo || "Entrenamiento", series) },
     series.length && { texto: "Compartir con un amigo…", accion: () => compartir(series[0].grupo || titulo, itemsDe(series, true)) },
@@ -2396,7 +2465,7 @@ function cabeceraParte(dia, grupo, p, color, nNombradas, partes, seriesItem) {
       esNombreCalentamiento(p.nombre) && ss.length > 0 && { texto: "Guardar calentamiento…", accion: () => guardarCalentamientoParte(dia, grupo, p.nombre) },   // v274
       // v262: sin «+ Ejercicio en esta parte» en este menú; se añade con los botones visibles de la propia parte
       // v284: sin «Mover la parte a otro entreno…»; la parte se reordena y se traslada a otro entreno con el asa ≡ (un solo arrastre)
-      plegada && { texto: "+ Bloque en esta parte", accion: () => abrirBloque(dia, grupo, p.nombre) },
+      plegada && { texto: "+ Superserie en esta parte", accion: () => abrirBloque(dia, grupo, p.nombre) },
       { texto: "Quitar la parte (sus ejercicios quedan sin parte)", accion: () => {
         ss.forEach(x => cambiar("series", { ...x, seccion: "" }, true));
         renombrarParteLocal(dia.id, grupo, p.nombre, "");
@@ -2638,7 +2707,7 @@ function elegirNuevoEntreno(dia) {
 }
 async function nuevoEntreno(dia) {
   const existentes = [...new Set(seriesDelDia(dia.id).map(s => s.grupo || "").concat(sesionesVacias[dia.id] || []))];
-  const n = await pedirNombre("Nombre del nuevo entreno", existentes.length ? "Entreno " + (existentes.length + 1) : "Entreno 2", "Por ejemplo «Mañana», «Tarde», «Carrera» o «Gimnasio». Tendrá sus propios ejercicios y bloques.");
+  const n = await pedirNombre("Nombre del nuevo entreno", existentes.length ? "Entreno " + (existentes.length + 1) : "Entreno 2", "Por ejemplo «Mañana», «Tarde», «Carrera» o «Gimnasio». Tendrá sus propios ejercicios y superseries.");
   if (!n) return;
   const nf = nombreEntrenoLibre(dia.id, n);   // v281: si ya hay un entreno con ese nombre, se crea otro aparte («Nombre (1)»…) en vez de reutilizar el existente
   (sesionesVacias[dia.id] = sesionesVacias[dia.id] || []).push(nf); guardarSesiones();
@@ -2905,7 +2974,7 @@ function menuGrupo(dia, grupo) {
         const hayCal1 = tieneCalentamiento(dia.id, grupo);
         const hayCal2 = tieneCalentamiento(dia.id, x);
         const nombrar = async separar => {
-          const n = await pedirNombre("Nombre del entreno fusionado", (grupo || "Entreno 1") + " + " + (x || "Entreno 1"), "Por ejemplo «Pecho + Pierna». Sus ejercicios, bloques y partes pasan a ser un solo entreno.");
+          const n = await pedirNombre("Nombre del entreno fusionado", (grupo || "Entreno 1") + " + " + (x || "Entreno 1"), "Por ejemplo «Pecho + Pierna». Sus ejercicios, superseries y partes pasan a ser un solo entreno.");
           if (n) fusionarEntrenos(dia, grupo, x, n, separar);
         };
         if (hayCal1 && hayCal2) abrirMenu("¿Qué hacemos con los calentamientos?", "Puedes juntarlos en una sola sección o conservarlos separados dentro del entreno fusionado.", [
@@ -2918,7 +2987,7 @@ function menuGrupo(dia, grupo) {
     // teclado con el asa enfocada). Si el día no se ve (no hay caja que arrastrar), se mantienen como alternativa
     nGrupos > 1 && !dia.bloquesEl.querySelector(":scope > .grupo .grupo-cab .asa") && { texto: "Subir sesión", accion: () => moverGrupo(dia.id, grupo, -1) },
     nGrupos > 1 && !dia.bloquesEl.querySelector(":scope > .grupo .grupo-cab .asa") && { texto: "Bajar sesión", accion: () => moverGrupo(dia.id, grupo, 1) },
-    series.filter(s => !s.bloque_id).length > 1 && { texto: "Seleccionar series para agrupar en bloque", accion: () => empezarSelSeries(dia) },
+    series.filter(s => !s.bloque_id).length > 1 && { texto: "Seleccionar series para agrupar en superserie", accion: () => empezarSelSeries(dia) },
     series.length && { texto: "Copiar entreno", accion: () => copiar(grupo || "Entreno 1", "", series, "entreno") },
     series.length && { texto: "Guardar en una lista de entrenamientos…", accion: () => guardarEnLista(grupo || "Entrenamiento", series) },
     { texto: "Añadir calentamiento guardado…", accion: () => elegirCalentamientoGuardado(dia, grupo) },   // v273
@@ -3410,6 +3479,7 @@ function elegirDiaDestino(lunes, titulo, alElegir) {
 }
 // Lleva la semana al día donde se ha añadido algo
 function irADia(f, aviso) {
+  if (zonaReordenar && zonaReordenar !== "dia:" + f) terminarModoOrden();
   desplazamiento = Math.round((lunesDe(deIso(f)) - lunesDe(new Date())) / 6048e5);
   verPestana("semana");
   pintarSemana();
@@ -3586,7 +3656,7 @@ function pintarDiaSinAncla(dia) {
       {   // plegar o desplegar el entreno tocando su nombre
         // Varios entrenos en el día: cada uno se pliega o despliega tocando su nombre (se recuerda en este dispositivo)
         const clavePl = dia.id + "|" + g.nombre, tg = cab.querySelector(".g-toggle");
-        const nombres = [...new Set(g.ids.map(id => id.startsWith("b:") || id.startsWith("v:") ? "Bloque" : nombreEj(ejDeClave(id))).filter(Boolean))];
+        const nombres = [...new Set(g.ids.map(id => id.startsWith("b:") || id.startsWith("v:") ? "Superserie" : nombreEj(ejDeClave(id))).filter(Boolean))];
         cab.querySelector(".g-res").textContent = nombres.slice(0, 3).join(", ") + (nombres.length > 3 ? "…" : "");
         const ponerPl = pl => { caja.classList.toggle("g-plegado", pl); tg.setAttribute("aria-expanded", String(!pl)); };
         ponerPl(gruposPlegados[clavePl] !== 0);
@@ -3779,13 +3849,13 @@ function pintarDiaSinAncla(dia) {
         lc.className = "letra-caja";
         lc.dataset.letra = letra;
         const ss = items.flatMap(x => seriesItem(x.id));
-        const nombres = items.map(x => x.id.startsWith("b:") || x.id.startsWith("v:") ? "Bloque" : nombreEj(ejDeClave(x.id)));
+        const nombres = items.map(x => x.id.startsWith("b:") || x.id.startsWith("v:") ? "Superserie" : nombreEj(ejDeClave(x.id)));
         const cabL = document.createElement("button");
         cabL.type = "button"; cabL.className = "letra-cab";
         cabL.innerHTML = '<span class="flecha-dia" aria-hidden="true">▸</span><span class="etq-orden"></span><span class="l-nombres"></span><span class="g-prog"></span>';
         cabL.querySelector(".etq-orden").textContent = letra;
         cabL.querySelector(".l-nombres").textContent = nombres.join(" + ");
-        cabL.setAttribute("aria-label", "Bloque " + letra + ": " + nombres.join(" + ") + (ss.length ? ". " + ss.filter(hecha).length + " de " + ss.length + " series completadas" : ""));
+        cabL.setAttribute("aria-label", "Superserie " + letra + ": " + nombres.join(" + ") + (ss.length ? ". " + ss.filter(hecha).length + " de " + ss.length + " series completadas" : ""));
         cabL.querySelector(".g-prog").textContent = ss.length ? ss.filter(hecha).length + "/" + ss.length : "";
         items[0].el.before(lc);
         lc.appendChild(cabL);
@@ -3803,9 +3873,9 @@ function pintarDiaSinAncla(dia) {
       if (p.nombre) {
         const add = document.createElement("div");
         add.className = "add-fila add-parte" + color;
-        add.innerHTML = '<button type="button" class="add-ej">+ Ejercicio</button><button type="button" class="add-ej">+ Bloque</button>';
+        add.innerHTML = '<button type="button" class="add-ej">+ Ejercicio</button><button type="button" class="add-ej">+ Superserie</button>';
         add.children[0].setAttribute("aria-label", "Añadir un ejercicio a " + p.nombre);
-        add.children[1].setAttribute("aria-label", "Añadir un bloque a " + p.nombre);
+        add.children[1].setAttribute("aria-label", "Añadir una superserie a " + p.nombre);
         add.children[0].addEventListener("click", () => abrirSelector(dia, null, g.nombre, p.nombre));
         add.children[1].addEventListener("click", () => abrirBloque(dia, g.nombre, p.nombre));
         plegarAdd(add, !p.ids.length);   // parte vacía: las opciones ya a la vista
@@ -3893,7 +3963,7 @@ function pintarDiaSinAncla(dia) {
     };
     const otrasSesiones = [...new Set(grupos.map(x => x.nombre))].filter(x => x !== g.nombre);
     movibles().forEach(el => {
-      const clave = el.dataset.clave, ej = ejDeClave(clave), nombre = clave.startsWith("b:") ? "Bloque" : nombreEj(ej), espera = !!el.dataset.espera;
+      const clave = el.dataset.clave, ej = ejDeClave(clave), nombre = clave.startsWith("b:") ? "Superserie" : nombreEj(ej), espera = !!el.dataset.espera;
       // Arrastrar encima de la cabecera de una parte lo mete en ella, al final
       const zonasParte = { lista: () => [...caja.querySelectorAll(":scope > .parte-caja > .parte-cab")].filter(z => z.dataset.parte !== (el.dataset.parte || ""))
           .concat(clave.startsWith("b:") ? [] : [...caja.querySelectorAll(".bloque-rep > .bloque-cab")]), alSoltar: z => {
@@ -3918,7 +3988,7 @@ function pintarDiaSinAncla(dia) {
         l.splice(k + 1, 0, el);
         ponerParte(dia, g.nombre, clave, espera, dest);
         soltar(l);
-        setEstado((clave.startsWith("b:") ? "Bloque" : nombre) + " movido a «" + dest + "»");
+        setEstado((clave.startsWith("b:") ? "Superserie" : nombre) + " movido a «" + dest + "»");
       } };
       if (movibles().length > 1 || zonasParte.lista().length || otrasSesiones.length) el.querySelector(".bloque-cab").appendChild(asaArrastreDia(el, caja, movibles, soltar, nombre, zonasParte));
       if (clave.startsWith("b:")) return;
@@ -3956,11 +4026,11 @@ function pintarDiaSinAncla(dia) {
       add.className = "add-fila add-grupo";
       add.innerHTML = '<button type="button" class="add-ej add-en-grupo">+ Añadir</button>';
       const b = add.firstElementChild;
-      b.setAttribute("aria-label", "Añadir al entreno " + g.nombre + ": ejercicio, bloque o parte");
+      b.setAttribute("aria-label", "Añadir al entreno " + g.nombre + ": ejercicio, superserie o parte");
       b.setAttribute("aria-haspopup", "dialog");
       b.addEventListener("click", () => abrirMenu("Añadir a «" + g.nombre + "»", "", [
         { texto: "+ Ejercicio", accion: () => abrirSelector(dia, null, g.nombre) },
-        { texto: "+ Bloque", accion: () => abrirBloque(dia, g.nombre) },
+        { texto: "+ Superserie", accion: () => abrirBloque(dia, g.nombre) },
         { texto: "+ Parte", accion: () => nuevaParte(dia, g.nombre) },
         { texto: "+ Calentamiento guardado", accion: () => elegirCalentamientoGuardado(dia, g.nombre) }   // v273
       ]));
@@ -4700,7 +4770,7 @@ function agruparSeleccion() {
   const opcion = (lista, rondas) => {
     const p = rondas ? periodoRepetido(lista.map(s => s.ejercicio_id)) : lista.length, n = lista.length / p;
     const nombres = lista.slice(0, p).map(s => nombreEj(s.ejercicio_id));
-    return { lista, p, n, texto: "Bloque ×" + n + " · " + (p > 3 ? nombres.slice(0, 2).join(" + ") + "… (" + p + " tramos)" : nombres.join(" + ")) };
+    return { lista, p, n, texto: "Superserie ×" + n + " · " + (p > 3 ? nombres.slice(0, 2).join(" + ") + "… (" + p + " tramos)" : nombres.join(" + ")) };
   };
   const aplicar = o => {
     const bloque = nuevoId(), grupo = o.lista[0].grupo || "", huecos = o.lista.map(s => n0(s.orden)).sort((a, b) => a - b);
@@ -4715,7 +4785,7 @@ function agruparSeleccion() {
   const otroOrden = elegidas.some((s, i) => s !== enDia[i]);
   abrirMenu("Agrupar " + elegidas.length + " series", "Se conservan sus valores, lo hecho y lo pendiente. Elige cómo:", [
     conPatron.n > 1 && { texto: conPatron.texto, accion: () => aplicar(conPatron) },
-    { texto: "Bloque ×1 con las " + elegidas.length + " en una ronda", accion: () => aplicar(unaRonda) },
+    { texto: "Superserie ×1 con las " + elegidas.length + " en una ronda", accion: () => aplicar(unaRonda) },
     otroOrden && { texto: "En el orden en que las tocaste · " + orden.texto, accion: () => aplicar(orden) }
   ]);
 }
@@ -4724,7 +4794,7 @@ function desagruparBloque(dia, series) {
   series.forEach(s => cambiar("series", { ...s, bloque_id: "", ronda: 0 }, true));
   persistir();
   pintarDia(dia);
-  avisoDeshacer("Bloque desagrupado en series sueltas", deshacer);
+  avisoDeshacer("Superserie desagrupada en series sueltas", deshacer);
 }
 // Mete un ejercicio en un bloque: una serie suya en cada ronda, al final de la ronda. Si viene de fuera
 // (arrastrado), sus series pasan a las rondas (la 1.ª a la R1…) y desaparecen como ejercicio suelto
@@ -4758,7 +4828,7 @@ function meterEnBloque(dia, seriesBloque, ejercicioId, sueltas) {
   const sobran = venidas.length - movidas;
   persistir();
   pintarDia(dia);
-  avisoDeshacer(nombreEj(ejercicioId) + " añadido al bloque (" + rondas.length + " rondas)" + (sobran > 0 ? " · " + sobran + (sobran === 1 ? " serie sigue suelta" : " series siguen sueltas") + " (no entran en las rondas)" : ""),
+  avisoDeshacer(nombreEj(ejercicioId) + " añadido a la superserie (" + rondas.length + " rondas)" + (sobran > 0 ? " · " + sobran + (sobran === 1 ? " serie sigue suelta" : " series siguen sueltas") + " (no entran en las rondas)" : ""),
     antes.concat(nuevas.map(f => ["series", { ...f, borrado: true }])));
 }
 // Bloque vacío: una caja «×N rondas» donde arrastrar (o añadir) ejercicios; con el primero pasa a ser un bloque normal
@@ -4779,6 +4849,84 @@ function meterEnVacio(dia, vid, ejercicioId, sueltas) {
 //  · Quitar un ejercicio: sus series NO se borran; pasan a sueltas en el mismo entreno y parte (mismos id, valores, orden y completado; sin ronda).
 //  · Añadir un ejercicio: una serie suya en cada ronda, al final de la ronda y en el orden en que se eligieron. NO se mueve ningún ejercicio entre bloques.
 let ebE = null;
+// Valores del borrador: no se escribe ninguna serie hasta confirmar el panel.
+function ebCamposValores(id, filas) {
+  const dist = esDistancia(tipoDe(id)), medidas = new Set(dist ? ["distancia", "tiempo"] : medidasDe(id));
+  return ["peso", "reps", "tiempo", "distancia"].filter(k => medidas.has(k === "peso" ? "carga" : k) || filas.some(s => n0(s[k]) > 0 || k === "peso" && n0(s.pct) > 0 || k === "reps" && (s.max_reps || esRango(s)) || k === "tiempo" && s.max_tiempo));
+}
+function ebTextoValor(s, k, id) {
+  if (k === "peso") return n0(s.pct) > 0 ? num(n0(s.pct)) + "%" : num(n0(s.peso));
+  if (k === "reps") return s.max_reps ? "máx" : esRango(s) ? rangoTxt(s) : String(n0(s.reps));
+  if (k === "tiempo") return s.max_tiempo ? "máx" : esDistancia(tipoDe(id)) ? fmtTiempo(n0(s.tiempo)) : String(n0(s.tiempo));
+  return String(n0(s.distancia));
+}
+function ebBorradorValores(id, filas) {
+  const campos = ebCamposValores(id, filas), ini = {};
+  campos.forEach(k => { const v = [...new Set(filas.map(s => ebTextoValor(s, k, id)))]; ini[k] = v.length === 1 ? v[0] : ""; });
+  return { campos, ini, texto: { ...ini }, filas };
+}
+function ebLeerCampo(k, texto, id) {
+  const t = texto.trim().toLowerCase(), numero = /^\d+(?:[.,]\d+)?$/;
+  if (k === "peso") {
+    const pct = t.endsWith("%"), v = pct ? t.slice(0, -1).trim() : t.replace(/\s*kg$/, "").trim();
+    if (!numero.test(v)) return null;
+    const n = Number(v.replace(",", "."));
+    return Number.isFinite(n) && n >= 0 && (!pct || n > 0) ? { peso: pct ? 0 : n, pct: pct ? n : 0 } : null;
+  }
+  if (k === "reps") {
+    if (/^m[aá]x(?:imas?)?$/.test(t)) return { reps: 0, max_reps: true, rango_min: 0, rango_max: 0 };
+    const r = t.match(/^(\d+)\s*[-–]\s*(\d+)$/);
+    if (r) return +r[1] > 0 && +r[2] >= +r[1] && +r[2] <= 999 ? { reps: +r[1], max_reps: false, rango_min: +r[1], rango_max: +r[2] } : null;
+    return /^\d+$/.test(t) && +t <= 999 ? { reps: +t, max_reps: false, rango_min: 0, rango_max: 0 } : null;
+  }
+  if (k === "tiempo") {
+    if (/^m[aá]x(?:imo)?$/.test(t)) return { tiempo: 0, max_tiempo: true };
+    const n = esDistancia(tipoDe(id)) ? leerTiempo(t) : leerSegs(t);
+    return t && Number.isFinite(n) && n >= 0 ? { tiempo: n, max_tiempo: false } : null;
+  }
+  const m = t.match(/^(\d+(?:[.,]\d+)?)\s*(km|m)?$/);
+  const n = m && Math.round(Number(m[1].replace(",", ".")) * (m[2] === "km" ? 1000 : 1));
+  return m && Number.isFinite(n) ? { distancia: n } : null;
+}
+function ebParcheValores(id, d, nuevo) {
+  const v = {};
+  for (const k of d.campos) {
+    const t = d.texto[k].trim();
+    if (!nuevo && (!t || t === d.ini[k])) continue;   // vacío/varios: conservar los valores de cada ronda
+    const p = ebLeerCampo(k, t || "0", id);
+    if (!p) return { error: nombreEj(id) + ": revisa " + ({ peso: "la carga (kg o %)", reps: "las repeticiones (0–999, rango o máx)", tiempo: "el tiempo", distancia: "la distancia en metros" })[k] };
+    Object.assign(v, p);
+  }
+  const filas = nuevo ? [d.base] : d.filas;
+  if (nuevo || Object.keys(v).length) {
+    for (const s of filas) {
+      const f = { ...s, ...v }, soloCarga = d.campos.every(k => k === "peso");
+      if (!(n0(f.reps) > 0 || n0(f.tiempo) > 0 || n0(f.distancia) > 0 || f.max_reps || f.max_tiempo || n0(f.rango_max) > 0 || soloCarga && (n0(f.peso) > 0 || n0(f.pct) > 0))) return { error: nombreEj(id) + ": indica repeticiones, tiempo o distancia." };
+    }
+  }
+  return { valores: v };
+}
+function ebCamposDibujo(cont, id, d, nuevo) {
+  const grid = document.createElement("div"); grid.className = "eb-valores";
+  d.campos.forEach(k => {
+    const label = document.createElement("label"), input = document.createElement("input"); label.className = "eb-valor";
+    const titulo = ({ peso: "Carga (kg o %)", reps: "Reps", tiempo: esDistancia(tipoDe(id)) ? "Tiempo (m:ss)" : "Tiempo (s)", distancia: "Distancia (m)" })[k];
+    label.append(titulo); input.value = d.texto[k]; input.inputMode = "text"; input.autocomplete = "off"; input.disabled = !nuevo && !d.filas.length; input.dataset.campo = k;
+    input.setAttribute("aria-label", titulo + " de " + nombreEj(id)); input.placeholder = nuevo ? "0" : "Varios · sin cambios";
+    input.addEventListener("input", () => { d.texto[k] = input.value; ebValidar(); }); label.appendChild(input); grid.appendChild(label);
+  });
+  cont.appendChild(grid);
+}
+const ebValoresCambiados = () => ebE.ejs.filter(id => !ebE.quitar.has(id)).map(id => ({ id, ...ebParcheValores(id, ebE.edicion[id], false) })).filter(p => p.error || Object.keys(p.valores).length);
+
+function ebNuevoEjercicio(id) {
+  const hist = seriesDe(id), ult = hist[hist.length - 1];
+  const v = ult ? valores(ult) : { reps: admite(id, "reps") ? 10 : 0 };
+  const base = { ...v, peso: sinCarga(id) ? 0 : n0(v.peso), pct: sinCarga(id) ? 0 : n0(v.pct) };
+  const edicion = ebBorradorValores(id, [base]); edicion.base = base;
+  return { id, edicion };
+}
+
 function abrirEditorBloque(dia, bloqueId) {
   const base = seriesDelDia(dia.id).filter(x => x.bloque_id === bloqueId).sort((a, b) => n0(a.ronda) - n0(b.ronda) || a.orden - b.orden);
   if (!base.length) return;
@@ -4793,14 +4941,10 @@ function abrirEditorBloque(dia, bloqueId) {
   const g0 = grupos(base), mixto = l => new Set(l.map(recTexto)).size > 1;
   ebE = { dia, bloqueId, base, rondas, ejs, n: rondas.length, quitar: new Set(), nuevos: [], conf: false, grupos, actual, mixto: { ej: mixto(g0.ej), ron: mixto(g0.ron), fin: mixto(g0.fin) },
     ini: { ej: actual(g0.ej), ron: actual(g0.ron), fin: actual(g0.fin) }, desc: { ej: actual(g0.ej), ron: actual(g0.ron), fin: actual(g0.fin) } };
-  // v272: repeticiones de cada ejercicio del bloque (solo series PENDIENTES): valor común si todas coinciden; vacío = sin cambios
-  ebE.reps = {}; ebE.repsIni = {}; ebE.repsInfo = {};
+  ebE.edicion = {};
   ejs.forEach(id => {
-    const pend = base.filter(x => x.ejercicio_id === id && !hecha(x) && !x.calentamiento);
-    const porTiempo = !pend.length || pend.every(x => n0(x.tiempo) > 0 && !(n0(x.reps) > 0)) || esDistancia(tipoDe(id)) || pend.some(x => n0(x.distancia) > 0);
-    const vals = [...new Set(pend.map(x => n0(x.reps)))];
-    ebE.repsInfo[id] = { editable: !porTiempo, pend: pend.length, hechas: base.filter(x => x.ejercicio_id === id && hecha(x)).length, mixto: vals.length > 1, rango: pend.some(esRango) };
-    ebE.repsIni[id] = vals.length === 1 && vals[0] > 0 ? String(vals[0]) : ""; ebE.reps[id] = ebE.repsIni[id];
+    const todas = base.filter(x => x.ejercicio_id === id), pendientes = todas.filter(x => !hecha(x) && !x.calentamiento);
+    const d = ebBorradorValores(id, pendientes.length ? pendientes : todas); d.filas = pendientes; ebE.edicion[id] = d;
   });
   pintarEditorBloque();
   $("dlgEditBloque").showModal();
@@ -4861,33 +5005,29 @@ function pintarEditorBloque() {
     t.appendChild(el("span", "eb-ej-n", nombreEj(id)));
     t.appendChild(el("span", "eb-ej-d", fuera ? "Se quedará suelto en este entreno con sus " + n + " series, tal como están" : n + (n === 1 ? " serie" : " series")));
     li.appendChild(t);
-    const inf = e.repsInfo[id];
-    if (!fuera && inf && inf.editable) {
-      const lr = el("label", "eb-reps"), ir = document.createElement("input");
-      ir.value = e.reps[id]; ir.inputMode = "numeric"; ir.autocomplete = "off"; ir.setAttribute("aria-label", "Repeticiones de " + nombreEj(id) + " en las series pendientes de todas las rondas");
-      ir.placeholder = inf.mixto ? "varias" : inf.rango ? "rango" : "reps";
-      ir.addEventListener("input", () => { e.reps[id] = ir.value; ebValidar(); });
-      lr.append("Reps ", ir); lr.title = inf.pend + (inf.pend === 1 ? " serie pendiente" : " series pendientes") + (inf.hechas ? " · " + (inf.hechas === 1 ? "la hecha no cambia" : "las " + inf.hechas + " hechas no cambian") : "");
-      t.appendChild(lr);
-      t.appendChild(el("span", "eb-ej-d", "Solo las " + inf.pend + (inf.pend === 1 ? " serie pendiente" : " series pendientes") + (inf.hechas ? " (" + inf.hechas + (inf.hechas === 1 ? " hecha" : " hechas") + " sin tocar)" : "") + (inf.rango ? " · sustituye el rango por reps fijas" : "")));
+    if (!fuera) {
+      const d = e.edicion[id]; ebCamposDibujo(t, id, d, false);
+      t.appendChild(el("span", "eb-ej-d", d.filas.length ? "Solo las " + d.filas.length + " series pendientes; las hechas no cambian. Vacío: sin cambios; 0: quitar ese valor." : "Sin series pendientes. Las hechas no se modifican."));
     }
-    const b = fuera ? boton("Mantener", "nav-btn eb-bt", () => { e.quitar.delete(id); e.conf = false; pintarEditorBloque(); }) : boton("Quitar del bloque", "nav-btn eb-bt", () => { e.quitar.add(id); e.conf = false; pintarEditorBloque(); }, "Quitar " + nombreEj(id) + " del bloque (queda suelto)");
-    if (!fuera && quedan <= 1) { b.disabled = true; b.title = "Un bloque necesita al menos un ejercicio: usa «Desagrupar» en el menú del bloque"; }
+    const b = fuera ? boton("Mantener", "nav-btn eb-bt", () => { e.quitar.delete(id); e.conf = false; pintarEditorBloque(); }) : boton("Quitar de la superserie", "nav-btn eb-bt", () => { e.quitar.add(id); e.conf = false; pintarEditorBloque(); }, "Quitar " + nombreEj(id) + " de la superserie (queda suelto)");
+    if (!fuera && quedan <= 1) { b.disabled = true; b.title = "Una superserie necesita al menos un ejercicio: usa «Desagrupar» en el menú de la superserie"; }
     li.appendChild(b);
     if (fuera) li.classList.add("eb-quitado");
     ul.appendChild(li);
   });
-  e.nuevos.forEach((id, k) => {
+  e.nuevos.forEach((nuevo, k) => {
+    const id = nuevo.id;
     const li = el("li", "eb-ej eb-nuevo"), t = el("div", "eb-ej-t");
     t.appendChild(el("span", "eb-ej-n", nombreEj(id)));
     t.appendChild(el("span", "eb-ej-d", "Nuevo · una serie en cada una de las " + e.n + " rondas"));
+    ebCamposDibujo(t, id, nuevo.edicion, true);
     li.appendChild(t);
     li.appendChild(boton("Quitar", "nav-btn eb-bt", () => { e.nuevos.splice(k, 1); pintarEditorBloque(); }, "No añadir " + nombreEj(id)));
     ul.appendChild(li);
   });
   se.appendChild(ul);
   if (e.quitar.size) se.appendChild(el("p", "eb-nota", "Un ejercicio quitado no se borra: queda suelto en el mismo entreno con todas sus series, valores y lo que ya hiciste."));
-  se.appendChild(boton("+ Añadir un ejercicio", "add-ej", () => abrirSelector(e.dia, id => { if (ebE === e) { e.nuevos.push(id); e.conf = false; pintarEditorBloque(); } }, e.base[0].grupo || "", e.base[0].seccion || "")));
+  se.appendChild(boton("+ Añadir un ejercicio", "add-ej", () => abrirSelector(e.dia, id => { if (ebE === e) { e.nuevos.push(ebNuevoEjercicio(id)); e.conf = false; pintarEditorBloque(); } }, e.base[0].grupo || "", e.base[0].seccion || "")));
   cuerpo.appendChild(se);
   // Descansos (se guardan en la serie de antes del descanso)
   const sd = el("section", "eb-sec");
@@ -4901,7 +5041,7 @@ function pintarEditorBloque() {
   };
   campo("ej", "Entre ejercicios (dentro de cada ronda)", quedan > 1);
   campo("ron", "Entre rondas", e.n > 1);
-  campo("fin", "Al terminar el bloque", true);
+  campo("fin", "Al terminar la superserie", true);
   sd.appendChild(el("p", "eb-nota", "Tiempo («1,30» o «90»), metros trotando («300 m») o ambos («300 m · 1:30»). Vacío o «0» lo quita. Sin tocar, no cambia."));
   cuerpo.appendChild(sd);
   cuerpo.appendChild(el("p", "aviso eb-err", ""));
@@ -4910,28 +5050,28 @@ function pintarEditorBloque() {
   cuerpo.appendChild(bt);
   ebValidar();
 }
-// v272: ejercicios (no quitados) cuyas repeticiones se han escrito distintas de las actuales
-const ebRepsCambiadas = () => ebE.ejs.filter(id => !ebE.quitar.has(id) && ebE.repsInfo[id].editable && ebE.reps[id].trim() !== ebE.repsIni[id]);
 function ebCambios() {
   const e = ebE;
-  return { rondas: e.n !== e.rondas.length, ejs: e.quitar.size > 0 || e.nuevos.length > 0, desc: ["ej", "ron", "fin"].some(k => e.desc[k].trim() !== e.ini[k]), reps: ebRepsCambiadas().length > 0 };
+  return { rondas: e.n !== e.rondas.length, ejs: e.quitar.size > 0 || e.nuevos.length > 0, desc: ["ej", "ron", "fin"].some(k => e.desc[k].trim() !== e.ini[k]), valores: ebValoresCambiados().length > 0 };
 }
 function ebValidar() {
   const e = ebE, c = ebCambios(), err = document.querySelector("#ebCuerpo .eb-err"), g = document.querySelector("#ebCuerpo .eb-guardar");
   if (!g) return;
   let msg = "";
   ["ej", "ron", "fin"].forEach(k => { if (!msg && e.desc[k].trim() !== e.ini[k] && !ebDescanso(e.desc[k])) msg = "No entiendo «" + e.desc[k].trim() + "»: prueba 1,30, 90 o 300 m"; });
-  ebRepsCambiadas().forEach(id => { const v = e.reps[id].trim(); if (!msg && !(/^\d+$/.test(v) && parseInt(v, 10) > 0 && parseInt(v, 10) <= 999)) msg = "Repeticiones de " + nombreEj(id) + ": escribe un número entero de 1 a 999."; });
+  ebValoresCambiados().forEach(p => { if (!msg && p.error) msg = p.error; });
+  e.nuevos.forEach(n => { const p = ebParcheValores(n.id, n.edicion, true); if (!msg && p.error) msg = p.error; });
   if (!msg && e.n < e.rondas.length && !e.conf) msg = "Marca la casilla para confirmar que se borran esas series.";
   err.textContent = msg;
-  g.disabled = !(c.rondas || c.ejs || c.desc || c.reps) || !!msg;
+  g.disabled = !(c.rondas || c.ejs || c.desc || c.valores) || !!msg;
 }
 function guardarEditorBloque() {
+  ebValidar(); if (document.querySelector("#ebCuerpo .eb-guardar").disabled) return;
   const e = ebE, dia = e.dia;
   // El bloque debe seguir tal como estaba al abrir el panel (p. ej. por una sincronización): si no, no se aplica nada
   const fresco = seriesDelDia(dia.id).filter(x => x.bloque_id === e.bloqueId);
   const igual = fresco.length === e.base.length && e.base.every(x => { const f = db.series[x.id]; return f && !f.borrado && f.bloque_id === e.bloqueId && JSON.stringify(f) === JSON.stringify(x); });
-  if (!igual) { $("dlgEditBloque").close(); setEstado("El bloque ha cambiado mientras lo editabas. Ábrelo de nuevo."); return; }
+  if (!igual) { $("dlgEditBloque").close(); setEstado("La superserie ha cambiado mientras la editabas. Ábrela de nuevo."); return; }
   const b0 = e.base[0], orig = new Map(e.base.map(x => [x.id, { ...x }])), trab = new Map(e.base.map(x => [x.id, { ...x }]));
   const vivas = () => [...trab.values()].filter(x => x.bloque_id === e.bloqueId && !x.borrado);
   const rondasAct = () => [...new Set(vivas().map(x => n0(x.ronda)))].sort((a, b) => a - b);
@@ -4945,18 +5085,15 @@ function guardarEditorBloque() {
   // 2) rondas que se quitan
   const act = rondasAct();
   if (e.n < act.length) { const fuera = act.slice(e.n); vivas().filter(x => fuera.includes(n0(x.ronda))).forEach(x => { x.borrado = true; nBorradas++; }); }
-  // 2b) v272: repeticiones por ejercicio: solo las series PENDIENTES del bloque, en todas las rondas (las hechas no se tocan); sustituye marca «máx» y rango por reps fijas
-  let nReps = 0;
-  ebRepsCambiadas().forEach(id => {
-    const v = parseInt(e.reps[id].trim(), 10);
-    vivas().filter(x => x.ejercicio_id === id && !hecha(x) && !x.calentamiento).forEach(x => { x.reps = v; x.max_reps = false; x.rango_min = 0; x.rango_max = 0; nReps++; });
-  });
-  // 3) ejercicios que se añaden: una serie en cada ronda, al final de la ronda, en el orden en que se eligieron
-  e.nuevos.forEach(id => {
-    const hist = seriesDe(id), ult = hist[hist.length - 1];
-    const v = ult ? valores(ult) : { reps: tipoDe(id) === "fuerza" || tipoDe(id) === "movilidad" ? 10 : 0 };
+  // Valores escritos: únicamente sobre las series pendientes que permanecen.
+  let nValores = 0;
+  const cambiosValores = ebValoresCambiados();
+  cambiosValores.forEach(p => vivas().filter(x => x.ejercicio_id === p.id && !hecha(x) && !x.calentamiento).forEach(x => { Object.assign(x, p.valores); nValores++; }));
+  // Nuevos ejercicios: todos sus valores se preparan antes de crear sus series.
+  e.nuevos.forEach(nuevo => {
+    const id = nuevo.id, v = { ...nuevo.edicion.base, ...ebParcheValores(id, nuevo.edicion, true).valores };
     rondasAct().forEach(r => {
-      const f = { id: nuevoId(), fecha: dia.id, ejercicio_id: id, meso_id: b0.meso_id || "", peso: sinCarga(id) ? 0 : n0(v.peso), reps: n0(v.reps), distancia: n0(v.distancia), tiempo: n0(v.tiempo), pct: sinCarga(id) ? 0 : n0(v.pct), por_lado: !!v.por_lado,
+      const f = { id: nuevoId(), fecha: dia.id, ejercicio_id: id, meso_id: b0.meso_id || "", peso: n0(v.peso), reps: n0(v.reps), distancia: n0(v.distancia), tiempo: n0(v.tiempo), pct: n0(v.pct), por_lado: !!v.por_lado,
         descanso: n0(v.descanso), rec_dist: n0(v.rec_dist), max_reps: !!v.max_reps, max_tiempo: !!v.max_tiempo, rango_min: n0(v.rango_min), rango_max: n0(v.rango_max),
         ciclo_id: "", calentamiento: false, nota: v.nota || "", hecha: false, borrado: false, grupo: b0.grupo || "", seccion: b0.seccion || "", bloque_id: e.bloqueId, ronda: r, orden: orden++, letra_nueva: !!b0.letra_nueva, copia: 0 };
       trab.set(f.id, f); nNuevas++;
@@ -4966,7 +5103,7 @@ function guardarEditorBloque() {
   const act2 = rondasAct();
   if (e.n > e.rondas.length) {
     const ultima = vivas().filter(x => n0(x.ronda) === act2[act2.length - 1]).sort((a, b) => a.orden - b.orden);
-    for (let k = 1; k <= e.n - e.rondas.length; k++) ultima.forEach(x => { const f = { ...x, id: nuevoId(), orden: orden++, ronda: act2[act2.length - 1] + k, hecha: false }; delete f.sucio; trab.set(f.id, f); nNuevas++; });
+    for (let k = 1; k <= e.n - e.rondas.length; k++) ultima.forEach(x => { const f = { ...x, id: nuevoId(), orden: orden++, ronda: act2[act2.length - 1] + k, hecha: false }; delete f.sucio; const p = cambiosValores.find(p => p.id === f.ejercicio_id); if (p) Object.assign(f, p.valores); trab.set(f.id, f); nNuevas++; });
   }
   // 5) descansos: solo los campos que se han tocado, sobre la estructura final
   const gf = e.grupos(vivas());
@@ -4991,9 +5128,9 @@ function guardarEditorBloque() {
   if (e.quitar.size) partes.push(e.quitar.size + (e.quitar.size === 1 ? " ejercicio suelto" : " ejercicios sueltos"));
   if (e.nuevos.length) partes.push(e.nuevos.length + (e.nuevos.length === 1 ? " ejercicio añadido" : " ejercicios añadidos"));
   if (ebCambios().desc) partes.push("descansos");
-  if (nReps) partes.push("reps en " + nReps + (nReps === 1 ? " serie pendiente" : " series pendientes"));
+  if (nValores) partes.push("valores en " + nValores + (nValores === 1 ? " serie pendiente" : " series pendientes"));
   ebE = null;
-  avisoDeshacer("Bloque editado" + (partes.length ? " · " + partes.join(" · ") : ""), antes.concat(creadas));
+  avisoDeshacer("Superserie editada" + (partes.length ? " · " + partes.join(" · ") : ""), antes.concat(creadas));
 }
 $("dlgEditBloque").addEventListener("close", () => { ebE = null; });
 function tarjetaBloqueVacio(dia, vid) {
@@ -5001,15 +5138,15 @@ function tarjetaBloqueVacio(dia, vid) {
   const c = document.createElement("div");
   c.className = "bloque bloque-rep bloque-vacio";
   c.dataset.vacio = vid;
-  c.innerHTML = '<div class="bloque-cab"><span class="br-tit"></span><span class="g-prog">vacío</span><button type="button" class="menu-btn" aria-label="Opciones del bloque vacío">⋯</button></div>' +
-    '<p class="bv-txt">Arrastra aquí ejercicios del entreno con ≡ (quédate un momento encima del título) o añádelos.</p><button type="button" class="add-ej bv-add">+ Añadir ejercicio al bloque</button>';
+  c.innerHTML = '<div class="bloque-cab"><span class="br-tit"></span><span class="g-prog">vacío</span><button type="button" class="menu-btn" aria-label="Opciones de la superserie vacía">⋯</button></div>' +
+    '<p class="bv-txt">Arrastra aquí ejercicios del entreno con ≡ (quédate un momento encima del título) o añádelos.</p><button type="button" class="add-ej bv-add">+ Añadir ejercicio a la superserie</button>';
   c.querySelector(".br-tit").textContent = "×" + n0(bv.r) + " rondas";
   c.querySelector(".bv-add").addEventListener("click", () => abrirSelector(dia, id => meterEnVacio(dia, vid, id, null), bv.g || "", bv.p || ""));
   const rondas = n => { bloquesVacios[k] = { ...bv, r: Math.max(1, Math.min(50, n)) }; guardarVacios(); pintarDia(dia); };
-  c.querySelector(".menu-btn").addEventListener("click", () => abrirMenu("Bloque vacío ×" + n0(bv.r), "", [
+  c.querySelector(".menu-btn").addEventListener("click", () => abrirMenu("Superserie vacía ×" + n0(bv.r), "", [
     { texto: "Añadir una ronda", accion: () => rondas(n0(bv.r) + 1) },
     n0(bv.r) > 1 && { texto: "Quitar una ronda", accion: () => rondas(n0(bv.r) - 1) },
-    { texto: "Quitar bloque vacío", peligro: true, accion: () => { delete bloquesVacios[k]; guardarVacios(); pintarDia(dia); } }
+    { texto: "Quitar superserie vacía", peligro: true, accion: () => { delete bloquesVacios[k]; guardarVacios(); pintarDia(dia); } }
   ]));
   return c;
 }
@@ -5037,19 +5174,19 @@ function tarjetaBloque(dia, bloqueId, series) {
   // Descripción: si todos los ejercicios tienen la misma, bajo el título; si no, cada una junto a su ejercicio en la R1
   const notasT = primera.map(s0 => notaDe(series.filter(x => x.ejercicio_id === s0.ejercicio_id)));
   const notaComun = notasT.every(n => n === notasT[0]) ? notasT[0] : "";
-  if (notaComun) c.querySelector(".bloque-cab").after(lineaNota(notaComun, () => editarNota(dia, series, "Descripción del bloque")));
+  if (notaComun) c.querySelector(".bloque-cab").after(lineaNota(notaComun, () => editarNota(dia, series, "Descripción de la superserie")));
   const menu = c.querySelector(".menu-btn");
-  menu.setAttribute("aria-label", "Opciones del bloque");
+  menu.setAttribute("aria-label", "Opciones de la superserie");
   menu.addEventListener("click", () => {
-    abrirMenu("Bloque ×" + rondas.length, primera.map(s => nombreEj(s.ejercicio_id)).join(" + "), [
-      { texto: "Editar bloque…", accion: () => abrirEditorBloque(dia, bloqueId) },   // v270 (MEJ-BLQ-001): rondas, descansos y ejercicios en un solo panel
+    abrirMenu("Superserie ×" + rondas.length, primera.map(s => nombreEj(s.ejercicio_id)).join(" + "), [
+      { texto: "Editar superserie…", accion: () => abrirEditorBloque(dia, bloqueId) },   // v270 (MEJ-BLQ-001): rondas, descansos y ejercicios en un solo panel
       c.dataset.puedeLetra && { texto: c.dataset.letraNueva ? "Seguir con la letra anterior" : "Empezar letra nueva aquí (" + String.fromCharCode(c.querySelector(".etq-orden").textContent.charCodeAt(0) + 1) + "1)", accion: () => ponerLetraNueva(dia, series[0].grupo || "", "b:" + bloqueId, false, !c.dataset.letraNueva) },
-      (variosTramos || !notaDe(series)) && { texto: variosTramos ? "Descripción (del bloque o de un ejercicio)…" : "+ Descripción (tempo, banda, EEP…)", accion: () => !variosTramos ? editarNota(dia, series, "Descripción del bloque")
-        : abrirMenu("¿Descripción de qué?", "", [{ texto: "De todo el bloque", accion: () => editarNota(dia, series, "Descripción del bloque") }]
+      (variosTramos || !notaDe(series)) && { texto: variosTramos ? "Descripción (de la superserie o de un ejercicio)…" : "+ Descripción (tempo, banda, EEP…)", accion: () => !variosTramos ? editarNota(dia, series, "Descripción de la superserie")
+        : abrirMenu("¿Descripción de qué?", "", [{ texto: "De toda la superserie", accion: () => editarNota(dia, series, "Descripción de la superserie") }]
           .concat(primera.map(s0 => ({ texto: nombreEj(s0.ejercicio_id), accion: () => editarNota(dia, series.filter(x => x.ejercicio_id === s0.ejercicio_id), "Descripción de " + nombreEj(s0.ejercicio_id)) })))) },
       { texto: "Desagrupar (series sueltas)", accion: () => desagruparBloque(dia, series) },
-      { texto: "Compartir con un amigo…", accion: () => compartir("Bloque ×" + rondas.length + " · " + primera.map(s => nombreEj(s.ejercicio_id)).join(" + "), itemsDe(series, true)) },
-      { texto: "Quitar bloque", peligro: true, confirmar: "Pulsa otra vez: se borran " + series.length + " series", accion: () => {
+      { texto: "Compartir con un amigo…", accion: () => compartir("Superserie ×" + rondas.length + " · " + primera.map(s => nombreEj(s.ejercicio_id)).join(" + "), itemsDe(series, true)) },
+      { texto: "Quitar superserie", peligro: true, confirmar: "Pulsa otra vez: se borran " + series.length + " series", accion: () => {
         series.forEach(s => cambiar("series", { ...s, borrado: true }, true)); persistir(); pintarDia(dia);
       } }
     ]);
@@ -5198,14 +5335,14 @@ function tarjetaBloque(dia, bloqueId, series) {
         mb.addEventListener("click", ev => {
           ev.stopPropagation();
           const delEj = series.filter(x => x.ejercicio_id === s.ejercicio_id);
-          abrirMenu(ejV.nombre || "Ejercicio", "En este bloque · " + delEj.length + (delEj.length === 1 ? " serie" : " series"), [
+          abrirMenu(ejV.nombre || "Ejercicio", "En esta superserie · " + delEj.length + (delEj.length === 1 ? " serie" : " series"), [
             { texto: "Ver ficha del ejercicio", accion: () => abrirDetalle(s.ejercicio_id) },
             { texto: notaDe(delEj) ? "Editar la descripción…" : "+ Descripción (tempo, banda, EEP…)", accion: () => editarNota(dia, delEj, "Descripción de " + (ejV.nombre || "el ejercicio")) },
-            variosTramos && { texto: "Quitar del bloque", peligro: true, confirmar: "Pulsa otra vez: se borran sus " + delEj.length + " series de todas las rondas", accion: () => {
+            variosTramos && { texto: "Quitar de la superserie", peligro: true, confirmar: "Pulsa otra vez: se borran sus " + delEj.length + " series de todas las rondas", accion: () => {
               const antes = delEj.map(x => ["series", { ...x }]);
               delEj.forEach(x => cambiar("series", { ...x, borrado: true }, true));
               persistir(); pintarDia(dia);
-              avisoDeshacer((ejV.nombre || "Ejercicio") + " quitado del bloque", antes);
+              avisoDeshacer((ejV.nombre || "Ejercicio") + " quitado de la superserie", antes);
             } }
           ]);
         });
@@ -5370,7 +5507,7 @@ $("blqVacio").addEventListener("click", () => {
   guardarVacios();
   $("dlgBloque").close();
   pintarDia(diaBloque);
-  setEstado("Bloque vacío ×" + rondas + " creado: arrastra ejercicios encima con ≡");
+  setEstado("Superserie vacía ×" + rondas + " creado: arrastra ejercicios encima con ≡");
 });
 $("blqCrear").addEventListener("click", () => {
   const rondas = parseInt($("blqRondas").value, 10), aviso = $("blqAviso");
@@ -5671,7 +5808,7 @@ function pintarNuevoEj() {
     usar.appendChild(x);
   });
   const comun = creaComun() && $("neComun").checked, d = b.destino;
-  const donde = d.alElegir ? "al bloque que estás editando" : d.dia ? (d.grupo ? "a «" + d.grupo + "»" + (d.parte ? " › «" + d.parte + "»" : "") + " del " : "a los ejercicios del ") + NOMBRES[d.dia.i].toLowerCase() + " " + fmt(deIso(d.dia.id)) : "";
+  const donde = d.alElegir ? "a la superserie que estás editando" : d.dia ? (d.grupo ? "a «" + d.grupo + "»" + (d.parte ? " › «" + d.parte + "»" : "") + " del " : "a los ejercicios del ") + NOMBRES[d.dia.i].toLowerCase() + " " + fmt(deIso(d.dia.id)) : "";
   $("neDonde").textContent = (comun ? "Se guardará en el catálogo común (lo verán todos los usuarios aprobados)" : "Se guardará como ejercicio personal (solo lo ves tú)") + (donde ? " y se añadirá " + donde : "") + ". Tus series y marcas son siempre solo tuyas.";
   $("neGuardar").disabled = !n || c.length > 0 || b.hecho;
 }
@@ -5870,7 +6007,9 @@ function pintarListas() {
     const nSem = (l.items || []).filter(esSep).length;
     const sec = document.createElement("section");
     sec.className = "cat-sec lista-sec" + (abierta ? "" : " cerrada");
+    sec.dataset.zonaOrden = "lista:" + l.id;
     sec.innerHTML = '<div class="lista-cab"><button type="button" class="sec-toggle"><span class="flecha-dia" aria-hidden="true">▸</span><h3></h3><span class="sec-n"></span></button><button type="button" class="menu-btn">⋯</button></div><div class="sec-cuerpo"><div class="sec-cuerpo-in"><div class="lista-ents"></div><div class="add-fila"><button type="button" class="add-ej">+ Entrenamiento</button><button type="button" class="add-ej">+ Bloque (semana, fase…)</button><button type="button" class="add-ej add-meso">+ Mesociclo</button></div></div></div>';
+    instalarControlOrden(sec, sec.querySelector(".lista-cab"), l.nombre);
     sec.querySelector("h3").textContent = l.nombre;
     const nGr = (l.items || []).filter(esGrupoL).length;
     sec.querySelector(".sec-n").textContent = "· " + rec.length + (nGr ? " · " + nGr + (nGr === 1 ? " mesociclo" : " mesociclos") : "") + (nSem ? " · " + nSem + (nSem === 1 ? " bloque" : " bloques") : "");
@@ -5878,8 +6017,10 @@ function pintarListas() {
     boton.setAttribute("aria-expanded", String(abierta)); cuerpo.inert = !abierta;
     boton.addEventListener("click", () => {
       const abrir = sec.classList.contains("cerrada");
+      if (!abrir && puedeReordenar(sec)) terminarModoOrden();
       sec.classList.toggle("cerrada", !abrir); boton.setAttribute("aria-expanded", String(abrir)); cuerpo.inert = !abrir;
       listasAbiertas[l.id] = abrir; escribir("listas-abiertas-v1", listasAbiertas);
+      actualizarModoOrden();
     });
     const anadir = tras => elegirPlantilla("Añadir a «" + l.nombre + "»", p => anadirPlantillaALista(l, p, tras));
     const nuevaSemana = async tras => {
@@ -7365,7 +7506,7 @@ function pintarMarcas() {
     s2.appendChild(nota("«Real»: tu mejor marca en esa distancia (* sacada de una serie algo más larga, a su ritmo medio). La predicción de 250 m es muy orientativa: VDOT y Riegel son menos fiables en distancias cortas de velocidad; un tiempo medido en pista es más representativo."));
     const s3 = seccionMarcas("Ritmos de entrenamiento");
     s3.appendChild(tablaSimple(["Zona", "Por km", "Por 400 m"], ZONAS.map(([n, fr]) => { const r = ritmoZona(f.vdot, fr) * (1 + carga.ajuste); return { celdas: [n, fmtTiempo(r), fmtTiempo(r * 0.4)] }; })));
-    s3.appendChild(nota("Cada serie de carrera planificada muestra su objetivo calculado con todo el entrenamiento de ese día (series, bloques, volumen y recuperaciones) y se ajusta según cómo te van saliendo."));
+    s3.appendChild(nota("Cada serie de carrera planificada muestra su objetivo calculado con todo el entrenamiento de ese día (series, superseries, volumen y recuperaciones) y se ajusta según cómo te van saliendo."));
     cont.append(s1, seccionCarreras(), s2, s3);
   }
   if (!f) cont.append(s1, seccionCarreras());
@@ -7560,6 +7701,7 @@ function avisoUsuarios() {
 // Editor de mesociclo
 let mesoEdit = null, mesoImportacion = null;
 function abrirMeso(id, importacion = null) {
+  terminarModoOrden();
   mesoImportacion = importacion;
   const m = id ? db.mesociclos[id] : null;
   mesoEdit = m ? { ...m, dias: JSON.parse(JSON.stringify(m.dias || {})) }
@@ -7711,7 +7853,10 @@ function aplicarMeso(m, rehacer) {
   });
   tareas.sort((a, b) => a.w - b.w || a.d - b.d || a.pos - b.pos).forEach(({ w, d, p }) => {
     const items = esDescarga(m, w) ? descargarItems(p.items || [], m.descarga, w * n0(m.progresion)) : p.items || [];
-    pegarItems(iso(sumarDias(lunes, w * 7 + d)), items, p.nombre, m.id, esDescarga(m, w) ? 0 : w * n0(m.progresion));
+    // Cada sesión nueva empieza después de todo lo existente: no empatar posiciones aunque Date.now() coincida.
+    const fecha = iso(sumarDias(lunes, w * 7 + d));
+    const inicio = Math.max(Date.now(), seriesDelDia(fecha).reduce((max, s) => Math.max(max, n0(s.orden)), 0) + 1);
+    pegarItems(fecha, items, p.nombre, m.id, esDescarga(m, w) ? 0 : w * n0(m.progresion), inicio);
     total += contarSeries(items);
   });
   return total;
@@ -7811,6 +7956,7 @@ $("sigBtn").addEventListener("click", () => irA(desplazamiento + 1));
 // Volver a hoy: la semana actual con hoy desplegado y a la vista (o el día de hoy, en la vista de un día)
 function irAHoy() {
   const hoy = iso(new Date());
+  if (zonaReordenar && zonaReordenar !== "dia:" + hoy) terminarModoOrden();
   if (diaAbierto) { abrirDia(hoy); return; }
   desplegados[hoy] = true;
   escribir("dias-desplegados-v1", desplegados);
@@ -7856,6 +8002,7 @@ function pintarCalendario() {
 }
 // Ir a una fecha: se abre su semana con ese día desplegado (o el día suelto, si estabas en esa vista)
 function irAFecha(id) {
+  if (zonaReordenar && zonaReordenar !== "dia:" + id) terminarModoOrden();
   $("dlgCal").close();
   if (diaAbierto) { abrirDia(id); return; }
   if (id === iso(new Date())) { irAHoy(); return; }
@@ -7876,6 +8023,7 @@ const VISTAS = { semana: "vistaSemana", ejercicios: "vistaEjercicios", listas: "
 const TABS = { semana: "tabSemana", ejercicios: "tabEjercicios", listas: "tabListas", plan: "tabPlan", marcas: "tabMarcas" };
 function verPestana(cual) {
   if (!VISTAS[cual]) cual = "semana";
+  if (zonaReordenar && ![...document.querySelectorAll("[data-zona-orden]")].some(z => z.dataset.zonaOrden === zonaReordenar && z.closest("#" + VISTAS[cual]))) terminarModoOrden();
   if (cual !== "plan" && selPlant) { selPlant = null; $("selPlantAcciones").hidden = true; document.body.classList.remove("seleccionando"); }
   if (cual !== "plan" && selMeso) { selMeso = null; $("selMesoAcciones").hidden = true; document.body.classList.remove("seleccionando"); }
   Object.keys(VISTAS).forEach(k => {
@@ -8385,7 +8533,7 @@ function exportarJSON() {
   descargarArchivo("fuerza-y-ritmo-copia-" + iso(new Date()) + ".json", JSON.stringify({ app: "Fuerza y Ritmo", version: 1, exportado: new Date().toISOString(), email: (sesion && sesion.email) || "", datos, conflictos: leer("conflictos-copia-v1") || [], correccionesFechas: leer("fechas-series-copias-v1") || [] }), "application/json");
 }
 function exportarSeries() {
-  const filas = [["Fecha", "Día", "Sesión", "Ejercicio", "Tipo", "Estado", "Peso (kg)", "% 1RM", "Reps", "Distancia (m)", "Tiempo", "Ritmo", "Descanso", "Recuperación (m)", "Bloque", "Esfuerzo del día (RPE)", "Sensaciones del día"]];
+  const filas = [["Fecha", "Día", "Sesión", "Ejercicio", "Tipo", "Estado", "Peso (kg)", "% 1RM", "Reps", "Distancia (m)", "Tiempo", "Ritmo", "Descanso", "Recuperación (m)", "Superserie", "Esfuerzo del día (RPE)", "Sensaciones del día"]];
   seriesVivas().sort(ordenSerie).forEach(s => {
     const tipo = tipoDe(s.ejercicio_id), e = db.entrenos[s.fecha] || {};
     filas.push([s.fecha, diaSemana(s.fecha), nombreEntrenoHist(s), nombreEj(s.ejercicio_id), TIPOS[tipo].nombre, (s.calentamiento ? "Calentamiento · " : "") + (hecha(s) ? "Hecha" : "Planificada"),
@@ -8608,10 +8756,10 @@ function leerRutina(texto) {
     }
     if ((m = l.match(/^[-•*]\s*(.+)$/))) {
       if (!sesion) return fallo(i, "falta antes una sesión que empiece por ## (por ejemplo «## Pierna @ Lunes»)");
-      const b = m[1].match(/^BLOQUE\s*[x×]\s*(\d+)\s*:?\s*(.+)$/i);
+      const b = m[1].match(/^(?:BLOQUE|SUPERSERIE)\s*[x×]\s*(\d+)\s*:?\s*(.+)$/i);
       if (b) {
         const rondas = +b[1], tramos = [];
-        if (!(rondas >= 1 && rondas <= 50)) return fallo(i, "un bloque se repite entre 1 y 50 veces");
+        if (!(rondas >= 1 && rondas <= 50)) return fallo(i, "una superserie se repite entre 1 y 50 veces");
         for (const t of b[2].split("|")) {
           const e = leerEjercicio(t.trim(), false);
           if (e.error) return fallo(i, e.error);
@@ -8977,27 +9125,27 @@ NOTA: Para quien no corre o lleva mucho sin hacerlo. Trota a un ritmo al que pue
 SEMANA 1
 ## Correr y caminar @ Lunes, Miércoles, Sábado
 - Caminar [carrera]: 1x5min
-- BLOQUE x8: Trote suave [carrera] 1min | Caminar [carrera] 1:30
+- SUPERSERIE x8: Trote suave [carrera] 1min | Caminar [carrera] 1:30
 SEMANA 2
 ## Correr y caminar @ Lunes, Miércoles, Sábado
 - Caminar [carrera]: 1x5min
-- BLOQUE x6: Trote suave [carrera] 2min | Caminar [carrera] 2min
+- SUPERSERIE x6: Trote suave [carrera] 2min | Caminar [carrera] 2min
 SEMANA 3
 ## Correr y caminar @ Lunes, Miércoles, Sábado
 - Caminar [carrera]: 1x5min
-- BLOQUE x5: Trote suave [carrera] 3min | Caminar [carrera] 1:30
+- SUPERSERIE x5: Trote suave [carrera] 3min | Caminar [carrera] 1:30
 SEMANA 4
 ## Correr y caminar @ Lunes, Miércoles, Sábado
 - Caminar [carrera]: 1x5min
-- BLOQUE x4: Trote suave [carrera] 5min | Caminar [carrera] 2min
+- SUPERSERIE x4: Trote suave [carrera] 5min | Caminar [carrera] 2min
 SEMANA 5
 ## Correr y caminar @ Lunes, Miércoles, Sábado
 - Caminar [carrera]: 1x5min
-- BLOQUE x3: Trote suave [carrera] 8min | Caminar [carrera] 2min
+- SUPERSERIE x3: Trote suave [carrera] 8min | Caminar [carrera] 2min
 SEMANA 6
 ## Correr y caminar @ Lunes, Miércoles, Sábado
 - Caminar [carrera]: 1x5min
-- BLOQUE x2: Trote suave [carrera] 12min | Caminar [carrera] 2min
+- SUPERSERIE x2: Trote suave [carrera] 12min | Caminar [carrera] 2min
 SEMANA 7
 ## Trote continuo @ Lunes, Miércoles, Sábado
 - Caminar [carrera]: 1x5min
@@ -9018,7 +9166,7 @@ NOTA: Sesiones sueltas para guardar como plantilla. Con datos en Marcas, la app 
 - Trote de recuperación [carrera]: 1x10min
 ## Fartlek
 - Calentamiento carrera [carrera]: 1x10min
-- BLOQUE x6: Fartlek [carrera] 2min | Trote de recuperación [carrera] 1min
+- SUPERSERIE x6: Fartlek [carrera] 2min | Trote de recuperación [carrera] 1min
 - Trote de recuperación [carrera]: 1x10min
 ## Umbral
 - Calentamiento carrera [carrera]: 1x15min
@@ -9074,7 +9222,7 @@ NOTA: Para nivel intermedio. Sube 2,5 kg cuando completes todas las series.
 - Movilidad dinámica de cadera [movilidad]: 1x10 por lado
 ### Parte principal
 - Series 1000 m [carrera]: 5x1000m @4:10/km rec 2:00
-- BLOQUE x4: Series 200 m [carrera] 200m | Trote de recuperación [carrera] 200m
+- SUPERSERIE x4: Series 200 m [carrera] 200m | Trote de recuperación [carrera] 200m
 ## Rodaje @ Sábado
 - Rodaje [carrera]: 1x45min`;
 // ---------- Prompt basado en un mesociclo, una lista o tus últimas semanas ----------
@@ -9084,7 +9232,7 @@ function lineasItemsIA(items) {
   items.forEach(it => {
     const sec = it.seccion || "";
     if (sec !== parte) { if (sec) out.push("### " + sec); parte = sec; }
-    if (it.bloque) out.push("- BLOQUE x" + Math.max(1, ...(it.tramos || []).map(t => t.series.length)) + ": " + (it.tramos || []).map(t => nombreEj(t.ejercicio_id) + " [" + tipoDe(t.ejercicio_id) + "] " + textoValor(t.series[0] || {}, tipoDe(t.ejercicio_id))).join(" | "));
+    if (it.bloque) out.push("- SUPERSERIE x" + Math.max(1, ...(it.tramos || []).map(t => t.series.length)) + ": " + (it.tramos || []).map(t => nombreEj(t.ejercicio_id) + " [" + tipoDe(t.ejercicio_id) + "] " + textoValor(t.series[0] || {}, tipoDe(t.ejercicio_id))).join(" | "));
     else if (ejercicioVivo(it.ejercicio_id)) out.push("- " + nombreEj(it.ejercicio_id) + " [" + tipoDe(it.ejercicio_id) + "]: " + resumenSeriesRutina(it.series, tipoDe(it.ejercicio_id)) + (it.series[0] && it.series[0].nota ? " nota: " + it.series[0].nota : ""));
   });
   return out;
@@ -9216,7 +9364,7 @@ function textoPrompt() {
     "- Intensidad: @RPE8 o @75% (del 1RM) en fuerza, @4:30/km en carrera, @1:50/100m en natación. No pongas kilos fijos.",
     "- Descanso: «desc 2:00» o «desc 90» (segundos). En carrera y natación la recuperación también puede ir en metros: «rec 200m».",
     "- Indicaciones de un ejercicio (tempo, tipo de banda o resistencia, EEP/RIR, pausas…): al final de su línea, «nota: …». Ejemplo: «- Sentadilla [fuerza]: 4x6 @RPE8 nota: Tempo 3-1-1-0».",
-    "- Tramos que se repiten seguidos: «- BLOQUE x4: Ejercicio [tipo] 400m rec 200m | Ejercicio [tipo] 200m».",
+    "- Tramos que se repiten seguidos: «- SUPERSERIE x4: Ejercicio [tipo] 400m rec 200m | Ejercicio [tipo] 200m».",
     "- Divide cada sesión en partes con una línea «### Calentamiento», «### Parte principal» y, si encaja, «### Vuelta a la calma» antes de sus ejercicios.",
     "- El calentamiento incluye movilidad [movilidad] de las articulaciones que se van a trabajar ese día (por ejemplo cadera y tobillo para pierna, hombro y columna torácica para torso, o movilidad dinámica antes de correr) y, si encaja, otros ejercicios: bici o trote suave, activación, técnica o series de aproximación [fuerza]. La vuelta a la calma puede llevar estiramientos [movilidad].",
     "- Tirada larga con ritmos distintos por tramos, en una línea: «- Tirada larga [carrera]: 1x8km @5:20/km + 1x6km @4:50/km + 1x2km @5:30/km».",
@@ -9253,7 +9401,7 @@ function textoPromptSesion() {
     "- Indicaciones (tempo, banda, EEP/RIR, pausas…): al final de la línea del ejercicio, «nota: …». Ejemplo: «- Remo con banda [fuerza]: 3x12 nota: Banda roja, tempo 2-0-1-1».",
     "- Divide la sesión en partes con una línea «### Calentamiento», «### Parte principal» y «### Vuelta a la calma» antes de sus ejercicios.",
     "- El calentamiento incluye movilidad [movilidad] de las articulaciones que se van a trabajar (cadera y tobillo para pierna, hombro y columna torácica para torso, movilidad dinámica antes de correr) y, si encaja, otros ejercicios: bici o trote suave, activación, técnica o series de aproximación [fuerza]. La vuelta a la calma puede llevar estiramientos [movilidad].",
-    "- Tramos que se repiten: «- BLOQUE x4: Ejercicio [tipo] 400m rec 200m | Ejercicio [tipo] 200m». Tirada por tramos: «- Tirada larga [carrera]: 1x8km @5:20/km + 1x6km @4:50/km»."].filter(Boolean).join("\n");
+    "- Tramos que se repiten: «- SUPERSERIE x4: Ejercicio [tipo] 400m rec 200m | Ejercicio [tipo] 200m». Tirada por tramos: «- Tirada larga [carrera]: 1x8km @5:20/km + 1x6km @4:50/km»."].filter(Boolean).join("\n");
 }
 // ---------- Importar un documento de entrenamiento (PDF, Word, Excel, CSV, texto o foto) ----------
 let docIA = null;   // { nombre, texto, sinTexto } mientras el prompt es para convertir un documento
@@ -9832,17 +9980,55 @@ function moverGrupo(fecha, nombre, paso) {
 // Asa ≡: se arrastra (dedo o ratón) con vista en vivo, o se mueve con las flechas del teclado
 // zonas (opcional): { lista: () => [elementos], alSoltar: zona => … } — soltar encima de una (p. ej. la cabecera
 // de «Calentamiento») mete el elemento dentro, como una app en una carpeta
+// Las asas solo capturan el gesto dentro de su zona explícitamente habilitada.
+function prepararArrastreAsa(asa, iniciar) {
+  asa.addEventListener("contextmenu", e => { if (puedeReordenar(asa)) e.preventDefault(); });
+  asa.addEventListener("pointerdown", e => {
+    e.stopPropagation();   // un asa bloqueada tampoco inicia selección por pulsación larga en su fila
+    if (!puedeReordenar(asa) || e.button > 0 || e.isPrimary === false || arrastreOrden) return;
+    e.preventDefault();
+    const id = e.pointerId;
+    const limpiar = () => {
+      document.removeEventListener("pointerup", terminar, true);
+      document.removeEventListener("pointercancel", terminar, true);
+      document.removeEventListener("touchstart", varios, true);
+      asa.removeEventListener("lostpointercapture", perdido);
+      if (arrastreOrden?.cancelar === cancelar) arrastreOrden = null;
+    };
+    const cancelar = () => {
+      asa.dispatchEvent(new PointerEvent("pointercancel", { pointerId: id, pointerType: e.pointerType }));
+      limpiar();
+      try { if (asa.hasPointerCapture(id)) asa.releasePointerCapture(id); } catch {}
+    };
+    const terminar = ev => {
+      if (ev.pointerId !== id) return;
+      if (ev.type === "pointerup") {
+        const r = raizOrden(asa)?.getBoundingClientRect();
+        if (!r || ev.clientX < r.left || ev.clientX > r.right || ev.clientY < r.top || ev.clientY > r.bottom) { cancelar(); return; }
+      }
+      limpiar();
+    };
+    const varios = ev => { if (ev.touches.length !== 1) cancelar(); };
+    const perdido = () => { if (arrastreOrden?.cancelar === cancelar) cancelar(); };
+    arrastreOrden = { asa, cancelar };
+    document.addEventListener("pointerup", terminar, true);
+    document.addEventListener("pointercancel", terminar, true);
+    document.addEventListener("touchstart", varios, { passive: true, capture: true });
+    asa.addEventListener("lostpointercapture", perdido);
+    iniciar(e);   // sin espera: touch-action está definido por el modo antes de apoyar el dedo
+  });
+}
+
 function asaArrastre(el, hermanos, alSoltar, nombre, zonas) {
   const asa = document.createElement("button");
   asa.type = "button";
   asa.className = "asa";
   asa.textContent = "≡";
-  asa.setAttribute("aria-label", "Mover " + nombre + " (arrástralo o usa las flechas arriba y abajo)");
-  asa.addEventListener("click", e => e.stopPropagation());
-  // En iOS, que el toque en el asa no acabe enfocando lo que haya debajo al soltar (abriría el teclado)
-  asa.addEventListener("touchstart", e => e.preventDefault(), { passive: false });
+  asa.setAttribute("aria-label", "Mover " + nombre + " (activa Reordenar en esta zona y arrastra o usa las flechas arriba y abajo)");
+  asa.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); });
   asa.addEventListener("keydown", e => {
     if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+    if (!puedeReordenar(el)) return;
     e.preventDefault();
     const h = hermanos(), i = h.indexOf(el), j = i + (e.key === "ArrowUp" ? -1 : 1);
     if (j < 0 || j >= h.length) return;
@@ -9852,7 +10038,7 @@ function asaArrastre(el, hermanos, alSoltar, nombre, zonas) {
   });
   // Arrastre: el elemento sigue al dedo con transform (en cada fotograma), los demás se apartan con una
   // transición corta y el orden se guarda una sola vez al soltar; cerca de los bordes la vista se desplaza sola
-  asa.addEventListener("pointerdown", e => {
+  prepararArrastreAsa(asa, e => {
     if (e.button > 0) return;
     e.preventDefault();
     e.stopPropagation();
@@ -9940,8 +10126,11 @@ function asaArrastre(el, hermanos, alSoltar, nombre, zonas) {
     };
     const pedir = () => { if (!pendiente) { pendiente = true; requestAnimationFrame(pintar); } };
     if (zonas) zonas.repintar = pedir;   // v282: la zona puede pedir un fotograma (p. ej. al desplegar un entreno con el dedo quieto)
-    const mover = ev => { dedoX = ev.clientX; dedoY = ev.clientY; pedir(); };
+    let movido = false;
+    const mover = ev => { if (ev.clientX !== e.clientX || ev.clientY !== e.clientY) movido = true; dedoX = ev.clientX; dedoY = ev.clientY; pedir(); };
     const fin = ev => {
+      if (!movido && ev.type === "pointerup") ev = { type: "pointercancel" };
+      if (ev.type === "pointerup") ultimoGesto = Date.now();   // el gesto termina ahora, aunque el arrastre haya durado varios segundos
       vivo = false;
       clearTimeout(tZona);
       arrastreActivo = false;
@@ -9990,10 +10179,9 @@ function asaArrastre(el, hermanos, alSoltar, nombre, zonas) {
 function asaArrastreDia(el, caja, hermanos, alSoltar, nombre, zonas) {
   const asa = asaArrastre(el, hermanos, alSoltar, nombre, zonas);   // teclado (flechas) como siempre
   const nuevo = asa.cloneNode(true);
-  nuevo.addEventListener("click", e => e.stopPropagation());
-  nuevo.addEventListener("touchstart", e => e.preventDefault(), { passive: false });
+  nuevo.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); });
   nuevo.addEventListener("keydown", e => asa.dispatchEvent(new KeyboardEvent("keydown", { key: e.key, bubbles: false, cancelable: true })) || e.preventDefault());
-  nuevo.addEventListener("pointerdown", e => {
+  prepararArrastreAsa(nuevo, e => {
     if (e.button > 0) return;
     e.preventDefault();
     e.stopPropagation();
@@ -10076,6 +10264,9 @@ function asaArrastreDia(el, caja, hermanos, alSoltar, nombre, zonas) {
       moverHueco(() => donde === "antes" ? ref.before(ph) : ref.after(ph));
     };
     medir();
+    // El hueco ya ocupa espacio: mantener el punto de agarre antes del primer movimiento.
+    trasEl = r0.top + scrollY - baseEl;
+    el.style.transform = "translate3d(0," + trasEl / zf + "px,0)";
     const pintar = () => {
       pendiente = false;
       if (!vivo) return;
@@ -10125,8 +10316,11 @@ function asaArrastreDia(el, caja, hermanos, alSoltar, nombre, zonas) {
       if (dedoY < bArriba + 48 || dedoY > bAbajo - 48) pedir();
     };
     const pedir = () => { if (!pendiente) { pendiente = true; requestAnimationFrame(pintar); } };
-    const mover = ev => { dedoY = ev.clientY; if (Math.abs(dedoY - ultY) > 2) { dir = dedoY > ultY ? 1 : -1; ultY = dedoY; } pedir(); };
+    let movido = false;
+    const mover = ev => { if (ev.clientX !== e.clientX || ev.clientY !== e.clientY) movido = true; dedoY = ev.clientY; if (Math.abs(dedoY - ultY) > 2) { dir = dedoY > ultY ? 1 : -1; ultY = dedoY; } pedir(); };
     const fin = ev => {
+      if (!movido && ev.type === "pointerup") ev = { type: "pointercancel" };
+      if (ev.type === "pointerup") ultimoGesto = Date.now();   // el gesto termina ahora, aunque el arrastre haya durado varios segundos
       if (!vivo) return;   // v252: una sola vez (pointerup/pointercancel y la pérdida de captura pueden llegar seguidos)
       vivo = false;
       zonaFin.classList.remove("arrastre-ej");
@@ -10186,6 +10380,7 @@ function asaArrastreDia(el, caja, hermanos, alSoltar, nombre, zonas) {
 // ---------- Vista de un solo día ----------
 function abrirDia(id) {
   if (!id) return;
+  if (zonaReordenar && zonaReordenar !== "dia:" + id) terminarModoOrden();
   diaAbierto = id;
   escribir("dia-abierto-v1", { id, abierto: iso(new Date()) });
   desplazamiento = Math.round((lunesDe(deIso(id)) - lunesDe(new Date())) / 6048e5);
@@ -10193,6 +10388,7 @@ function abrirDia(id) {
   scrollTo(0, 0);
 }
 function cerrarDia() {
+  terminarModoOrden();
   diaAbierto = null;
   escribir("dia-abierto-v1", null);
   pintarSemana();
@@ -10220,9 +10416,11 @@ $("semana").addEventListener("touchend", e => {
 let desplegados = {}; // todos los días empiezan plegados en cada apertura
 const desplegado = id => desplegados[id] ?? false;
 function ponerPlegado(d, plegado) {
+  if (plegado && puedeReordenar(d.col)) terminarModoOrden();
   d.col.classList.toggle("plegado", plegado);
   d.col.querySelector(".dia-abrir").setAttribute("aria-expanded", String(!plegado));
   d.col.querySelector(".dia-cuerpo").inert = plegado;
+  actualizarModoOrden();
 }
 function plegarDia(d) {
   if (diaAbierto) return;
@@ -10452,7 +10650,7 @@ function pintarEntreno() {
   $("enNota").hidden = !s.nota;
   if (s.bloque_id) {
     const rondas = Math.max.apply(null, lista.filter(x => x.bloque_id === s.bloque_id).map(x => n0(x.ronda)));
-    $("enSerie").textContent = "Bloque · ronda " + n0(s.ronda) + " de " + rondas;
+    $("enSerie").textContent = "Superserie · ronda " + n0(s.ronda) + " de " + rondas;
   } else if (s.calentamiento) {
     $("enSerie").textContent = "Calentamiento";
   } else {
@@ -10624,7 +10822,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v291" + (BETA ? " beta" : "");
+const VERSION_APP = "v296" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";
@@ -11100,7 +11298,7 @@ function pintarImportar() {
           const n = marcadas.length / periodoRepetido(marcadas.map(v => Math.round(v.distancia / 50)));
           const b = document.createElement("button");
           b.type = "button"; b.className = "anadir";
-          b.textContent = "Agrupar las " + marcadas.length + " marcadas en bloque ×" + n;
+          b.textContent = "Agrupar las " + marcadas.length + " marcadas en superserie ×" + n;
           b.addEventListener("click", () => { const g = (a.siguienteGrupo = (a.siguienteGrupo || 0) + 1); marcadas.forEach(v => { v.grupoManual = g; v.marcada = false; }); a.bloque = false; pintarImportar(); });
           bot.appendChild(b);
         }
@@ -11113,13 +11311,13 @@ function pintarImportar() {
         }
         caja.appendChild(bot);
       }
-      if (grupos.length) caja.appendChild(nota("Las vueltas con ▣ se guardarán como " + (grupos.length === 1 ? "un bloque" : grupos.length + " bloques") + " (×N según cuántas veces se repite su patrón)."));
+      if (grupos.length) caja.appendChild(nota("Las vueltas con ▣ se guardarán como " + (grupos.length === 1 ? "una superserie" : grupos.length + " superseries") + " (×N según cuántas veces se repite su patrón)."));
       const p = patronSeries(a.vueltas);
       caja.appendChild(nota(p.n ? p.n + (p.n === 1 ? " serie" : " series") + " → «" + p.nombre + "». Las recuperaciones y los descansos se guardan como descanso de la serie anterior; el calentamiento y la vuelta a la calma no cuentan para marcas." : "No hay ninguna vuelta marcada como serie."));
       if (p.regular) {
         const b = document.createElement("label");
         b.className = "permiso";
-        b.innerHTML = '<input type="checkbox"> Agrupar las series como bloque ×' + p.n;
+        b.innerHTML = '<input type="checkbox"> Agrupar las series como superserie ×' + p.n;
         b.querySelector("input").checked = a.bloque;
         b.querySelector("input").addEventListener("change", ev => { a.bloque = ev.target.checked; });
         caja.appendChild(b);
@@ -11498,6 +11696,7 @@ function mostrarGrupoPlan(grupo) {
   aplicarGrupoPlan();
 }
 function mostrarSubVistaOrganizar(vista) {
+  if (vista !== subVistaOrganizar) terminarModoOrden();
   subVistaOrganizar = ["listas", "crear", "entrenos"].includes(vista) ? vista : "listas";
   const esLista = subVistaOrganizar === "listas";
   $("vistaListas").hidden = esLista ? false : true;

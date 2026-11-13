@@ -6419,6 +6419,7 @@ function grafica(puntos, etiqueta) {
 function refrescarDetalle() {
   const e = ejercicioVivo(detalleId);
   if (!e) { if ($("detalle").open) $("detalle").close(); return; }
+  pintarAvisoCargaContextual();
   const st = estadisticas(e.id), tipo = st.tipo;
   $("detTipo").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.tipo === tipo)));
   const medida = tipo === "fuerza" ? medidaDe(e.id) : "";
@@ -6705,6 +6706,25 @@ function pendientesCarga(id, contexto) {
   if (!contexto || !fechaSerieValida(contexto.fecha) || !Array.isArray(contexto.ids)) return [];
   return [...new Set(contexto.ids)].map(k => db.series[k]).filter(s => s && !s.borrado && !hecha(s) && s.ejercicio_id === id && s.fecha === contexto.fecha && (s.grupo || "") === contexto.grupo && cargaGuardada(s));
 }
+// Acceso persistente mientras esta ocurrencia conserva carga prevista sin admitir Carga.
+function pintarAvisoCargaContextual() {
+  let aviso = $("detAvisoCargaContextual");
+  if (!aviso) {
+    aviso = document.createElement("div"); aviso.id = "detAvisoCargaContextual";
+    const texto = document.createElement("p"); texto.id = "detContextoCargaTexto";
+    const revisar = document.createElement("button"); revisar.type = "button"; revisar.id = "detRevisarCarga";
+    revisar.className = "nav-btn"; revisar.style.minHeight = "44px"; revisar.style.whiteSpace = "normal";
+    revisar.textContent = "Revisar pesos previstos…";
+    revisar.addEventListener("click", () => ofrecerRetiradaCarga(detalleId, detalleContextoCarga));
+    aviso.append(texto, revisar); $("detMagNota").after(aviso);
+  }
+  const contexto = detalleContextoCarga;
+  const filas = contexto && !admite(detalleId, "carga") ? pendientesCarga(detalleId, contexto) : [];
+  aviso.hidden = !filas.length;
+  const texto = filas.length ? "La ficha no admite Carga, pero esta ocurrencia conserva peso previsto. Entrenamiento: «" + (contexto.grupo || "Ejercicios sueltos") + "». Fecha: " + fechaLargaPlant(contexto.fecha) + ". " + filas.length + (filas.length === 1 ? " serie pendiente con carga." : " series pendientes con carga.") + " No se retira nada automáticamente." : "";
+  if ($("detContextoCargaTexto").textContent !== texto) $("detContextoCargaTexto").textContent = texto;
+}
+
 function ofrecerRetiradaCarga(id, contexto) {
   if (admite(id, "carga")) return;
   const filas = pendientesCarga(id, contexto);
@@ -6805,6 +6825,7 @@ $("detTecnica").addEventListener("click", () => {
 // la ficha (dueño de un personal o quien edita el catálogo común) las cambia; el servidor lo impone con las mismas políticas de la ficha.
 // Cambiarlas no toca ninguna serie guardada: los datos que ya tengan se siguen mostrando aunque la ficha deje de ofrecer ese campo.
 function pintarMagnitudesDetalle(e) {
+  pintarAvisoCargaContextual();
   const tipo = tipoDe(e.id), posibles = MAGNITUDES_TIPO[tipo];
   $("detMagSec").hidden = !posibles;
   const cont = $("detMag");
@@ -10861,7 +10882,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v301" + (BETA ? " beta" : "");
+const VERSION_APP = "v302" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

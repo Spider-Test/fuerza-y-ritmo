@@ -1824,6 +1824,71 @@ function pedirNombre(titulo, valor, ayuda) {
   });
 }
 
+// Modo efímero de reordenación: un solo día o una sola lista, sin guardarlo ni sincronizarlo.
+let zonaReordenar = null, arrastreOrden = null, actualizandoOrden = false;
+const raizOrden = el => el?.closest?.("[data-zona-orden]") || null;
+const puedeReordenar = el => !!zonaReordenar && raizOrden(el)?.dataset.zonaOrden === zonaReordenar;
+const zonaOrdenPlegada = zona => zona.classList.contains(zona.classList.contains("dia") ? "plegado" : "cerrada");
+function terminarModoOrden() {
+  zonaReordenar = null;
+  if (arrastreOrden) arrastreOrden.cancelar();
+  actualizarModoOrden();
+}
+function instalarControlOrden(zona, cabecera, nombre) {
+  zona.dataset.zonaOrden = zona.dataset.zonaOrden || "";
+  zona.dataset.nombreOrden = nombre;
+  const barra = document.createElement("div"); barra.className = "orden-barra"; barra.hidden = true;
+  const estado = document.createElement("span"); estado.className = "orden-estado";
+  estado.textContent = "Reordenando"; estado.hidden = true; estado.setAttribute("role", "status");
+  const control = document.createElement("button"); control.type = "button";
+  control.className = "nav-btn modo-orden"; control.textContent = "Reordenar"; control.setAttribute("aria-pressed", "false");
+  control.addEventListener("click", () => {
+    if (puedeReordenar(zona)) terminarModoOrden();
+    else { terminarModoOrden(); zonaReordenar = zona.dataset.zonaOrden; actualizarModoOrden(); }
+  });
+  barra.append(control, estado); cabecera.appendChild(barra);
+}
+function actualizarModoOrden() {
+  if (actualizandoOrden) return;
+  actualizandoOrden = true;
+  try {
+    const zonas = [...document.querySelectorAll("[data-zona-orden]")];
+    const actual = zonas.find(z => z.dataset.zonaOrden === zonaReordenar && !z.closest("[hidden]"));
+    if (zonaReordenar && (!actual || zonaOrdenPlegada(actual) || !actual.querySelector(".asa") || document.querySelector("dialog[open]"))) terminarModoOrden();
+    else if (arrastreOrden && !arrastreOrden.asa.isConnected) arrastreOrden.cancelar();
+    zonas.forEach(z => {
+      const activo = puedeReordenar(z), barra = z.querySelector(":scope > .dia-cab > .orden-barra, :scope > .lista-cab > .orden-barra");
+      if (z.classList.contains("reordenando") !== activo) z.classList.toggle("reordenando", activo);
+      if (barra) {
+        const oculta = zonaOrdenPlegada(z) || !z.querySelector(".asa"), control = barra.querySelector(".modo-orden"), estado = barra.querySelector(".orden-estado");
+        if (barra.hidden !== oculta) barra.hidden = oculta;
+        if (estado.hidden === activo) estado.hidden = !activo;
+        const texto = activo ? "Hecho" : "Reordenar";
+        if (control.textContent !== texto) control.textContent = texto;
+        const pressed = String(activo), etiqueta = (activo ? "Terminar de reordenar " : "Reordenar ") + z.dataset.nombreOrden;
+        if (control.getAttribute("aria-pressed") !== pressed) control.setAttribute("aria-pressed", pressed);
+        if (control.getAttribute("aria-label") !== etiqueta) control.setAttribute("aria-label", etiqueta);
+      }
+      z.querySelectorAll(".asa").forEach(asa => {
+        if (asa.tabIndex !== (activo ? 0 : -1)) asa.tabIndex = activo ? 0 : -1;
+        if (asa.getAttribute("aria-disabled") !== String(!activo)) asa.setAttribute("aria-disabled", String(!activo));
+      });
+    });
+  } finally { actualizandoOrden = false; }
+}
+// Mantener la zona en los repintados, pero cancelar un arrastre cuyo nodo haya sido sustituido.
+let ordenPendiente = false;
+new MutationObserver(() => {
+  if (ordenPendiente) return;
+  ordenPendiente = true; queueMicrotask(() => { ordenPendiente = false; actualizarModoOrden(); });
+}).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["hidden", "open"] });
+document.addEventListener("pointerdown", e => {
+  const zona = raizOrden(e.target);
+  if (zonaReordenar && zona && zona.dataset.zonaOrden !== zonaReordenar) terminarModoOrden();
+}, true);
+window.addEventListener("blur", terminarModoOrden);
+document.addEventListener("visibilitychange", () => { if (document.hidden) terminarModoOrden(); });
+
 // ---------- Semana ----------
 const dias = DIAS.map((_, i) => {
   const col = document.createElement("section");
@@ -1856,6 +1921,7 @@ const dias = DIAS.map((_, i) => {
   col.querySelector(".dia-abrir").addEventListener("click", () => plegarDia(dia));
   dia.resumenEl.addEventListener("click", () => plegarDia(dia));
   col.querySelector(".dia-max").addEventListener("click", () => abrirDia(dia.id));
+  instalarControlOrden(col, col.querySelector(".dia-cab"), NOMBRES[i]);
   dia.empezarEl.addEventListener("click", () => empezarEntreno(dia));
   ed.addEventListener("focus", () => col.classList.add("escribiendo"));
   ed.addEventListener("blur", () => col.classList.remove("escribiendo"));
@@ -1894,6 +1960,7 @@ function pintarBanda() {
 }
 function pintarSemana() {
   const lunes = lunesVista();
+  if (zonaReordenar?.startsWith("dia:") && !Array.from({ length: 7 }, (_, i) => "dia:" + iso(sumarDias(lunes, i))).includes(zonaReordenar)) terminarModoOrden();
   const hoyIso = iso(new Date());
   $("rango").textContent = fmt(lunes) + " – " + fmt(sumarDias(lunes, 6));
   const n = desplazamiento, rel = $("relativa");
@@ -1914,6 +1981,8 @@ function pintarSemana() {
   dias.forEach(d => {
     const f = sumarDias(lunes, d.i);
     d.id = iso(f);
+    d.col.dataset.zonaOrden = "dia:" + d.id;
+    d.col.dataset.nombreOrden = NOMBRES[d.i] + " " + fmt(f);
     d.fechaEl.textContent = fmt(f);
     d.col.classList.toggle("hoy", d.id === hoyIso);
     d.col.hidden = !!diaAbierto && d.id !== diaAbierto;
@@ -3410,6 +3479,7 @@ function elegirDiaDestino(lunes, titulo, alElegir) {
 }
 // Lleva la semana al día donde se ha añadido algo
 function irADia(f, aviso) {
+  if (zonaReordenar && zonaReordenar !== "dia:" + f) terminarModoOrden();
   desplazamiento = Math.round((lunesDe(deIso(f)) - lunesDe(new Date())) / 6048e5);
   verPestana("semana");
   pintarSemana();
@@ -5870,7 +5940,9 @@ function pintarListas() {
     const nSem = (l.items || []).filter(esSep).length;
     const sec = document.createElement("section");
     sec.className = "cat-sec lista-sec" + (abierta ? "" : " cerrada");
+    sec.dataset.zonaOrden = "lista:" + l.id;
     sec.innerHTML = '<div class="lista-cab"><button type="button" class="sec-toggle"><span class="flecha-dia" aria-hidden="true">▸</span><h3></h3><span class="sec-n"></span></button><button type="button" class="menu-btn">⋯</button></div><div class="sec-cuerpo"><div class="sec-cuerpo-in"><div class="lista-ents"></div><div class="add-fila"><button type="button" class="add-ej">+ Entrenamiento</button><button type="button" class="add-ej">+ Bloque (semana, fase…)</button><button type="button" class="add-ej add-meso">+ Mesociclo</button></div></div></div>';
+    instalarControlOrden(sec, sec.querySelector(".lista-cab"), l.nombre);
     sec.querySelector("h3").textContent = l.nombre;
     const nGr = (l.items || []).filter(esGrupoL).length;
     sec.querySelector(".sec-n").textContent = "· " + rec.length + (nGr ? " · " + nGr + (nGr === 1 ? " mesociclo" : " mesociclos") : "") + (nSem ? " · " + nSem + (nSem === 1 ? " bloque" : " bloques") : "");
@@ -5878,8 +5950,10 @@ function pintarListas() {
     boton.setAttribute("aria-expanded", String(abierta)); cuerpo.inert = !abierta;
     boton.addEventListener("click", () => {
       const abrir = sec.classList.contains("cerrada");
+      if (!abrir && puedeReordenar(sec)) terminarModoOrden();
       sec.classList.toggle("cerrada", !abrir); boton.setAttribute("aria-expanded", String(abrir)); cuerpo.inert = !abrir;
       listasAbiertas[l.id] = abrir; escribir("listas-abiertas-v1", listasAbiertas);
+      actualizarModoOrden();
     });
     const anadir = tras => elegirPlantilla("Añadir a «" + l.nombre + "»", p => anadirPlantillaALista(l, p, tras));
     const nuevaSemana = async tras => {
@@ -7560,6 +7634,7 @@ function avisoUsuarios() {
 // Editor de mesociclo
 let mesoEdit = null, mesoImportacion = null;
 function abrirMeso(id, importacion = null) {
+  terminarModoOrden();
   mesoImportacion = importacion;
   const m = id ? db.mesociclos[id] : null;
   mesoEdit = m ? { ...m, dias: JSON.parse(JSON.stringify(m.dias || {})) }
@@ -7811,6 +7886,7 @@ $("sigBtn").addEventListener("click", () => irA(desplazamiento + 1));
 // Volver a hoy: la semana actual con hoy desplegado y a la vista (o el día de hoy, en la vista de un día)
 function irAHoy() {
   const hoy = iso(new Date());
+  if (zonaReordenar && zonaReordenar !== "dia:" + hoy) terminarModoOrden();
   if (diaAbierto) { abrirDia(hoy); return; }
   desplegados[hoy] = true;
   escribir("dias-desplegados-v1", desplegados);
@@ -7856,6 +7932,7 @@ function pintarCalendario() {
 }
 // Ir a una fecha: se abre su semana con ese día desplegado (o el día suelto, si estabas en esa vista)
 function irAFecha(id) {
+  if (zonaReordenar && zonaReordenar !== "dia:" + id) terminarModoOrden();
   $("dlgCal").close();
   if (diaAbierto) { abrirDia(id); return; }
   if (id === iso(new Date())) { irAHoy(); return; }
@@ -7876,6 +7953,7 @@ const VISTAS = { semana: "vistaSemana", ejercicios: "vistaEjercicios", listas: "
 const TABS = { semana: "tabSemana", ejercicios: "tabEjercicios", listas: "tabListas", plan: "tabPlan", marcas: "tabMarcas" };
 function verPestana(cual) {
   if (!VISTAS[cual]) cual = "semana";
+  if (zonaReordenar && ![...document.querySelectorAll("[data-zona-orden]")].some(z => z.dataset.zonaOrden === zonaReordenar && z.closest("#" + VISTAS[cual]))) terminarModoOrden();
   if (cual !== "plan" && selPlant) { selPlant = null; $("selPlantAcciones").hidden = true; document.body.classList.remove("seleccionando"); }
   if (cual !== "plan" && selMeso) { selMeso = null; $("selMesoAcciones").hidden = true; document.body.classList.remove("seleccionando"); }
   Object.keys(VISTAS).forEach(k => {
@@ -9832,17 +9910,55 @@ function moverGrupo(fecha, nombre, paso) {
 // Asa ≡: se arrastra (dedo o ratón) con vista en vivo, o se mueve con las flechas del teclado
 // zonas (opcional): { lista: () => [elementos], alSoltar: zona => … } — soltar encima de una (p. ej. la cabecera
 // de «Calentamiento») mete el elemento dentro, como una app en una carpeta
+// Las asas solo capturan el gesto dentro de su zona explícitamente habilitada.
+function prepararArrastreAsa(asa, iniciar) {
+  asa.addEventListener("contextmenu", e => { if (puedeReordenar(asa)) e.preventDefault(); });
+  asa.addEventListener("pointerdown", e => {
+    e.stopPropagation();   // un asa bloqueada tampoco inicia selección por pulsación larga en su fila
+    if (!puedeReordenar(asa) || e.button > 0 || e.isPrimary === false || arrastreOrden) return;
+    e.preventDefault();
+    const id = e.pointerId;
+    const limpiar = () => {
+      document.removeEventListener("pointerup", terminar, true);
+      document.removeEventListener("pointercancel", terminar, true);
+      document.removeEventListener("touchstart", varios, true);
+      asa.removeEventListener("lostpointercapture", perdido);
+      if (arrastreOrden?.cancelar === cancelar) arrastreOrden = null;
+    };
+    const cancelar = () => {
+      asa.dispatchEvent(new PointerEvent("pointercancel", { pointerId: id, pointerType: e.pointerType }));
+      limpiar();
+      try { if (asa.hasPointerCapture(id)) asa.releasePointerCapture(id); } catch {}
+    };
+    const terminar = ev => {
+      if (ev.pointerId !== id) return;
+      if (ev.type === "pointerup") {
+        const r = raizOrden(asa)?.getBoundingClientRect();
+        if (!r || ev.clientX < r.left || ev.clientX > r.right || ev.clientY < r.top || ev.clientY > r.bottom) { cancelar(); return; }
+      }
+      limpiar();
+    };
+    const varios = ev => { if (ev.touches.length !== 1) cancelar(); };
+    const perdido = () => { if (arrastreOrden?.cancelar === cancelar) cancelar(); };
+    arrastreOrden = { asa, cancelar };
+    document.addEventListener("pointerup", terminar, true);
+    document.addEventListener("pointercancel", terminar, true);
+    document.addEventListener("touchstart", varios, { passive: true, capture: true });
+    asa.addEventListener("lostpointercapture", perdido);
+    iniciar(e);   // sin espera: touch-action está definido por el modo antes de apoyar el dedo
+  });
+}
+
 function asaArrastre(el, hermanos, alSoltar, nombre, zonas) {
   const asa = document.createElement("button");
   asa.type = "button";
   asa.className = "asa";
   asa.textContent = "≡";
-  asa.setAttribute("aria-label", "Mover " + nombre + " (arrástralo o usa las flechas arriba y abajo)");
-  asa.addEventListener("click", e => e.stopPropagation());
-  // En iOS, que el toque en el asa no acabe enfocando lo que haya debajo al soltar (abriría el teclado)
-  asa.addEventListener("touchstart", e => e.preventDefault(), { passive: false });
+  asa.setAttribute("aria-label", "Mover " + nombre + " (activa Reordenar en esta zona y arrastra o usa las flechas arriba y abajo)");
+  asa.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); });
   asa.addEventListener("keydown", e => {
     if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+    if (!puedeReordenar(el)) return;
     e.preventDefault();
     const h = hermanos(), i = h.indexOf(el), j = i + (e.key === "ArrowUp" ? -1 : 1);
     if (j < 0 || j >= h.length) return;
@@ -9852,7 +9968,7 @@ function asaArrastre(el, hermanos, alSoltar, nombre, zonas) {
   });
   // Arrastre: el elemento sigue al dedo con transform (en cada fotograma), los demás se apartan con una
   // transición corta y el orden se guarda una sola vez al soltar; cerca de los bordes la vista se desplaza sola
-  asa.addEventListener("pointerdown", e => {
+  prepararArrastreAsa(asa, e => {
     if (e.button > 0) return;
     e.preventDefault();
     e.stopPropagation();
@@ -9940,8 +10056,11 @@ function asaArrastre(el, hermanos, alSoltar, nombre, zonas) {
     };
     const pedir = () => { if (!pendiente) { pendiente = true; requestAnimationFrame(pintar); } };
     if (zonas) zonas.repintar = pedir;   // v282: la zona puede pedir un fotograma (p. ej. al desplegar un entreno con el dedo quieto)
-    const mover = ev => { dedoX = ev.clientX; dedoY = ev.clientY; pedir(); };
+    let movido = false;
+    const mover = ev => { if (ev.clientX !== e.clientX || ev.clientY !== e.clientY) movido = true; dedoX = ev.clientX; dedoY = ev.clientY; pedir(); };
     const fin = ev => {
+      if (!movido && ev.type === "pointerup") ev = { type: "pointercancel" };
+      if (ev.type === "pointerup") ultimoGesto = Date.now();   // el gesto termina ahora, aunque el arrastre haya durado varios segundos
       vivo = false;
       clearTimeout(tZona);
       arrastreActivo = false;
@@ -9990,10 +10109,9 @@ function asaArrastre(el, hermanos, alSoltar, nombre, zonas) {
 function asaArrastreDia(el, caja, hermanos, alSoltar, nombre, zonas) {
   const asa = asaArrastre(el, hermanos, alSoltar, nombre, zonas);   // teclado (flechas) como siempre
   const nuevo = asa.cloneNode(true);
-  nuevo.addEventListener("click", e => e.stopPropagation());
-  nuevo.addEventListener("touchstart", e => e.preventDefault(), { passive: false });
+  nuevo.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); });
   nuevo.addEventListener("keydown", e => asa.dispatchEvent(new KeyboardEvent("keydown", { key: e.key, bubbles: false, cancelable: true })) || e.preventDefault());
-  nuevo.addEventListener("pointerdown", e => {
+  prepararArrastreAsa(nuevo, e => {
     if (e.button > 0) return;
     e.preventDefault();
     e.stopPropagation();
@@ -10076,6 +10194,9 @@ function asaArrastreDia(el, caja, hermanos, alSoltar, nombre, zonas) {
       moverHueco(() => donde === "antes" ? ref.before(ph) : ref.after(ph));
     };
     medir();
+    // El hueco ya ocupa espacio: mantener el punto de agarre antes del primer movimiento.
+    trasEl = r0.top + scrollY - baseEl;
+    el.style.transform = "translate3d(0," + trasEl / zf + "px,0)";
     const pintar = () => {
       pendiente = false;
       if (!vivo) return;
@@ -10125,8 +10246,11 @@ function asaArrastreDia(el, caja, hermanos, alSoltar, nombre, zonas) {
       if (dedoY < bArriba + 48 || dedoY > bAbajo - 48) pedir();
     };
     const pedir = () => { if (!pendiente) { pendiente = true; requestAnimationFrame(pintar); } };
-    const mover = ev => { dedoY = ev.clientY; if (Math.abs(dedoY - ultY) > 2) { dir = dedoY > ultY ? 1 : -1; ultY = dedoY; } pedir(); };
+    let movido = false;
+    const mover = ev => { if (ev.clientX !== e.clientX || ev.clientY !== e.clientY) movido = true; dedoY = ev.clientY; if (Math.abs(dedoY - ultY) > 2) { dir = dedoY > ultY ? 1 : -1; ultY = dedoY; } pedir(); };
     const fin = ev => {
+      if (!movido && ev.type === "pointerup") ev = { type: "pointercancel" };
+      if (ev.type === "pointerup") ultimoGesto = Date.now();   // el gesto termina ahora, aunque el arrastre haya durado varios segundos
       if (!vivo) return;   // v252: una sola vez (pointerup/pointercancel y la pérdida de captura pueden llegar seguidos)
       vivo = false;
       zonaFin.classList.remove("arrastre-ej");
@@ -10186,6 +10310,7 @@ function asaArrastreDia(el, caja, hermanos, alSoltar, nombre, zonas) {
 // ---------- Vista de un solo día ----------
 function abrirDia(id) {
   if (!id) return;
+  if (zonaReordenar && zonaReordenar !== "dia:" + id) terminarModoOrden();
   diaAbierto = id;
   escribir("dia-abierto-v1", { id, abierto: iso(new Date()) });
   desplazamiento = Math.round((lunesDe(deIso(id)) - lunesDe(new Date())) / 6048e5);
@@ -10193,6 +10318,7 @@ function abrirDia(id) {
   scrollTo(0, 0);
 }
 function cerrarDia() {
+  terminarModoOrden();
   diaAbierto = null;
   escribir("dia-abierto-v1", null);
   pintarSemana();
@@ -10220,9 +10346,11 @@ $("semana").addEventListener("touchend", e => {
 let desplegados = {}; // todos los días empiezan plegados en cada apertura
 const desplegado = id => desplegados[id] ?? false;
 function ponerPlegado(d, plegado) {
+  if (plegado && puedeReordenar(d.col)) terminarModoOrden();
   d.col.classList.toggle("plegado", plegado);
   d.col.querySelector(".dia-abrir").setAttribute("aria-expanded", String(!plegado));
   d.col.querySelector(".dia-cuerpo").inert = plegado;
+  actualizarModoOrden();
 }
 function plegarDia(d) {
   if (diaAbierto) return;
@@ -10624,7 +10752,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v291" + (BETA ? " beta" : "");
+const VERSION_APP = "v294" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";
@@ -11498,6 +11626,7 @@ function mostrarGrupoPlan(grupo) {
   aplicarGrupoPlan();
 }
 function mostrarSubVistaOrganizar(vista) {
+  if (vista !== subVistaOrganizar) terminarModoOrden();
   subVistaOrganizar = ["listas", "crear", "entrenos"].includes(vista) ? vista : "listas";
   const esLista = subVistaOrganizar === "listas";
   $("vistaListas").hidden = esLista ? false : true;

@@ -4187,7 +4187,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
       fa.value = t ? ti : m;
       fb.value = t ? m : ti;
     }
-    else if (mov) { fa.value = n0(s.reps) || ""; fb.value = n0(s.tiempo) > 0 ? (n0(s.tiempo) < 60 ? String(n0(s.tiempo)) : fmtTiempo(s.tiempo)) : ""; b.querySelector(".por-lado").checked = !!s.por_lado || ladoDe(id); }
+    else if (mov) { fa.value = n0(s.reps) || ""; fb.value = n0(s.tiempo) > 0 ? (n0(s.tiempo) < 60 ? String(n0(s.tiempo)) : fmtTiempo(s.tiempo)) : ""; b.querySelector(".por-lado").checked = (modoForm === "editar" && !!s.por_lado) || ladoDe(id); }
     else {
       const t = ((n0(s.tiempo) > 0 || !!s.max_tiempo) && !(n0(s.reps) > 0)) || (!(n0(s.reps) > 0) && !admite(id, "reps") && admite(id, "tiempo"));
       ponerPorT(t);
@@ -4196,7 +4196,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
       else { ponerModo(false); const kg = pesoMostrado(s); fa.value = kg > 0 ? num(kg) : ""; }
       fb.value = t ? segTxt(s.tiempo) : n0(s.reps) || "";
       if (!t && esRango(s) && !hecha(s)) { fb.value = modoForm === "editar" ? "" : rangoTxt(s); if (modoForm === "editar") setTimeout(() => { fb.placeholder = rangoTxt(s) + ": ¿cuántas?"; }, 0); }
-      if (b.querySelector(".por-lado")) b.querySelector(".por-lado").checked = !!s.por_lado || ladoDe(id);
+      if (b.querySelector(".por-lado")) b.querySelector(".por-lado").checked = (modoForm === "editar" && !!s.por_lado) || ladoDe(id);
       const esMax = !(n0(s.reps) > 0) && !(n0(s.tiempo) > 0) && !(n0(s.distancia) > 0) && !s.ciclo_id;
       // Completar una serie «máx» pendiente: se apunta lo que salió (reps o segundos)
       if (esMax && modoForm === "editar") { ponerMax(false); fb.placeholder = t ? "¿cuántos segundos?" : "¿cuántas reps?"; }
@@ -6190,6 +6190,7 @@ function refrescarDetalle() {
   $("detMedidaSec").hidden = tipo !== "fuerza" && tipo !== "movilidad";
   $("detMedida").hidden = tipo !== "fuerza"; $("detMedidaInfo").hidden = tipo !== "fuerza";
   $("detLado").checked = ladoDe(e.id);
+  pintarLadoAplicar(e.id);   // MEJ-LADO-001: diferencias frente a la ficha
   if (tipo === "fuerza") {
     $("detMedida").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.m === medida)));
     const puesta = MEDIDAS[(db.personales[e.id] || {}).medida];
@@ -6401,13 +6402,51 @@ function tablaBilbo(ses) {
   caja.appendChild(t);
   return caja;
 }
-$("detLado").addEventListener("change", () => {
-  if (!detalleId) return;
-  const p = db.personales[detalleId] || { ejercicio_id: detalleId, rm: 0 };
-  cambiar("personales", { ...p, ejercicio_id: detalleId, rm: n0(p.rm), lado: $("detLado").checked });
-  // Las series pendientes de este ejercicio pasan a «por lado» (o dejan de serlo); las hechas no se tocan
-  Object.values(db.series).filter(x => x.ejercicio_id === detalleId && !x.borrado && !hecha(x)).forEach(x => cambiar("series", { ...x, por_lado: $("detLado").checked }, true));
+// ---------- v271: «Se hace por lado» también en las series HECHAS ----------
+// Al cambiar la casilla, las pendientes se actualizan como siempre y, si hay hechas que no coinciden, se pide confirmación (con cuántas son) antes de
+// tocarlas. Si la ficha ya estaba como se quiere pero quedan series con otro valor, un botón en la ficha lo aplica. Solo cambia «por_lado»: reps, peso,
+// tiempo, fecha, orden, completado y el resto de datos no se tocan. Las series nuevas siguen tomándolo de la ficha. Con Deshacer.
+const seriesLadoDistinto = id => { const v = ladoDe(id); return Object.values(db.series).filter(x => x.ejercicio_id === id && !x.borrado && !!x.por_lado !== v); };
+function pintarLadoAplicar(id) {
+  const dif = id ? seriesLadoDistinto(id) : [], caja = $("detLadoAviso");
+  caja.hidden = !dif.length;
+  if (!dif.length) return;
+  const h = dif.filter(hecha).length, v = ladoDe(id);
+  $("detLadoTxt").textContent = dif.length + (dif.length === 1 ? " serie de este ejercicio no coincide" : " series de este ejercicio no coinciden") + " con la ficha (" + (v ? "«por lado»" : "sin «por lado»") + ")" + (h ? " · " + h + (h === 1 ? " hecha" : " hechas") : "") + ".";
+  $("detLadoAplicar").textContent = v ? "Marcar «por lado» en esas series" : "Quitar «por lado» de esas series";
+}
+async function aplicarLadoFicha(id) {
+  let dif = seriesLadoDistinto(id);
+  if (!dif.length) return;
+  const v = ladoDe(id), hechas = dif.filter(hecha);
+  if (hechas.length) {
+    const ok = await confirmar("¿Actualizar " + hechas.length + (hechas.length === 1 ? " serie hecha" : " series hechas") + "?",
+      "Se " + (v ? "marcará «por lado» en " : "quitará la marca «por lado» de ") + (dif.length === 1 ? "1 serie" : dif.length + " series") + " de «" + nombreEj(id) + "» (" + hechas.length + (hechas.length === 1 ? " hecha" : " hechas") + ", " + (dif.length - hechas.length) + " pendientes) para que coincidan con la ficha. Solo cambia la marca «por lado»: repeticiones, peso, tiempo, fecha, orden y estado de completado se conservan.", "Actualizar");
+    if (!ok) return;
+    dif = seriesLadoDistinto(id);   // por si algo cambió mientras estaba abierta la confirmación
+  }
+  const antes = dif.map(x => ["series", { ...x }]);
+  dif.forEach(x => cambiar("series", { ...x, por_lado: v }, true));
   persistir(); pintarBloques(true);
+  avisoDeshacer("«Por lado» " + (v ? "marcado" : "quitado") + " en " + dif.length + (dif.length === 1 ? " serie" : " series") + " de " + nombreEj(id), antes);
+}
+$("detLado").addEventListener("change", async () => {
+  if (!detalleId) return;
+  const id = detalleId, nuevo = $("detLado").checked;
+  const p = db.personales[id] || { ejercicio_id: id, rm: 0 };
+  cambiar("personales", { ...p, ejercicio_id: id, rm: n0(p.rm), lado: nuevo });
+  // Las series pendientes pasan a «por lado» (o dejan de serlo) sin preguntar, como siempre; las hechas, solo si se confirma
+  Object.values(db.series).filter(x => x.ejercicio_id === id && !x.borrado && !hecha(x) && !!x.por_lado !== nuevo).forEach(x => cambiar("series", { ...x, por_lado: nuevo }, true));
+  persistir(); pintarBloques(true);
+  pintarLadoAplicar(id);
+  await aplicarLadoFicha(id);
+  if (detalleId === id) pintarLadoAplicar(id);
+});
+$("detLadoAplicar").addEventListener("click", async () => {
+  if (!detalleId) return;
+  const id = detalleId;
+  await aplicarLadoFicha(id);
+  if (detalleId === id) pintarLadoAplicar(id);
 });
 $("detMedida").addEventListener("click", ev => {
   const x = ev.target.closest("button[data-m]");
@@ -10549,7 +10588,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v284" + (BETA ? " beta" : "");
+const VERSION_APP = "v285" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

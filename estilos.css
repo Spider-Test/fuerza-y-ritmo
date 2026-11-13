@@ -2829,3 +2829,6 @@ dialog#dlgAviso { margin: auto; }
 .eb-valores { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%; margin: 8px 0; }
 .eb-valor { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 13px; font-weight: 600; color: var(--muted); }
 .eb-valor input { width: 100%; min-width: 0; min-height: 44px; padding: 8px; font-size: 16px; color: var(--fg); }
+
+.lado-aplicar { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-top: 8px; padding: 10px 12px; border-radius: 10px; background: var(--gold-soft); }
+.lado-aplicar .menu-det { margin: 0; color: var(--fg); }

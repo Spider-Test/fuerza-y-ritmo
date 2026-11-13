@@ -7670,7 +7670,7 @@ function menuPlantilla(p) {
       // v291: fechas propias desde el calendario real, también al entrar antes de visitar Semana; no se modifica dias[].id.
       const fechas = fechasGenerales();
       // v278/v291: «Elegir otra fecha…» además de los siete días de la semana actual del calendario.
-      abrirMenu("¿A qué día?", "", [{ texto: "📅 Elegir otra fecha…", accion: () => abrirFechaPlantillas([p]) }].concat(fechas.map(d => ({ texto: NOMBRES[d.i] + " " + fmt(deIso(d.id)), accion: () => { abrirDia(d.id); aplicarPlantilla(dias.find(x => x.id === d.id), p); } }))));
+      abrirMenu("¿A qué día?", p.nombre, [{ texto: "📅 Elegir otra fecha…", accion: () => abrirFechaPlantillas([p]) }].concat(fechas.map(d => ({ texto: NOMBRES[d.i] + " " + fmt(deIso(d.id)), accion: () => abrirFechaPlantillas([p], d.id) }))));
     } },
     { texto: "Compartir con un amigo…", accion: () => compartir(p.nombre, p.items || []) },
     { texto: "Cambiar nombre…", accion: async () => { const n = await pedirNombre("Nombre de la plantilla", p.nombre); if (!n) return;
@@ -10822,7 +10822,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v298" + (BETA ? " beta" : "");
+const VERSION_APP = "v299" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";
@@ -11542,34 +11542,22 @@ $("selPlantEntrar").addEventListener("click", () => { selPlant = new Set(); pint
 $("selPlantCancelar").addEventListener("click", salirSeleccion);
 // Añadir todas a un día de la semana (cada una como su propia sesión)
 $("selPlantDia").addEventListener("click", () => {
-  // v276: los entrenos quedan en el orden en que se SELECCIONARON (selPlant es un Set: conserva el orden de inserción), no en orden alfabético
-  const ps = [...selPlant].map(id => db.plantillas[id]).filter(p => p && !p.borrado);
-  abrirMenu("Añadir " + ps.length + (ps.length === 1 ? " plantilla" : " plantillas"), ps.map(p => p.nombre).join(", "), [
-    // v277: cualquier fecha del calendario (el selector de fecha del navegador), sin tener que avanzar semana a semana
+  // O-3: Set conserva el orden de selección; otros usos de plantillasSel no cambian.
+  const ps = [...(selPlant || [])].map(id => db.plantillas[id]).filter(p => p && !p.borrado);
+  const fechas = fechasGenerales();
+  abrirMenu("Añadir " + ps.length + (ps.length === 1 ? " plantilla" : " plantillas"), ps.map(p => p.nombre).join(" → "), [
     { texto: "📅 Elegir otra fecha…", accion: () => abrirFechaPlantillas(ps) },
-    // v291: siete fechas de la semana real, independientes de la semana navegada y de dias[].id.
-    ...Array.from({ length: 7 }, (_, i) => {
-      const f = sumarDias(lunesDe(new Date()), i), fi = iso(f);
-      return { texto: NOMBRES[i] + " " + fmt(f), accion: () => {
-        const renom = [];   // v281: nombres repetidos → «Nombre (1)»…
-        ps.forEach(p => { const nf = nombreEntrenoLibre(fi, p.nombre); pegarItems(fi, p.items || [], nf); if (nf !== p.nombre) renom.push("«" + nf + "»"); });
-        persistir();
-        salirSeleccion();
-        abrirDia(fi);
-        setEstado(ps.length + (ps.length === 1 ? " plantilla añadida" : " plantillas añadidas") + " al " + NOMBRES[i] + (renom.length ? " · con sufijo por nombre repetido: " + renom.join(", ") : ""));
-      } };
-    })
+    ...fechas.map(d => ({ texto: NOMBRES[d.i] + " " + fmt(deIso(d.id)), accion: () => abrirFechaPlantillas(ps, d.id) }))
   ]);
 });
-// v277: «Añadir a un día» con cualquier fecha. Mismo comportamiento que los días de la semana visible (mismo pegarItems, mismo orden de selección, mismo contenido
-// existente conservado). v278: sirve también a la plantilla individual y, al confirmar, SIEMPRE abre ese día (abrirDia lleva la vista a su semana; no cambia la fecha del sistema).
 const fechaLargaPlant = f => deIso(f).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 let fpPlantillas = null;
-function abrirFechaPlantillas(ps) {
+function abrirFechaPlantillas(ps, inicial) {
   fpPlantillas = ps;
   $("fpResumen").textContent = ps.length + (ps.length === 1 ? " plantilla" : " plantillas") + " (en este orden): " + ps.map(p => p.nombre).join(" → ");
-  $("fpFecha").value = ""; $("fpAviso").textContent = ""; $("fpElegida").textContent = "Elige una fecha: se mostrará aquí antes de añadir.";
+  $("fpFecha").value = inicial || ""; $("fpAviso").textContent = ""; $("fpElegida").textContent = "Elige una fecha: se mostrará aquí antes de añadir.";
   $("fpAnadir").disabled = true;
+  fpValidar();
   $("dlgFechaPlant").showModal();
 }
 function fpValidar() {
@@ -11579,6 +11567,9 @@ function fpValidar() {
   const rel = f === hoyIso ? "hoy" : f < hoyIso ? "fecha pasada" : "fecha futura";
   $("fpElegida").textContent = "Se añadirá el " + fechaLargaPlant(f) + " (" + rel + (visible ? ", en la semana que estás viendo" : ", de otra semana: al confirmar se abrirá ese día") + ").";
   const hay = seriesDelDia(f).length;
+  const grupos = gruposDelDia(f).length;
+  if (!hay && grupos) $("fpElegida").textContent += " Ese día ya tiene " + grupos + " entrenamientos o elementos vacíos: se conservan y lo nuevo se añade detrás.";
+  if (aTexto((db.entrenos[f] || {}).html || "").trim()) $("fpElegida").textContent += " Las notas del día se conservan.";
   if (hay) $("fpElegida").textContent += " Ese día ya tiene " + hay + (hay === 1 ? " serie" : " series") + ": se conservan y las nuevas se añaden detrás.";
   $("fpAnadir").disabled = false;
 }
@@ -11589,8 +11580,12 @@ $("fpAnadir").addEventListener("click", () => {
   const f = $("fpFecha").value, ps = fpPlantillas;
   if (!ps || !fechaSerieValida(f)) { $("fpAviso").textContent = "Elige una fecha válida."; return; }
   $("dlgFechaPlant").close();
+  const ordenAntes = aplicarOrdenExplicito(gruposDelDia(f), ordenGrupos[f], x => x);
+  const agregados = [];
   const renom = [];   // v281
-  ps.forEach(p => { const nf = nombreEntrenoLibre(f, p.nombre); pegarItems(f, p.items || [], nf); if (nf !== p.nombre) renom.push("«" + nf + "»"); });
+  ps.forEach(p => { const nf = nombreEntrenoLibre(f, p.nombre); pegarItems(f, p.items || [], nf); agregados.push(nf); if (nf !== p.nombre) renom.push("«" + nf + "»"); });
+  ordenGrupos[f] = ordenAntes.concat(agregados);
+  guardarSesiones();
   persistir();
   if (selPlant) salirSeleccion();
   abrirDia(f);

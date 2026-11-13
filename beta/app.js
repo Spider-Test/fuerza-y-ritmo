@@ -4002,7 +4002,8 @@ function pintarDiaSinAncla(dia) {
         // A otro entreno del día no se puede arrastrar (cada entreno es su caja): esto sí se queda
         !espera && otrasSesiones.length && { texto: "Mover a otro entreno del día…", accion: () => abrirMenu("¿A qué entreno?", "", otrasSesiones.map(x => ({
           texto: x || "Sin sesión", accion: () => moverASesion(seriesDeItem(dia.id, g.nombre, clave), x) }))) },
-        { texto: "Ver ficha del ejercicio", accion: () => abrirDetalle(ej) },
+        { texto: "Ver ficha del ejercicio", accion: () => abrirDetalle(ej, contextoCarga(dia.id, g.nombre, espera ? [] : seriesDeItem(dia.id, g.nombre, clave))) },
+        sinCarga(ej) && pendientesCarga(ej, contextoCarga(dia.id, g.nombre, espera ? [] : seriesDeItem(dia.id, g.nombre, clave))).length && { texto: "Quitar peso previsto en este entrenamiento y día…", accion: () => ofrecerRetiradaCarga(ej, contextoCarga(dia.id, g.nombre, seriesDeItem(dia.id, g.nombre, clave))) },
         !espera && tipoDe(ej) === "carrera" && { texto: "Marcar como carrera (competición)…", accion: () => marcarComoCarrera(dia, seriesDeItem(dia.id, g.nombre, clave), g.nombre || nombre) },
         { texto: "Eliminar ejercicio" + (espera ? "" : " y sus series"), peligro: true, confirmar: espera ? "Pulsa otra vez para quitarlo" : "Pulsa otra vez: se borran " + seriesDeItem(dia.id, g.nombre, clave).length + " series", accion: () => {
           // Quita el ejercicio de esta sesión con todas sus series (hechas incluidas); se puede deshacer
@@ -4122,7 +4123,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
   if (dolor.length) { const m = document.createElement("span"); m.className = "molestia-tag"; m.textContent = "⚠ " + dolor.map(x => x.zona).join(", "); m.title = dolor.map(x => x.zona + (x.descripcion ? ": " + x.descripcion : "")).join(" · "); nom.appendChild(m); }
   nom.setAttribute("aria-label", series.length ? "Editar " + (ej.nombre || "ejercicio") + ": valores, número de series o ejercicio" : "Ver " + (ej.nombre || "ejercicio") + ": vídeo, récords e historial");
   // Con series: tocar el nombre abre (o cierra sin guardar) la edición del ejercicio; sin series, su ficha
-  nom.addEventListener("click", () => !series.length ? abrirDetalle(id) : formEl.hidden ? abrirGrupo() : (delete borradores[dia.id + "|" + (grupo || "") + "|" + idK + "|" + (parte || "")], pintarBloques(true)));
+  nom.addEventListener("click", () => !series.length ? abrirDetalle(id, contextoCarga(dia.id, grupo, series)) : formEl.hidden ? abrirGrupo() : (delete borradores[dia.id + "|" + (grupo || "") + "|" + idK + "|" + (parte || "")], pintarBloques(true)));
   const notaB = notaDe(series) || (!series.length ? esperaNota[dia.id + "|" + idK] || "" : "");
   const pedirNotaB = () => editarNota(dia, series, "Descripción de " + (ej.nombre || "el ejercicio"), id);
   if (notaB) b.querySelector(".bloque-cab").after(lineaNota(notaB, pedirNotaB));
@@ -5341,7 +5342,8 @@ function tarjetaBloque(dia, bloqueId, series) {
           ev.stopPropagation();
           const delEj = series.filter(x => x.ejercicio_id === s.ejercicio_id);
           abrirMenu(ejV.nombre || "Ejercicio", "En esta superserie · " + delEj.length + (delEj.length === 1 ? " serie" : " series"), [
-            { texto: "Ver ficha del ejercicio", accion: () => abrirDetalle(s.ejercicio_id) },
+            { texto: "Ver ficha del ejercicio", accion: () => abrirDetalle(s.ejercicio_id, contextoCarga(dia.id, s.grupo, delEj)) },
+            sinCarga(s.ejercicio_id) && pendientesCarga(s.ejercicio_id, contextoCarga(dia.id, s.grupo, delEj)).length && { texto: "Quitar peso previsto en este entrenamiento y día…", accion: () => ofrecerRetiradaCarga(s.ejercicio_id, contextoCarga(dia.id, s.grupo, delEj)) },
             { texto: notaDe(delEj) ? "Editar la descripción…" : "+ Descripción (tempo, banda, EEP…)", accion: () => editarNota(dia, delEj, "Descripción de " + (ejV.nombre || "el ejercicio")) },
             variosTramos && { texto: "Quitar de la superserie", peligro: true, confirmar: "Pulsa otra vez: se borran sus " + delEj.length + " series de todas las rondas", accion: () => {
               const antes = delEj.map(x => ["series", { ...x }]);
@@ -6696,10 +6698,40 @@ $("detRm").addEventListener("change", () => {
   refrescarDetalle();
 });
 
-function abrirDetalle(id) {
+// INC-KG-001: contexto explícito de una ocurrencia; nunca se toma de la semana visitada.
+const contextoCarga = (fecha, grupo, filas) => ({ fecha, grupo: grupo || "", ids: filas.map(s => s.id) });
+let detalleContextoCarga = null;
+function pendientesCarga(id, contexto) {
+  if (!contexto || !fechaSerieValida(contexto.fecha) || !Array.isArray(contexto.ids)) return [];
+  return [...new Set(contexto.ids)].map(k => db.series[k]).filter(s => s && !s.borrado && !hecha(s) && s.ejercicio_id === id && s.fecha === contexto.fecha && (s.grupo || "") === contexto.grupo && cargaGuardada(s));
+}
+function ofrecerRetiradaCarga(id, contexto) {
+  if (admite(id, "carga")) return;
+  const filas = pendientesCarga(id, contexto);
+  if (!filas.length) return;
+  const antes = filas.map(s => ({ ...s }));
+  const sello = s => JSON.stringify([s.id, s.fecha, s.grupo || "", s.ejercicio_id, !!s.borrado, hecha(s), s.peso || 0, s.pct || 0, s.ciclo_id || "", s.seccion || "", s.bloque_id || "", s.copia || 0]);
+  abrirMenu("Peso previsto de este entrenamiento", "La ficha ya no incluye Carga. Cambiarla no elimina valores guardados. Entrenamiento: «" + (contexto.grupo || "Ejercicios sueltos") + "». Fecha: " + fechaLargaPlant(contexto.fecha) + ". " + filas.length + (filas.length === 1 ? " serie pendiente afectada." : " series pendientes afectadas.") + " Se quitarán kg, % y la referencia al ciclo solo de estas pendientes; el historial de ciclos, las completadas y otras copias/días se conservan. Al confirmar volverás al entrenamiento y podrás Deshacer.", [
+    { texto: "Quitar el peso previsto solo en este entrenamiento y día", accion: () => {
+      const actuales = pendientesCarga(id, contexto);
+      if (admite(id, "carga") || actuales.length !== antes.length || actuales.some((s, i) => sello(s) !== sello(antes[i]))) { setEstado("Las series cambiaron. Reabre la acción para revisar el contexto y el recuento."); return; }
+      const deshacer = actuales.map(s => ["series", { ...s }]);
+      actuales.forEach(s => cambiar("series", { ...s, peso: 0, pct: 0, ciclo_id: "" }, true));
+      persistir();
+      if ($("detalle").open) $("detalle").close();
+      pintarTodo();
+      avisoDeshacer("Peso previsto retirado de " + actuales.length + (actuales.length === 1 ? " serie" : " series"), deshacer);
+    } },
+    { texto: "Conservar los pesos previstos", accion: () => {} },
+    { texto: "Cancelar", accion: () => {} }
+  ]);
+}
+
+function abrirDetalle(id, contexto = null) {
   const e = ejercicioVivo(id);
   if (!e) return;
   detalleId = id;
+  detalleContextoCarga = contexto ? { fecha: contexto.fecha, grupo: contexto.grupo || "", ids: [...contexto.ids] } : null;
   bilboReset = false;
   $("detNombre").value = e.nombre;
   $("detVideo").value = e.video_url;
@@ -6795,13 +6827,14 @@ function pintarMagnitudesDetalle(e) {
       editarEjercicio({ medidas: nuevas.length === base.length && base.every(x => nuevas.includes(x)) ? [] : nuevas });
       pintarMagnitudesDetalle(db.ejercicios[e.id]);
       pintarBloques(true);
+      if (m === "carga" && quitar) ofrecerRetiradaCarga(e.id, detalleContextoCarga);
     });
     cont.appendChild(b);
   });
   $("detMagNota").textContent = (propias ? "Elegidas para esta ficha. " : "Las de siempre para " + TIPOS[tipo].nombre.toLowerCase() + ". ") +
     (!columnaMedidas ? "Para cambiarlas hace falta actualizar el servidor (migración P6); de momento se usan las de siempre." :
      !editable(e) ? "Las ajusta quien edita el catálogo común." :
-     "Al programar y registrar solo se piden estos campos (p. ej. pasos de granjero: carga, distancia y tiempo). Las series ya guardadas no cambian.");
+     "Al programar y registrar solo se piden estos campos. Cambiar la ficha no elimina valores guardados. Para quitar peso previsto de una ocurrencia concreta, usa su menú en el entrenamiento y día; desde el catálogo no se deduce un destino.");
 }
 $("detNombre").addEventListener("change", () => {
   const n = $("detNombre").value.trim();
@@ -6837,6 +6870,7 @@ function abrirFichaSoloLectura(id) {
   $("detAvisoLectura").hidden = false;
 }
 $("detalle").addEventListener("close", () => {
+  detalleContextoCarga = null;
   $("detEmbed").textContent = "";   // para que el vídeo deje de sonar
   if (fichaLectura) {
     fichaLectura.forEach(x => { x.disabled = false; });
@@ -10827,7 +10861,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v300" + (BETA ? " beta" : "");
+const VERSION_APP = "v301" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

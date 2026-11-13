@@ -2832,3 +2832,30 @@ dialog#dlgAviso { margin: auto; }
 
 .lado-aplicar { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-top: 8px; padding: 10px 12px; border-radius: 10px; background: var(--gold-soft); }
 .lado-aplicar .menu-det { margin: 0; color: var(--fg); }
+
+/* v274: selector Ejercicios | Calentamientos y editor de calentamientos guardados */
+.ej-sel { margin: 0 0 10px; }
+.cal-acciones { display: flex; gap: 8px; flex-wrap: wrap; }
+.cal-items { display: flex; flex-direction: column; gap: 10px; }
+.cal-item { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; }
+.cal-item-cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.cal-item-n { overflow-wrap: anywhere; }
+.cal-item-bs { display: inline-flex; gap: 6px; }
+.cal-item > .add-ej { min-height: 44px; margin: 0; }
+#calCuerpo > .add-ej { min-height: 44px; margin: 0; }
+#calCuerpo > .d-botones { position: sticky; bottom: 0; z-index: 1; margin: 0 -16px -18px; padding: 10px 16px; background: var(--card); border-top: 1px solid var(--line); }
+
+/* v275: campos del editor de calentamientos con etiqueta visible y cuadrícula adaptable (2 columnas en móvil, más en pantallas anchas), siempre dentro de la tarjeta */
+.cal-item { min-width: 0; }
+.cal-fila { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding-top: 8px; border-top: 1px dashed var(--line); }
+.cal-fila-cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cal-n { font-weight: 700; font-size: 14px; color: var(--muted); }
+.cal-quitar { flex: none; min-width: 44px; min-height: 44px; }
+.cal-campos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 10px; min-width: 0; }
+.cal-campo { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: 13px; font-weight: 600; color: var(--muted); }
+.cal-et { line-height: 1.2; overflow-wrap: anywhere; }
+.cal-campo input { width: 100%; min-width: 0; box-sizing: border-box; min-height: 44px; padding: 8px; font-size: 16px; font-weight: 600; color: var(--fg); text-align: center; }
+.cal-ancho { grid-column: 1 / -1; }
+.cal-ancho input { text-align: left; }
+@media (min-width: 520px) { .cal-campos { grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); } .cal-ancho { grid-column: span 2; } }
+

@@ -27,7 +27,7 @@
   window.addEventListener("pageshow", actualizar);
 })();
 </script>
-<link rel="stylesheet" href="estilos.css?v=v285">
+<link rel="stylesheet" href="estilos.css?v=v287">
 </head>
 <body>
 
@@ -123,12 +123,23 @@
   </div>
 
   <div id="vistaEjercicios" hidden>
-    <div class="barra">
-      <input id="filtroEj" type="search" placeholder="Buscar ejercicio" aria-label="Buscar ejercicio" autocomplete="off">
-      <button type="button" class="nav-btn" id="nuevoEj">+ Nuevo</button>
+    <div class="tabs seg ej-sel" id="ejSel" role="group" aria-label="Ejercicios o calentamientos">
+      <button type="button" data-ejv="ejercicios" aria-pressed="true">Ejercicios</button>
+      <button type="button" data-ejv="calentamientos" aria-pressed="false">Calentamientos</button>
     </div>
-    <div class="filtro-clasif" id="filtroClasif" role="group" aria-label="Filtrar por clasificación" hidden></div>
-    <div id="catalogo"></div>
+    <div id="ejPanelEj">
+      <div class="barra">
+        <input id="filtroEj" type="search" placeholder="Buscar ejercicio" aria-label="Buscar ejercicio" autocomplete="off">
+        <button type="button" class="nav-btn" id="nuevoEj">+ Nuevo</button>
+      </div>
+      <div class="filtro-clasif" id="filtroClasif" role="group" aria-label="Filtrar por clasificación" hidden></div>
+      <div id="catalogo"></div>
+    </div>
+    <div id="ejPanelCal" hidden>
+      <div class="barra"><input id="filtroCal" type="search" placeholder="Buscar calentamiento" aria-label="Buscar calentamiento por nombre o ejercicio" autocomplete="off"></div>
+      <p class="menu-det" id="calAyuda">Calentamientos guardados (son plantillas: también salen en Entrenos → Plantillas). Se guardan desde ⋯ de una parte «Calentamiento» y se añaden desde ⋯ del entreno.</p>
+      <div class="lista-tarjetas" id="listaCalent"></div>
+    </div>
   </div>
 
   <div id="vistaPlan" hidden>
@@ -426,6 +437,14 @@
       <button value="ok" class="anadir" data-enter>Guardar</button>
     </div>
   </form>
+</dialog>
+
+<dialog id="dlgCalent" aria-label="Calentamiento guardado">
+  <form method="dialog" class="d-cab">
+    <h3 class="d-tit" id="calTit">Calentamiento</h3>
+    <button class="cerrar" aria-label="Cerrar">✕</button>
+  </form>
+  <div class="d-cuerpo" id="calCuerpo"></div>
 </dialog>
 
 <dialog id="dlgBloque" aria-label="Nueva superserie">
@@ -1031,6 +1050,6 @@
 <div class="toast" id="toast" role="status" hidden><span id="toastTxt"></span><button type="button" id="toastBtn">Deshacer</button></div>
 <div class="fiesta" id="fiesta" aria-hidden="true"></div>
 
-<script src="app.js?v=v285"></script>
+<script src="app.js?v=v287"></script>
 </body>
 </html>

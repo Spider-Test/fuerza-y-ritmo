@@ -2162,7 +2162,7 @@ async function guardarCalentamientoParte(dia, grupo, parte) {
 }
 function elegirCalentamientoGuardado(dia, grupo) {
   const ps = vivos("plantillas").filter(esPlantillaCalentamiento).sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
-  if (!ps.length) { abrirMenu("Calentamientos guardados", "Aún no tienes ninguno. Guárdalo desde ⋯ del entreno → «Guardar calentamiento…».", [{ texto: "Cerrar", accion: () => {} }]); return; }
+  if (!ps.length) { abrirMenu("Calentamientos guardados", "Aún no tienes ninguno. Guárdalo desde ⋯ de una parte «Calentamiento» → «Guardar calentamiento…».", [{ texto: "Cerrar", accion: () => {} }]); return; }
   abrirMenu("Añadir calentamiento guardado", "Se añade una COPIA al principio de «" + (grupo || "Entreno 1") + "»; la plantilla guardada no cambia.", ps.map(p => ({ texto: p.nombre + " · " + resumenItems(p.items), accion: () => aplicarCalentamiento(dia, grupo, p) })));
 }
 function aplicarCalentamiento(dia, grupo, p) {
@@ -2696,12 +2696,12 @@ function moverAParte(dia, grupo, clave, espera) {
   } })));
 }
 // «+ Entreno»: otro entreno el mismo día (por ejemplo, si doblas), separado y con sus propios ejercicios
-// «+ Entreno»: uno vacío (con nombre) o uno guardado en una de tus listas
+// «+ Entreno»: vacío, desde una plantilla o desde una lista; conserva la fecha del día elegido.
 function elegirNuevoEntreno(dia) {
   const ls = vivos("listas").filter(l => entrenosDeLista(l).length);
-  if (!ls.length) { nuevoEntreno(dia); return; }
   abrirMenu("+ Entreno en el " + NOMBRES[dia.i].toLowerCase(), "", [
     { texto: "Entreno vacío (le pones nombre)…", accion: () => nuevoEntreno(dia) },
+    { texto: "Desde una plantilla…", accion: () => elegirPlantilla("Añadir plantilla al " + NOMBRES[dia.i].toLowerCase() + " " + fmt(deIso(dia.id)), p => aplicarPlantilla(dia, p)) },
     ...ls.sort((a, b) => a.nombre.localeCompare(b.nombre, "es")).map(l => ({ texto: "Desde la lista «" + l.nombre + "»…", accion: () => elegirDeLista(l, (p, k) => ponerEnDia(l, p, k, dia.id)) }))
   ]);
 }
@@ -10822,7 +10822,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v296" + (BETA ? " beta" : "");
+const VERSION_APP = "v298" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

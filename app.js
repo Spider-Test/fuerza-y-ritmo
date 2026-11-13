@@ -2317,7 +2317,9 @@ function moverEntreEntrenos(dia, origen, clave, espera, destino, destParte, orde
     if (!x.espera || x.propio && !espera) return;
     const ck = x.propio ? clave : x.clave, sig = orden.slice(j + 1).find(y => !y.espera || (y.propio && !espera));
     if (sig) esperaAntes[dia.id + "|" + ck] = sig.propio ? nuevaClave : sig.clave; else delete esperaAntes[dia.id + "|" + ck];
+    delete esperaOrden[dia.id + "|" + ck];   // v269: la posición puesta a mano manda
   });
+  guardarEsperaOrden();
   escribir("espera-antes-v1", esperaAntes);
   const listas = orden.filter(x => x.propio ? !espera : !x.espera).map(x => x.propio ? ids.map(i => db.series[i]).filter(Boolean) : seriesDeItem(dia.id, destino, x.clave));
   sinHistorial = false;
@@ -3266,6 +3268,7 @@ function recolocar(ancla) {
 $("semana").addEventListener("focusout", () => setTimeout(() => { if (repintarLuego && !escribiendoSerie()) pintarBloques(); }, 0));
 
 function quitarEspera(fecha, id) {
+  if (esperaOrden[fecha + "|" + id] !== undefined) { delete esperaOrden[fecha + "|" + id]; guardarEsperaOrden(); }   // v269
   if (!enEspera[fecha]) return;
   enEspera[fecha] = enEspera[fecha].filter(x => x !== id);
   if (!enEspera[fecha].length) delete enEspera[fecha];
@@ -3341,7 +3344,8 @@ function pintarDiaSinAncla(dia) {
   const grupos = [];
   const grupo = nombre => grupos.find(g => g.nombre === nombre) || grupos[grupos.push({ nombre, ids: [] }) - 1];
   // Cada elemento de una sesión es un ejercicio suelto o un bloque ("b:" + id), en el orden en que aparecen
-  delDia.forEach(s => { const g = grupo(s.grupo || ""), k = claveSerie(s); if (!g.ids.includes(k)) g.ids.push(k); });
+  const ordenMinDia = {};   // v269: «orden» más bajo de las series de cada elemento
+  delDia.forEach(s => { const g = grupo(s.grupo || ""), k = claveSerie(s); if (!g.ids.includes(k)) g.ids.push(k); ordenMinDia[k] = Math.min(ordenMinDia[k] ?? Infinity, n0(s.orden)); });
   // Entrenos creados con «+ Entreno» que aún no tienen series
   (sesionesVacias[dia.id] || []).forEach(n => grupo(n));
   // …y los entrenos que solo tienen partes vacías (p. ej. «Calentamiento» recién creado en un día sin nada)
@@ -3350,7 +3354,13 @@ function pintarDiaSinAncla(dia) {
   (enEspera[dia.id] || []).forEach(id => {
     const gn = esperaGrupo[dia.id + "|" + id] || "";
     if (!ejercicioVivo(ejDeClave(id)) || grupos.some(g => g.nombre === gn && g.ids.includes(id))) return;
-    const g = grupo(gn), antes = esperaAntes[dia.id + "|" + id], i = antes ? g.ids.indexOf(antes) : -1;
+    const g = grupo(gn), antes = esperaAntes[dia.id + "|" + id];
+    let i = antes ? g.ids.indexOf(antes) : -1;
+    // v269: sin posición puesta a mano, queda delante del primer elemento con series que se creó después de añadirlo (orden de añadido)
+    if (i < 0 && !antes && esperaOrden[dia.id + "|" + id] !== undefined) {
+      const t = n0(esperaOrden[dia.id + "|" + id]);
+      i = g.ids.findIndex(k2 => ordenMinDia[k2] !== undefined && ordenMinDia[k2] > t);
+    }
     if (i >= 0) g.ids.splice(i, 0, id); else g.ids.push(id);
   });
   const diaVacio = !grupos.length && !Object.keys(bloquesVacios).some(k => k.startsWith(dia.id + "|"));
@@ -3662,7 +3672,9 @@ function pintarDiaSinAncla(dia) {
         if (!x.dataset.espera) return;
         const sig = n.slice(k + 1).find(y => !y.dataset.espera);
         if (sig) esperaAntes[dia.id + "|" + x.dataset.clave] = sig.dataset.clave; else delete esperaAntes[dia.id + "|" + x.dataset.clave];
+        delete esperaOrden[dia.id + "|" + x.dataset.clave];   // v269: la posición puesta a mano manda
       });
+      guardarEsperaOrden();
       escribir("espera-antes-v1", esperaAntes);
       // El orden entre los que aún no tienen series sale de su lista: se guarda tal como han quedado
       const ordenEsp = n.filter(x => x.dataset.espera).map(x => x.dataset.clave);
@@ -4413,7 +4425,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
     const letraNueva = series.length ? series.some(x => x.letra_nueva) : !!esperaLetra[dia.id + "|" + idK];
     if (esperaLetra[dia.id + "|" + idK]) { delete esperaLetra[dia.id + "|" + idK]; escribir("espera-letra-v1", esperaLetra); }
     if (esperaNota[dia.id + "|" + idK]) { delete esperaNota[dia.id + "|" + idK]; escribir("espera-nota-v1", esperaNota); }
-    const nueva = (k, vk) => ({ id: nuevoId(), fecha: dia.id, ejercicio_id: id, orden: Date.now() + k, grupo, seccion: parte || "", meso_id: "", bloque_id: "", ronda: 0, copia: copia > 1 ? copia : 0, borrado: false, calentamiento: false, nota: notaNueva, letra_nueva: letraNueva, ...(vk || v), hecha: nuevaHecha });
+    const nueva = (k, vk) => ({ id: nuevoId(), fecha: dia.id, ejercicio_id: id, orden: (!series.length && esperaOrden[dia.id + "|" + idK] || Date.now()) + k, grupo, seccion: parte || "", meso_id: "", bloque_id: "", ronda: 0, copia: copia > 1 ? copia : 0, borrado: false, calentamiento: false, nota: notaNueva, letra_nueva: letraNueva, ...(vk || v), hecha: nuevaHecha });
     if (modoForm === "una" || !series.length) {
       const n = modoForm === "una" ? 1 : Math.min(50, Math.max(1, parseInt(vecesEl.value, 10) || 1));
       if (!series.length) {
@@ -5137,6 +5149,7 @@ function elegir(id) {
   {
     id = idK;
     enEspera[dia.id] = (enEspera[dia.id] || []).filter(x => x !== id).concat(id); guardarEspera();
+    esperaOrden[dia.id + "|" + id] = Math.max(Date.now(), ...Object.values(esperaOrden).map(v => n0(v) + 1)); guardarEsperaOrden();   // v269: siempre posterior a los anteriores
     if (grupoSel) esperaGrupo[dia.id + "|" + id] = grupoSel; else delete esperaGrupo[dia.id + "|" + id];
     if (parteSel) esperaParte[dia.id + "|" + id] = parteSel; else delete esperaParte[dia.id + "|" + id];
     // v250: en una parte sin series con posición guardada, el ejercicio nuevo queda en ese sitio (y su primera serie también)
@@ -9349,11 +9362,17 @@ function reordenar(conjuntos, texto) {
 }
 // Ejercicios añadidos y aún sin series: delante de qué elemento del día quedan (solo en este dispositivo)
 let esperaAntes = leer("espera-antes-v1") || {};
+// v269 (INC-SEM-008): momento en que se añadió cada ejercicio todavía sin series (fecha|id -> ms). La primera serie lo hereda como «orden» y, mientras espera,
+// el ejercicio se pinta en ese sitio entre los que ya tienen series: así el orden en que se añaden varios no depende de cuál se confirma primero.
+// Solo en este dispositivo (como esperaAntes); una posición puesta a mano (arrastre) lo sustituye y, sin él, todo funciona como antes.
+let esperaOrden = leer("espera-orden-v1") || {};
+const guardarEsperaOrden = () => escribir("espera-orden-v1", esperaOrden);
 // Al recibir su primera serie, el ejercicio se queda donde estaba en vez de irse al final
 function colocarPrimeraSerie(fecha, id, grupo, eraEspera) {
   const k = fecha + "|" + id, antes = esperaAntes[k];
   delete esperaAntes[k];
   escribir("espera-antes-v1", esperaAntes);
+  if (esperaOrden[k] !== undefined) { delete esperaOrden[k]; guardarEsperaOrden(); }   // v269
   if (!eraEspera || !antes) return;
   const g = estructuraDia(fecha).find(x => x.nombre === (grupo || ""));
   if (!g) return;
@@ -10253,7 +10272,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v281" + (BETA ? " beta" : "");
+const VERSION_APP = "v282" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

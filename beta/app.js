@@ -360,10 +360,10 @@ const MEDIDAS_BASE = { fuerza: ["reps", "tiempo", "carga"], movilidad: ["reps", 
 const medidasPropias = id => { const e = db.ejercicios[id], ok = MAGNITUDES_TIPO[tipoDe(id)] || []; return e && Array.isArray(e.medidas) ? ok.filter(m => e.medidas.includes(m)) : []; };
 const medidasDe = id => { const p = medidasPropias(id); return p.length ? p : (MEDIDAS_BASE[tipoDe(id)] || []).slice(); };
 const admite = (id, m) => medidasDe(id).includes(m);
-// v271 (kg en ejercicios sin carga): la MISMA condición con la que la tarjeta del día oculta el campo de kg (sin-peso): un ejercicio de fuerza con medidas
-// propias en la ficha y sin «Carga», o, sin medidas propias, con una medida de progreso distinta de «Peso». Para esos ejercicios no se copia ningún kg a las
-// series NUEVAS (el campo oculto arrastraba el de la serie anterior); lo ya guardado (series y pesos históricos) no se toca ni se oculta.
-const sinCarga = id => tipoDe(id) === "fuerza" && (medidasPropias(id).length ? !medidasPropias(id).includes("carga") : medidaDe(id) !== "peso");
+// INC-KG-001: las medidas efectivas de la ficha deciden si una serie nueva admite carga.
+// La medida de progreso no decide los campos; carga/%/ciclo guardados siguen accesibles al editar.
+const sinCarga = id => tipoDe(id) === "fuerza" && !admite(id, "carga");
+const cargaGuardada = s => !!s && (n0(s.peso) > 0 || n0(s.pct) > 0 || !!s.ciclo_id);
 // Fuerza con distancia (granjero: carga + distancia, con el tiempo opcional): el récord se compara solo con la misma carga y distancia
 const conDistFuerza = s => n0(s.distancia) > 0 && !esDistancia(tipoDe(s.ejercicio_id));
 // ---------- v263: clasificación de ejercicios (Región y Técnica) ----------
@@ -4159,10 +4159,12 @@ function bloque(dia, id, series, grupo, parte, copia) {
   }
   // El formulario tiene tres usos: «grupo» (×N series iguales y OK, también para editarlas todas), «una» (+ Serie suelta) y «editar» (una serie)
   let modoForm = "grupo";
+  const cargaVisible = () => !sinCarga(id) || cargaGuardada(modoForm === "editar" ? editando : modoForm === "grupo" ? series.filter(x => !x.calentamiento)[0] : null);
   const vecesEl = b.querySelector(".veces"), cambiarEl = b.querySelector(".cambiar-ej"), otroEj = b.querySelector(".otro-ej");
   b.querySelector(".cambiar-ej-btn").addEventListener("click", ev => { ev.currentTarget.hidden = true; cambiarEl.hidden = false; otroEj.focus(); });
   const ponerModoForm = m => {
     modoForm = m;
+    if (tipo === "fuerza") b.classList.toggle("sin-peso", !cargaVisible());
     b.querySelector(".veces-izq").hidden = m !== "grupo";
     if (m !== "grupo" && extrasEl) extrasEl.textContent = "";
     cambiarEl.hidden = true;
@@ -4206,6 +4208,8 @@ function bloque(dia, id, series, grupo, parte, copia) {
       ir.inputMode = "decimal";
       ir.placeholder = enMax() ? "máx" : enTiempo() ? "seg" : "reps"; ir.disabled = enMax();
       ik.placeholder = enPct ? "%" : "kg";
+      const kgVisible = !sinCarga(id) || modoForm === "grupo" && cargaGuardada(series.filter(x => !x.calentamiento)[k]);
+      ik.hidden = !kgVisible; row.querySelector(".fx-kg").hidden = !kgVisible;
       row.querySelector(".fx-u").textContent = enTiempo() ? "s" : "reps";
       row.querySelector(".fx-kg").textContent = enPct ? "%" : "kg";
       if (val.auto) row.setAttribute("data-auto", "");
@@ -4220,7 +4224,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
     const row = extrasEl.children[k - 1];
     if (!row) return v;
     const out = { ...v }, r = row.querySelector(".r-reps").value.trim(), kg = row.querySelector(".r-kg").value.trim();
-    if (kg !== "" && !sinCarga(id)) { const x = parseFloat(kg.replace(",", ".")); if (x >= 0) { out.pct = enPct ? x : 0; out.peso = enPct ? kgDePct(id, x) : x; } }
+    if (kg !== "" && !row.querySelector(".r-kg").hidden) { const x = parseFloat(kg.replace(",", ".")); if (x >= 0) { out.pct = enPct ? x : 0; out.peso = enPct ? kgDePct(id, x) : x; } }
     if (!enMax() && r !== "") {
       if (enTiempo()) { const t = leerSegs(r); if (t > 0) out.tiempo = t; }
       else if (leerRango(r)) { const g = leerRango(r); out.reps = g.min; out.rango_min = g.min; out.rango_max = g.max; }
@@ -4301,8 +4305,8 @@ function bloque(dia, id, series, grupo, parte, copia) {
   const opsF = b.querySelector(".ops-fuerza"), filaDesc = b.querySelector(".ns-desc");
   // Fuerza: series junto al nombre; fila «[reps] Reps ▾   [peso] kg»; abajo «Por lado · ⏱ descanso · OK»
   { const cl = b.querySelector(".por-lado"); if (cl) { if (ladoDe(id) && !series.length) cl.checked = true; cl.closest("label").hidden = true; } }
-  if (opsF && tipo === "fuerza" && medidaDe(id) !== "peso") {
-    b.classList.add("sin-peso");   // dominadas, fondos, plancha…: sin casilla de kg (para el lastre, el ejercicio «lastrado»)
+  if (opsF && tipo === "fuerza" && sinCarga(id) && !series.some(cargaGuardada)) {
+    b.classList.add("sin-peso");   // Medidas de la ficha; no se infiere carga por el nombre.
     if (medidaDe(id) === "tiempo" && !series.length) ponerPorT(true);
   }
   if (opsF && medidaBtn) {
@@ -4335,7 +4339,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
     b.classList.add("con-dist");
   }
   if (opsF && propiasF.length) {
-    if (!propiasF.includes("carga")) b.classList.add("sin-peso"); else b.classList.remove("sin-peso");   // la ficha manda sobre la medida de progreso
+    if (!propiasF.includes("carga") && !series.some(cargaGuardada)) b.classList.add("sin-peso"); else b.classList.remove("sin-peso");   // la ficha manda sobre la medida de progreso
     if (!propiasF.includes("reps") && propiasF.includes("tiempo") && !series.length) ponerPorT(true);
     if (!propiasF.includes("reps") && !propiasF.includes("tiempo") && !series.some(x => n0(x.reps) > 0 || n0(x.tiempo) > 0)) { b.classList.add("solo-dist"); fb.closest(".paso").hidden = true; if (medidaBtn) medidaBtn.hidden = true; }
   }
@@ -4433,6 +4437,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
   };
   // La recuperación solo se copia de una serie de este mismo día: cada entrenamiento la ajusta
   const rellenarCon = (s, conRec) => {
+    if (tipo === "fuerza") b.classList.toggle("sin-peso", !cargaVisible());
     if (dist) {
       const t = !(n0(s.distancia) > 0) && n0(s.tiempo) > 0, m = distCampo(s.distancia), ti = n0(s.tiempo) > 0 ? fmtTiempo(s.tiempo) : "";
       ponerPorTiempo(t);
@@ -4624,7 +4629,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
       const x = parseFloat((fa.value.trim() || "0").replace(",", "."));
       v.pct = enPct ? x : 0;
       v.peso = enPct ? kgDePct(id, x) : x;
-      if (sinCarga(id)) { const e0 = modoForm === "editar" && editando ? editando : null; v.peso = e0 ? n0(e0.peso) : 0; v.pct = e0 ? n0(e0.pct) : 0; }   // v271: el kg oculto no se guarda
+      if (!cargaVisible()) { const e0 = modoForm === "editar" && editando ? editando : null; v.peso = e0 ? n0(e0.peso) : 0; v.pct = e0 ? n0(e0.pct) : 0; }   // v271: el kg oculto no se guarda
       v.ciclo_id = chkBilbo && chkBilbo.checked && ciclo ? ciclo.id : "";
       v.por_lado = !!(b.querySelector(".por-lado") || {}).checked || ladoDe(id);
       v.rango_min = 0; v.rango_max = 0;
@@ -4678,7 +4683,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
     const letraNueva = series.length ? series.some(x => x.letra_nueva) : !!esperaLetra[dia.id + "|" + idK];
     if (esperaLetra[dia.id + "|" + idK]) { delete esperaLetra[dia.id + "|" + idK]; escribir("espera-letra-v1", esperaLetra); }
     if (esperaNota[dia.id + "|" + idK]) { delete esperaNota[dia.id + "|" + idK]; escribir("espera-nota-v1", esperaNota); }
-    const nueva = (k, vk) => ({ id: nuevoId(), fecha: dia.id, ejercicio_id: id, orden: (!series.length && esperaOrden[dia.id + "|" + idK] || Date.now()) + k, grupo, seccion: parte || "", meso_id: "", bloque_id: "", ronda: 0, copia: copia > 1 ? copia : 0, borrado: false, calentamiento: false, nota: notaNueva, letra_nueva: letraNueva, ...(vk || v), hecha: nuevaHecha });
+    const nueva = (k, vk) => ({ id: nuevoId(), fecha: dia.id, ejercicio_id: id, orden: (!series.length && esperaOrden[dia.id + "|" + idK] || Date.now()) + k, grupo, seccion: parte || "", meso_id: "", bloque_id: "", ronda: 0, copia: copia > 1 ? copia : 0, borrado: false, calentamiento: false, nota: notaNueva, letra_nueva: letraNueva, ...(vk || v), ...(sinCarga(id) ? { peso: 0, pct: 0 } : {}), hecha: nuevaHecha });
     if (modoForm === "una" || !series.length) {
       const n = modoForm === "una" ? 1 : Math.min(50, Math.max(1, parseInt(vecesEl.value, 10) || 1));
       if (!series.length) {
@@ -4700,7 +4705,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
     const aplicar = borrarHechas => {
       const deshacer = series.map(x => ["series", { ...x }]);
       const nuevas = [];
-      pend.forEach(x => cambiar("series", { ...x, ...valoresFila(efect.indexOf(x), v), ...(sinCarga(id) ? { peso: x.peso, pct: x.pct } : {}), hecha: false }, true));   // v271: sin carga, cada pendiente conserva su peso
+      pend.forEach(x => cambiar("series", { ...x, ...valoresFila(efect.indexOf(x), v), ...(sinCarga(id) && !cargaGuardada(x) ? { peso: x.peso, pct: x.pct } : {}), hecha: false }, true));   // v271: sin carga, cada pendiente conserva su peso
       if (objetivo > efect.length) {
         const ultimo = Math.max(...series.map(x => n0(x.orden)));
         for (let k = 0; k < objetivo - efect.length; k++) { const f = { ...nueva(k, valoresFila(efect.length + k, v)), orden: ultimo + (k + 1) / 100, hecha: false }; nuevas.push(f); cambiar("series", f, true); }
@@ -10671,7 +10676,7 @@ function pintarEntreno() {
   // Campos para apuntar lo que de verdad se hizo
   const mov = tipo === "movilidad";
   // v271: un ejercicio sin carga (ver sinCarga) no pide kg si la serie no tiene ninguno guardado; si ya lo tiene, el campo se muestra para no ocultar el dato
-  const sc = !dist && !mov && sinCarga(s.ejercicio_id) && !(n0(s.peso) > 0);
+  const sc = !dist && !mov && sinCarga(s.ejercicio_id) && !cargaGuardada(s);
   ent.campos = sc ? (!(n0(s.reps) > 0) && (n0(s.tiempo) > 0 || s.max_tiempo) ? ["s", "reps"] : ["reps", "s"]) : dist ? (n0(s.distancia) > 0 ? ["m", "t"] : ["t", "m"]) : !mov && ((n0(s.tiempo) > 0 || s.max_tiempo) && !(n0(s.reps) > 0) || conDistFuerza(s) && !(n0(s.reps) > 0)) ? ["kg", "s"] : mov ? (n0(s.reps) > 0 || !(n0(s.tiempo) > 0) ? ["reps", "s"] : ["s", "reps"]) : ["kg", "reps"];
   const etiqueta = { kg: "Peso (kg)", reps: "Repeticiones" + (s.por_lado ? " por lado" : ""), m: enKm() ? "Kilómetros" : "Metros", t: "Tiempo", s: "Tiempo" + (s.por_lado ? " por lado" : "") + " (45 = segundos)" };
   const valor = c => c === "kg" ? (kg ? num(kg) : "") : c === "reps" ? ((s.ciclo_id === "auto" || esRango(s)) && !hecha(s) ? "" : n0(s.reps) || "")
@@ -10822,7 +10827,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v299" + (BETA ? " beta" : "");
+const VERSION_APP = "v300" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

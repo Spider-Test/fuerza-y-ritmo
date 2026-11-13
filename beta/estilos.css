@@ -718,7 +718,7 @@ dialog.pantalla[open] { display: flex; flex-direction: column; }
 
 /* Reordenar: asa ≡ y elemento arrastrándose */
 .grupo { display: flex; flex-direction: column; gap: 8px; }
-.asa { flex: none; width: 32px; height: 32px; border: 0; background: none; color: var(--muted); font-size: 18px; padding: 0; border-radius: 6px; cursor: grab; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+.asa { flex: none; width: 32px; height: 32px; border: 0; background: none; color: var(--muted); font-size: 18px; padding: 0; border-radius: 6px; cursor: grab; touch-action: none; -webkit-user-select: none; user-select: none; }
 .asa:active { cursor: grabbing; }
 .series li .asa { margin-left: auto; }
 .arrastrando { position: relative; z-index: 5; background: var(--card); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22); border-radius: 10px; opacity: 0.97; }
@@ -2826,32 +2826,3 @@ dialog#dlgAviso { margin: auto; }
   #selector.selector-visible > .filtro-clasif { flex-shrink: 0; }
   #selector.selector-visible #listaEj { min-height: 0; max-height: none; flex: 1 1 auto; overflow-y: auto; }
 }
-
-/* Reordenación local: el control pertenece a la cabecera del día o de la lista. */
-#vistaSemana .dia > .dia-cab, #vistaListas .lista-sec > .lista-cab { flex-wrap: wrap; }
-.orden-barra { flex: 1 0 100%; display: flex; align-items: center; justify-content: flex-start; gap: 8px; padding: 4px 2px; }
-#vistaSemana .dia > .dia-cab > .orden-barra { padding: 0 8px 2px; }
-.orden-barra[hidden], .orden-estado[hidden] { display: none !important; }
-/* La superficie visible es compacta; el botón conserva toda su zona táctil. */
-.modo-orden.nav-btn { position: relative; isolation: isolate; min-height: 36px; min-width: 96px; padding: 5px 10px; font-size: 12px; white-space: nowrap; background: transparent; border-color: transparent; }
-.modo-orden::before { content: ""; position: absolute; inset: 3px 2px; z-index: -1; border: 1px solid var(--line); border-radius: 6px; background: var(--card); }
-.modo-orden[aria-pressed="true"] { min-width: 64px; }
-.modo-orden.nav-btn:hover:not(:disabled) { background: transparent; border-color: transparent; }
-.modo-orden:hover::before { border-color: var(--accent); }
-.orden-estado { color: var(--accent); font-size: 12px; font-weight: 700; }
-.reordenando > .dia-cab .modo-orden, .reordenando > .lista-cab .modo-orden { color: var(--accent); }
-.reordenando > .dia-cab .modo-orden::before, .reordenando > .lista-cab .modo-orden::before { background: var(--accent-soft); border-color: var(--accent); }
-[data-zona-orden] .asa { cursor: default; touch-action: manipulation; }
-[data-zona-orden]:not(.reordenando) .asa { visibility: hidden !important; pointer-events: none; }
-[data-zona-orden].reordenando .asa { cursor: grab; touch-action: none; opacity: 1 !important; visibility: visible !important; }
-[data-zona-orden].reordenando .asa:active { cursor: grabbing; }
-@media (max-width: 760px) { .modo-orden.nav-btn { min-height: 44px; } }
-
-/* En el día ampliado de PC, mantener el control por debajo de la barra de pestañas. */
-@media (min-width: 761px) {
-  #vistaSemana.solo-dia .dia { overflow: clip; }
-  #vistaSemana.solo-dia .dia > .dia-cab { position: sticky; top: 64px; z-index: 15; background: var(--card); box-shadow: 0 1px 0 var(--line); }
-  #vistaSemana.solo-dia .dia-cuerpo { isolation: isolate; }
-  #vistaSemana.solo-dia .dia-abrir { visibility: visible; }
-}
-.orden-barra { flex-wrap: wrap; }

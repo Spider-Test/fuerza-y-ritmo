@@ -27,7 +27,7 @@
   window.addEventListener("pageshow", actualizar);
 })();
 </script>
-<link rel="stylesheet" href="estilos.css?v=v283">
+<link rel="stylesheet" href="estilos.css?v=v284">
 </head>
 <body>
 
@@ -427,9 +427,9 @@
   </form>
 </dialog>
 
-<dialog id="dlgBloque" aria-label="Nuevo bloque">
+<dialog id="dlgBloque" aria-label="Nueva superserie">
   <form method="dialog" class="d-cab">
-    <h3 class="d-tit">Nuevo bloque</h3>
+    <h3 class="d-tit">Nueva superserie</h3>
     <button class="cerrar" aria-label="Cerrar">✕</button>
   </form>
   <div class="d-cuerpo">
@@ -439,15 +439,15 @@
     <label class="campo">Rondas (veces que se repite) <input id="blqRondas" type="number" min="1" max="50" inputmode="numeric"></label>
     <p id="blqAviso" class="aviso" role="status"></p>
     <div class="d-botones">
-      <button type="button" class="nav-btn" id="blqVacio" title="Un bloque sin ejercicios: luego arrastras ejercicios del entreno dentro con ≡">Crear vacío</button>
-      <button type="button" class="anadir" id="blqCrear">Crear bloque</button>
+      <button type="button" class="nav-btn" id="blqVacio" title="Una superserie sin ejercicios: luego arrastras ejercicios del entreno dentro con ≡">Crear vacío</button>
+      <button type="button" class="anadir" id="blqCrear">Crear superserie</button>
     </div>
   </div>
 </dialog>
 
-<dialog id="dlgEditBloque" aria-label="Editar bloque">
+<dialog id="dlgEditBloque" aria-label="Editar superserie">
   <form method="dialog" class="d-cab">
-    <h3 class="d-tit">Editar bloque</h3>
+    <h3 class="d-tit">Editar superserie</h3>
     <button class="cerrar" aria-label="Cerrar">✕</button>
   </form>
   <div class="d-cuerpo" id="ebCuerpo"></div>
@@ -654,14 +654,14 @@
     </details>
     <details><summary>Varios entrenos el mismo día</summary>
       <p>Si doblas (por ejemplo, gimnasio por la mañana y carrera por la tarde), pulsa <b>+ Entreno</b> debajo del día y ponle nombre («Tarde», «Carrera»…). Se crea vacío, aunque no hayas hecho aún el primero. Con varios entrenos, toca el nombre de cada uno (▸/▾) para plegarlo o desplegarlo.</p>
-      <p>Cada entreno va en su propia caja con su nombre, su progreso y sus botones <b>+ Ejercicio</b> y <b>+ Bloque</b>, que añaden a ese entreno. El primero se llama «Entreno 1» hasta que le pongas nombre en su ⋯ («Cambiar nombre del entreno»). En el ⋯ también puedes subirlo o bajarlo, copiarlo, guardarlo como plantilla o quitarlo. Un ejercicio ya apuntado se pasa de uno a otro con su ⋯ → «Mover a otra sesión».</p>
+      <p>Cada entreno va en su propia caja con su nombre, su progreso y sus botones <b>+ Ejercicio</b> y <b>+ Superserie</b>, que añaden a ese entreno. El primero se llama «Entreno 1» hasta que le pongas nombre en su ⋯ («Cambiar nombre del entreno»). En el ⋯ también puedes subirlo o bajarlo, copiarlo, guardarlo como plantilla o quitarlo. Un ejercicio ya apuntado se pasa de uno a otro con su ⋯ → «Mover a otra sesión».</p>
     </details>
     <details><summary>Partes de un entreno</summary>
       <p>Son opcionales: si no creas ninguna, el entreno va todo seguido, como siempre. Para dividirlo, pulsa <b>+ Parte</b> (debajo del día, o en la caja de cada entreno si tienes varios) y ponle nombre: «Calentamiento», «Parte principal», «Fuerza», «Series», «Vuelta a la calma»…</p>
-      <p>Cada parte tiene su <b>color</b> (cabecera y un fondo suave en sus ejercicios), su progreso y sus botones <b>+ Ejercicio</b> y <b>+ Bloque</b>. Dentro de una parte puedes poner bloques ×N, por ejemplo 4 × (400 m + trote 200 m) en «Parte principal».</p>
-      <p>En el <b>⋯ de la parte</b> la subes o bajas, le cambias el nombre, la quitas (sus ejercicios quedan sin parte) o la borras con sus ejercicios. Un ejercicio o bloque se pasa a otra parte arrastrándolo con su asa ≡.</p>
-      <p><b>Arrastrar a una parte:</b> coge un ejercicio o bloque por su asa <b>≡</b> y suéltalo <b>encima de la cabecera</b> de una parte (se ilumina): entra en ella, al final, como una app en una carpeta. También puedes arrastrarlo entre los ejercicios de otra parte. Si una parte se queda sin nada, se queda vacía para volver a llenarla.</p>
-      <p>Cada parte es una caja de su color con sus ejercicios dentro. Toca su nombre (▸/▾) para plegarla o desplegarla; la app lo recuerda en cada dispositivo. Los ejercicios y bloques se numeran como en las hojas de entrenamiento: cada parte empieza una letra (A1, A2…; luego B1, B2…) y, con el ⋯ de un ejercicio o bloque → «Empezar letra nueva aquí», separas superseries dentro de una parte (C1, C2, D1…). Si una parte tiene varias letras, cada una va en su desplegable (toca ▸ B, ▸ C…).</p>
+      <p>Cada parte tiene su <b>color</b> (cabecera y un fondo suave en sus ejercicios), su progreso y sus botones <b>+ Ejercicio</b> y <b>+ Superserie</b>. Dentro de una parte puedes poner superseries ×N, por ejemplo 4 × (400 m + trote 200 m) en «Parte principal».</p>
+      <p>En el <b>⋯ de la parte</b> la subes o bajas, le cambias el nombre, la quitas (sus ejercicios quedan sin parte) o la borras con sus ejercicios. Un ejercicio o superserie se pasa a otra parte arrastrándolo con su asa ≡.</p>
+      <p><b>Arrastrar a una parte:</b> coge un ejercicio o una superserie por su asa <b>≡</b> y suéltalo <b>encima de la cabecera</b> de una parte (se ilumina): entra en ella, al final, como una app en una carpeta. También puedes arrastrarlo entre los ejercicios de otra parte. Si una parte se queda sin nada, se queda vacía para volver a llenarla.</p>
+      <p>Cada parte es una caja de su color con sus ejercicios dentro. Toca su nombre (▸/▾) para plegarla o desplegarla; la app lo recuerda en cada dispositivo. Los ejercicios y superseries se numeran como en las hojas de entrenamiento: cada parte empieza una letra (A1, A2…; luego B1, B2…) y, con el ⋯ de un ejercicio o una superserie → «Empezar letra nueva aquí», separas superseries dentro de una parte (C1, C2, D1…). Si una parte tiene varias letras, cada una va en su desplegable (toca ▸ B, ▸ C…).</p>
     </details>
     <details><summary>Calendario y unidades</summary>
       <p>El botón <b>📅</b>, junto a las fechas de la semana, abre el calendario del mes: cada día con entrenamiento lleva un punto (relleno si lo hiciste entero, a medias o vacío si estaba planificado). Cambia de mes con ‹ › y toca un día para ir a su semana con ese día abierto.</p>
@@ -679,8 +679,8 @@
       <p><b>Series y OK:</b> en fuerza, el número de <b>series</b> va junto al nombre del ejercicio; debajo, las <b>repeticiones</b> con su selector (Reps ▾: tiempo, máx…) y el <b>peso</b> con kg/%; y abajo, Por lado, el descanso y OK. Se guarda como «3 × 10 (100 kg)» y pulsa <b>OK</b>. Se crean todas de golpe y el ejercicio se pliega, limpio: «Press banca · 60 kg × 8 · ×4» con su progreso. Hoy y en días futuros quedan pendientes para marcarlas una a una; en días pasados se apuntan como hechas.</p>
       <p><b>Ventana de reps:</b> «10-12» en las repeticiones (en el móvil, «10,12») planifica una ventana; al marcar la serie te pide las que hiciste.</p>
       <p><b>Deshacer (ordenador):</b> Ctrl+Z / ⌘Z deshace y Ctrl+Y / ⌘⇧Z rehace.</p>
-      <p><b>Bloque vacío:</b> «+ Bloque» → «Crear vacío», y luego arrastra ejercicios encima de su título.</p>
-      <p><b>Bloques (superseries, circuitos):</b> toca una serie de una ronda para cambiarla; con <b>kg/%</b> eliges kilos o % del 1RM y con «Igual en las otras rondas pendientes» se aplica a todas. Los descansos van en la serie de antes: en el ⋯ del bloque, «⏱ Descansos del bloque…» pone de una vez el de entre ejercicios, entre rondas o al terminar el bloque.</p>
+      <p><b>Superserie vacía:</b> «+ Superserie» → «Crear vacío», y luego arrastra ejercicios encima de su título.</p>
+      <p><b>Superseries y circuitos:</b> toca una serie de una ronda para cambiarla; con <b>kg/%</b> eliges kilos o % del 1RM y con «Igual en las otras rondas pendientes» se aplica a todas. Los descansos van en la serie de antes: en el ⋯ de la superserie → «Editar superserie…», ajusta el de entre ejercicios, entre rondas o al terminar la superserie.</p>
       <p><b>Una fila por serie:</b> con 2 o más series sale una fila por cada una (2, 3, 4…) con sus reps y sus kilos, para pirámides o series descendentes. La 1 es la de arriba; las demás la copian hasta que las cambias. Las series ya hechas se ven en gris y se editan tocándolas.</p>
       <p><b>Editar el ejercicio entero:</b> toca su nombre (o <b>⋯ → Editar</b>). Puedes cambiar los valores de todas las series pendientes a la vez, el número <b>×N</b> (añade o quita series pendientes; si hubiera que quitar series hechas, te lo pregunta) o <b>cambiar el ejercicio</b> por otro del mismo tipo (por ejemplo, sentadilla → prensa) manteniendo las series. <b>OK</b> lo vuelve a plegar; tocar el nombre otra vez lo cierra sin guardar. Todo se puede deshacer.</p>
       <p><b>El mismo ejercicio dos veces:</b> «+ Ejercicio» con uno que ya está crea otra tarjeta, «Press banca (2)», con sus propias series.</p>
@@ -701,26 +701,26 @@
       <p>Las series que añades en días futuros (o que vienen de plantillas y mesociclos) quedan <b>planificadas</b>, en gris y con un círculo.</p>
       <p>Toca el círculo para marcarla como hecha tal cual. Si hiciste otra cosa, toca la serie, corrige los datos y guárdala. También puedes corregir después una serie ya hecha tocándola.</p>
       <p>En el móvil también puedes <b>deslizar</b> una serie: a la derecha la marca hecha y a la izquierda la borra. Durante 5 segundos aparece abajo <b>Deshacer</b>. Si consigues un récord, te lo celebra.</p>
-      <p>¿Marcaste una serie por error? Toca su número (o el ✓ en los bloques), desliza la serie hecha a la derecha, o tócala y elige <b>↺ Marcar como pendiente</b>. Vuelve a planificada y deja de contar para récords, volumen y marcas. En el modo entreno tienes el mismo botón (vuelve con <b>‹ Anterior</b> si ya pasaste a la siguiente).</p>
+      <p>¿Marcaste una serie por error? Toca su número (o el ✓ en las superseries), desliza la serie hecha a la derecha, o tócala y elige <b>↺ Marcar como pendiente</b>. Vuelve a planificada y deja de contar para récords, volumen y marcas. En el modo entreno tienes el mismo botón (vuelve con <b>‹ Anterior</b> si ya pasaste a la siguiente).</p>
     </details>
     <details><summary>Modo entreno</summary>
       <p>En el día de hoy (o en un día abierto) pulsa <b>Empezar entreno</b>: verás en grande cada serie, con los discos que van por lado y el ritmo objetivo en carrera.</p>
-      <p>Ajusta lo que hiciste y pulsa <b>Hecha</b>: pasa a la siguiente (respetando los bloques ronda a ronda) y empieza la cuenta atrás del descanso, que puedes saltar o alargar. Al acabar suena y vibra si el móvil lo permite.</p>
+      <p>Ajusta lo que hiciste y pulsa <b>Hecha</b>: pasa a la siguiente (respetando las superseries ronda a ronda) y empieza la cuenta atrás del descanso, que puedes saltar o alargar. Al acabar suena y vibra si el móvil lo permite.</p>
       <p>En carrera, el campo de tiempo muestra como ejemplo el objetivo de esa serie; escribe tu tiempo real (3:52 o 3,52).</p>
       <p>El temporizador solo existe dentro de este modo; fuera de él nunca salta nada.</p>
     </details>
-    <details><summary>Bloques ×N</summary>
-      <p><b>+ Bloque</b> crea uno o varios tramos que se repiten, por ejemplo 1000 m + recuperación 300 m ×4, o Press banca + Remo ×4. Se muestran ronda a ronda.</p>
-      <p><b>Descripción:</b> «+ Descripción», debajo de las casillas del ejercicio o en su ⋯ (y en el ⋯ de un bloque), guarda indicaciones como el tempo, la banda, el EEP/RIR o pausas. Sale debajo del ejercicio (tócala para cambiarla o quitarla) y en el modo entreno. En texto: «nota: …» al final de la línea del ejercicio.</p>
-      <p><b>Cada ejercicio de un bloque</b> tiene su ⋯ en la primera ronda: ver su ficha, su descripción o quitarlo del bloque.</p>
-      <p><b>Editar un bloque:</b> en su ⋯, «+ Añadir un ejercicio al bloque…» (entra en todas las rondas) o «Quitar un ejercicio del bloque…». También puedes arrastrar un ejercicio suelto por su asa ≡ y soltarlo encima del título del bloque: entra con una serie en cada ronda.</p>
-      <p><b>Agrupar series ya apuntadas:</b> mantén pulsada una serie (o ⋯ del día o de la sesión → <b>Seleccionar series para agrupar en bloque</b>), toca las que quieras y pulsa <b>Agrupar en bloque</b>. Si hay un patrón que se repite (por ejemplo 1000 m + trote 300 m, cuatro veces) te propone el bloque ×4; también puedes juntarlas en una sola ronda o en el orden en que las tocaste. Se conservan valores, hechas y pendientes, tiempos, desnivel y pulsaciones, y se puede deshacer. <b>⋯ del bloque → Desagrupar</b> lo vuelve a dejar en series sueltas.</p>
-      <p><b>Al importar</b> una carrera, en la vista previa marca las casillas de las vueltas y pulsa <b>Agrupar las marcadas en bloque ×N</b>; «Quitar agrupación» lo deshace antes de guardar.</p>
+    <details><summary>Superseries ×N</summary>
+      <p><b>+ Superserie</b> crea uno o varios tramos que se repiten, por ejemplo 1000 m + recuperación 300 m ×4, o Press banca + Remo ×4. Se muestran ronda a ronda.</p>
+      <p><b>Descripción:</b> «+ Descripción», debajo de las casillas del ejercicio o en su ⋯ (y en el ⋯ de una superserie), guarda indicaciones como el tempo, la banda, el EEP/RIR o pausas. Sale debajo del ejercicio (tócala para cambiarla o quitarla) y en el modo entreno. En texto: «nota: …» al final de la línea del ejercicio.</p>
+      <p><b>Cada ejercicio de una superserie</b> tiene su ⋯ en la primera ronda: ver su ficha, su descripción o quitarlo de la superserie.</p>
+      <p><b>Editar una superserie:</b> en su ⋯ → «Editar superserie…» puedes añadir o quitar ejercicios y rondas, ajustar los descansos y editar los valores de las series pendientes. Los ejercicios nuevos permiten escribir sus valores antes de guardar. Las series hechas conservan sus valores. También puedes arrastrar un ejercicio suelto por su asa ≡ y soltarlo encima del título de la superserie: entra con una serie en cada ronda.</p>
+      <p><b>Agrupar series ya apuntadas:</b> mantén pulsada una serie (o ⋯ del día o de la sesión → <b>Seleccionar series para agrupar en superserie</b>), toca las que quieras y pulsa <b>Agrupar en superserie</b>. Si hay un patrón que se repite (por ejemplo 1000 m + trote 300 m, cuatro veces) te propone la superserie ×4; también puedes juntarlas en una sola ronda o en el orden en que las tocaste. Se conservan valores, hechas y pendientes, tiempos, desnivel y pulsaciones, y se puede deshacer. <b>⋯ de la superserie → Desagrupar</b> lo vuelve a dejar en series sueltas.</p>
+      <p><b>Al importar</b> una carrera, en la vista previa marca las casillas de las vueltas y pulsa <b>Agrupar las marcadas en superserie ×N</b>; «Quitar agrupación» lo deshace antes de guardar.</p>
     </details>
     <details><summary>Cambiar el orden</summary>
-      <p>Arrastra el asa <b>≡</b> para mover una serie dentro de su ejercicio, un ejercicio o bloque dentro de su sesión, o una sesión entera dentro del día (por ejemplo, subir un calentamiento que añadiste al final). Mientras arrastras ves el resultado; el asa no interfiere con deslizar ni con el desplazamiento.</p>
-      <p>Los ejercicios que aún no tienen series también se mueven, y al añadirles la primera serie se quedan donde los pusiste. Con <b>Mover a otra sesión…</b> (menú ⋯) pasas un ejercicio o bloque a otra sesión del día o a «Sin sesión».</p>
-      <p>En una sesión puedes usar <b>Subir</b> y <b>Bajar</b> de su menú ⋯; con teclado, las flechas sobre el asa ≡ mueven ejercicios y bloques. Para pasar algo a otro entreno del día, usa su ⋯ → «Mover a otro entreno del día». Durante 5 segundos aparece <b>Deshacer</b>. El nuevo orden se usa también en el modo entreno y al guardar como plantilla.</p>
+      <p>Arrastra el asa <b>≡</b> para mover una serie dentro de su ejercicio, un ejercicio o una superserie dentro de su sesión, o una sesión entera dentro del día (por ejemplo, subir un calentamiento que añadiste al final). Mientras arrastras ves el resultado; el asa no interfiere con deslizar ni con el desplazamiento.</p>
+      <p>Los ejercicios que aún no tienen series también se mueven, y al añadirles la primera serie se quedan donde los pusiste. Con <b>Mover a otra sesión…</b> (menú ⋯) pasas un ejercicio o una superserie a otra sesión del día o a «Sin sesión».</p>
+      <p>En una sesión puedes usar <b>Subir</b> y <b>Bajar</b> de su menú ⋯; con teclado, las flechas sobre el asa ≡ mueven ejercicios y superseries. Para pasar algo a otro entreno del día, usa su ⋯ → «Mover a otro entreno del día». Durante 5 segundos aparece <b>Deshacer</b>. El nuevo orden se usa también en el modo entreno y al guardar como plantilla.</p>
     </details>
     <details><summary>Listas de entrenamientos</summary>
       <p>En la pestaña <b>Listas</b> guardas tus entrenamientos agrupados: por ejemplo una lista «Fuerza 3 días» con Torso, Pierna y Full body. Crea una con <b>+ Nueva lista</b>.</p>
@@ -768,7 +768,7 @@
       <p><b>Desnivel:</b> si el archivo trae altitud (GPX y TCX punto a punto, o la subida y bajada de cada vuelta en el CSV de COROS, Strava o Garmin), cada serie guarda su desnivel y un <b>ritmo ajustado por pendiente</b>: el ritmo equivalente en llano según el coste energético de correr en cuesta (modelo de Minetti, 2002). La altitud se suaviza para quitar el ruido del GPS. Subir hace el ritmo ajustado más rápido que el real y bajar, más lento. La forma, las marcas, las predicciones y los objetivos usan el ajustado; lo apuntado a mano y los archivos sin altitud, el real.</p>
       <p>Una serie con pendiente media de más del 4 % se marca «con desnivel» y no cuenta para las marcas por distancia. En <b>Ajustes</b> puedes hacer que cuente con su ritmo ajustado.</p>
       <p>El CSV de vueltas de COROS no trae la fecha: se toma del nombre del archivo (por ejemplo …20261103185611.csv es el 3 de noviembre a las 18:56) y puedes corregirla en la vista previa antes de importar. Se usa el tiempo en movimiento de cada vuelta.</p>
-      <p>Si tiene vueltas (lap): las rápidas son <b>series</b>; las más lentas de 8:00/km son <b>recuperación</b> y se guardan como descanso de la serie anterior; las que casi no avanzan son <b>descanso parado</b>; las lentas y largas del principio y del final son <b>calentamiento</b> y <b>vuelta a la calma</b> (no cuentan para marcas). Puedes cambiar cada vuelta en la vista previa, y si las series son iguales, agruparlas como bloque ×N. El límite de 8:00 se cambia en Ajustes.</p>
+      <p>Si tiene vueltas (lap): las rápidas son <b>series</b>; las más lentas de 8:00/km son <b>recuperación</b> y se guardan como descanso de la serie anterior; las que casi no avanzan son <b>descanso parado</b>; las lentas y largas del principio y del final son <b>calentamiento</b> y <b>vuelta a la calma</b> (no cuentan para marcas). Puedes cambiar cada vuelta en la vista previa, y si las series son iguales, agruparlas como superserie ×N. El límite de 8:00 se cambia en Ajustes.</p>
       <p>Si una carrera ya está en tu calendario, la app lo detecta y no la duplica. Los rodajes con vuelta automática cada km se guardan como una sola serie.</p>
     </details>
     <details><summary>Marcas y ritmos recomendados</summary>
@@ -781,7 +781,7 @@
       <p>Arriba de la semana, <b>Resumen de la semana</b> muestra km (con las recuperaciones en metros, igual que el total de cada día), kilos levantados (peso × repeticiones), series hechas frente a planificadas, récords y esfuerzo medio, comparados con la semana anterior.</p>
     </details>
     <details><summary>Compartir con amigos</summary>
-      <p>Desde el menú ⋯ de un día, una sesión o una plantilla, <b>Compartir con un amigo</b> crea un código de 8 letras (con su botón <b>Copiar código</b>) y un enlace. Antes de crearlo ves exactamente qué se envía (las notas, las cargas de series ya hechas y las de plantillas no se envían salvo que lo marques) y eliges cuándo caduca (30 días por defecto). Tu amigo lo abre o lo pega en <b>Entrenos → Crear o importar → Añadir algo compartido</b>; ahí mismo, en <b>Mis enlaces compartidos</b>, puedes ver y revocar los tuyos. Primero solo lo ve (ejercicios, series, partes y bloques); si lo quiere, pulsa <b>+ Añadir a mi rutina…</b> y elige el día o guardarlo como plantilla.</p>
+      <p>Desde el menú ⋯ de un día, una sesión o una plantilla, <b>Compartir con un amigo</b> crea un código de 8 letras (con su botón <b>Copiar código</b>) y un enlace. Antes de crearlo ves exactamente qué se envía (las notas, las cargas de series ya hechas y las de plantillas no se envían salvo que lo marques) y eliges cuándo caduca (30 días por defecto). Tu amigo lo abre o lo pega en <b>Entrenos → Crear o importar → Añadir algo compartido</b>; ahí mismo, en <b>Mis enlaces compartidos</b>, puedes ver y revocar los tuyos. Primero solo lo ve (ejercicios, series, partes y superseries); si lo quiere, pulsa <b>+ Añadir a mi rutina…</b> y elige el día o guardarlo como plantilla.</p>
       <p>Un <b>mesociclo</b> entero se comparte desde su editor: tu amigo ve una vista previa y lo guarda con todas sus plantillas.</p>
     </details>
     <details><summary>Copia de seguridad</summary>
@@ -1012,7 +1012,7 @@
   <div class="en-pie"><button type="button" class="nav-btn" id="enAnt">‹ Anterior</button><button type="button" class="nav-btn" id="enSig">Siguiente ›</button></div>
 </dialog>
 
-<div class="sel-acciones" id="selSerBarra" hidden><span class="sel-n" id="selSerN"></span><button type="button" id="selSerAgrupar">Agrupar en bloque</button><button type="button" id="selSerSalir">Cancelar</button></div>
+<div class="sel-acciones" id="selSerBarra" hidden><span class="sel-n" id="selSerN"></span><button type="button" id="selSerAgrupar">Agrupar en superserie</button><button type="button" id="selSerSalir">Cancelar</button></div>
 <div class="sel-acciones" id="selPlantAcciones" hidden>
   <button type="button" id="selPlantDia">Añadir a un día</button>
   <button type="button" id="selPlantMeso">Mesociclo</button>
@@ -1030,6 +1030,6 @@
 <div class="toast" id="toast" role="status" hidden><span id="toastTxt"></span><button type="button" id="toastBtn">Deshacer</button></div>
 <div class="fiesta" id="fiesta" aria-hidden="true"></div>
 
-<script src="app.js?v=v283"></script>
+<script src="app.js?v=v284"></script>
 </body>
 </html>

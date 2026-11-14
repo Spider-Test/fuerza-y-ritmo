@@ -1933,6 +1933,24 @@ const dias = DIAS.map((_, i) => {
   return dia;
 });
 
+// Resumen derivado en la pista de la descripción: nunca forma parte del HTML editable ni de la nota guardada.
+function pintarResumenDescripcion(dia) {
+  const series = seriesDelDia(dia.id);
+  const lineas = [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].map(caja => {
+    const grupo = caja.dataset.grupo || "", del = series.filter(s => (s.grupo || "") === grupo);
+    // Las copias/partes son tarjetas independientes; en superseries contar los tramos, no repetirlos por ronda.
+    const ejercicios = [...caja.querySelectorAll(".bloque[data-clave]")].reduce((n, tarjeta) => {
+      const clave = tarjeta.dataset.clave;
+      if (clave.startsWith("v:")) return n;
+      if (clave.startsWith("b:")) return n + (itemsDe(del.filter(s => s.bloque_id === clave.slice(2)))[0]?.tramos?.length || 0);
+      return n + 1;
+    }, 0);
+    return (grupo || "Ejercicios sueltos") + " · " + ejercicios + (ejercicios === 1 ? " ejercicio" : " ejercicios") + " · " + del.length + (del.length === 1 ? " serie" : " series");
+  });
+  const pista = lineas.join("\n") || PISTAS[dia.i];
+  if (dia.ed.dataset.pista !== pista) dia.ed.dataset.pista = pista;
+}
+
 // Pone en cada día su texto guardado (sin tocar el que se está escribiendo)
 function rellenar() {
   dias.forEach(({ id, ed }) => {
@@ -2396,14 +2414,19 @@ function cabeceraParte(dia, grupo, p, color, nNombradas, partes, seriesItem) {
       // v284: sin «Mover la parte a otro entreno…»; la parte se reordena y se traslada a otro entreno con el asa ≡ (un solo arrastre)
       plegada && { texto: "+ Superserie en esta parte", accion: () => abrirBloque(dia, grupo, p.nombre) },
       { texto: "Quitar la parte (sus ejercicios quedan sin parte)", accion: () => {
+        registrarAntes("@orden", "p|" + dia.id + "|" + grupo, estadoOrden("p|" + dia.id + "|" + grupo));
         ss.forEach(x => cambiar("series", { ...x, seccion: "" }, true));
         renombrarParteLocal(dia.id, grupo, p.nombre, "");
         persistir(); pintarDia(dia);
       } },
       ss.length && { texto: "Borrar la parte y sus ejercicios", peligro: true, confirmar: "Pulsa otra vez: se borran " + ss.length + " series", accion: () => {
+        const kOrden = "p|" + dia.id + "|" + grupo, ordenAntes = estadoOrden(kOrden), diaAntes = instantaneaDia(dia.id, []);
+        registrarAntes("@orden", kOrden, ordenAntes);
         const antes = ss.map(x => ["series", { ...x }]);
         ss.forEach(x => cambiar("series", { ...x, borrado: true }, true));
         renombrarParteLocal(dia.id, grupo, p.nombre, null);
+        const diaDespues = instantaneaDia(dia.id, []);
+        antes.push(["fn", () => { aplicarDeltaDia({ k: dia.id, antes: diaAntes, despues: diaDespues }); volcarExtra(); }]);
         persistir(); pintarDia(dia);
         avisoDeshacer("Parte «" + p.nombre + "» borrada", antes);
       } }
@@ -2921,6 +2944,8 @@ function menuGrupo(dia, grupo) {
     { texto: "Guardar como plantilla…", accion: () => guardarPlantilla(grupo, series) },
     { texto: "Compartir con un amigo…", accion: () => compartir(grupo, itemsDe(series, true)) },
     { texto: "Quitar este entreno del día", peligro: true, confirmar: series.length ? "Pulsa otra vez: se borran " + series.length + " series" : "Pulsa otra vez para quitarlo", accion: () => {
+      registrarAntes("@dia", dia.id, instantaneaDia(dia.id, []));
+      const entradaDia = pasoHist?.find(x => x.t === "@dia" && x.k === dia.id);
       series.forEach(s => cambiar("series", { ...s, borrado: true }, true));
       sesionesVacias[dia.id] = (sesionesVacias[dia.id] || []).filter(x => x !== grupo);
       if (!sesionesVacias[dia.id].length) delete sesionesVacias[dia.id];
@@ -2931,7 +2956,9 @@ function menuGrupo(dia, grupo) {
       if (ordenGrupos[dia.id]) { const r = ordenGrupos[dia.id].filter(x => x !== grupo); if (r.length) ordenGrupos[dia.id] = r; else delete ordenGrupos[dia.id]; }
       delete ordenPartes[dia.id + "|" + grupo];
       delete posPartes[dia.id + "|" + grupo];   // v250
-      guardarEspera(); guardarSesiones(); persistir(); pintarDia(dia);
+      guardarEspera(); guardarSesiones();
+      if (entradaDia) entradaDia.despues = instantaneaDia(dia.id, []);
+      persistir(); pintarDia(dia);
     } }
   ]);
 }
@@ -3972,6 +3999,7 @@ function pintarDiaSinAncla(dia) {
   if (pieDia) cont.appendChild(pieDia);
   pintarRpe(dia);
   pintarCabDia(dia);
+  pintarResumenDescripcion(dia);
   if (selSeries) pintarSelSeries();
 }
 
@@ -9749,9 +9777,16 @@ function relacionBilboCompatible(fecha, id, grupo, r) {
   return Array.isArray(r?.o) && r.o.some(k => enContexto(db.series[k]) && !db.series[k].calentamiento)
     && Array.isArray(r?.c) && r.c.some(k => enContexto(db.series[k]) && db.series[k].calentamiento);
 }
+// Una relación conserva el historial; solo un calentamiento vivo del mismo contexto resuelve la propuesta.
+function calentamientoBilboVivo(fecha, id, grupo, r) {
+  return Array.isArray(r?.c) && r.c.some(k => {
+    const s = db.series[k];
+    return s && !s.borrado && s.calentamiento && s.fecha === fecha && s.ejercicio_id === id && (s.grupo || "") === grupo;
+  });
+}
 function calentAceptado(fecha, series) {
   const relaciones = Object.values((db.entrenos[fecha] || {}).extra?.cb || {}), base = series.find(s => !s.calentamiento);
-  if (base && esBilboCalent(series)) return relaciones.some(r => relacionBilboCompatible(fecha, base.ejercicio_id, base.grupo || "", r));
+  if (base && esBilboCalent(series)) return relaciones.some(r => relacionBilboCompatible(fecha, base.ejercicio_id, base.grupo || "", r) && calentamientoBilboVivo(fecha, base.ejercicio_id, base.grupo || "", r));
   const ids = new Set(series.filter(s => !s.calentamiento).map(s => s.id));
   return relaciones.some(r => Array.isArray(r.o) && r.o.some(id => ids.has(id)));
 }
@@ -9759,14 +9794,24 @@ function calentRechazado(fecha, id, series) {
   const r = leer("calent-respuesta-v2") || {};
   if (!esBilboCalent(series)) return !!r[claveCalent(fecha, id, series)];
   const grupo = (series.find(s => !s.calentamiento) || {}).grupo || "";
-  if (r[claveRespuestaBilbo(fecha, id, grupo)]) return true;
-  // Un No antiguo se amplía solo si corresponde a una aparición Bilbo conocida en este entrenamiento/día.
-  return seriesDelDia(fecha).some(s => s.ejercicio_id === id && (s.grupo || "") === grupo && !s.calentamiento && s.ciclo_id && r[claveCalent(fecha, id, [s])]);
+  const actuales = seriesDelDia(fecha).filter(s => s.ejercicio_id === id && (s.grupo || "") === grupo && !s.calentamiento && s.ciclo_id);
+  // Anclar juntas las claves legadas de este contexto: no dejar un true de otra aparición que reviva al recrearla.
+  let ancladas = false;
+  if (actuales.length) Object.keys(r).forEach(clave => {
+    if (r[clave] !== true || !clave.startsWith(fecha + "|")) return;
+    let contexto; try { contexto = JSON.parse(clave.slice(fecha.length + 1)); } catch { return; }
+    if (!Array.isArray(contexto) || ![2, 5].includes(contexto.length) || contexto[0] !== id || (contexto[1] || "") !== grupo) return;
+    r[clave] = { o: actuales.map(s => s.id) }; ancladas = true;
+  });
+  if (ancladas) escribir("calent-respuesta-v2", r);
+  const vigente = clave => Array.isArray(r[clave]?.o) && actuales.some(s => r[clave].o.includes(s.id));
+  if (vigente(claveRespuestaBilbo(fecha, id, grupo))) return true;
+  return actuales.some(s => vigente(claveCalent(fecha, id, [s])));
 }
 function conflictoNombreBilbo(fecha, id, grupo) {
   const etiqueta = norm(nombreEj(id)), parte = nombreParteBilbo(id), delGrupo = seriesDelDia(fecha).filter(s => (s.grupo || "") === grupo);
   if (delGrupo.some(s => s.ejercicio_id !== id && norm(nombreEj(s.ejercicio_id)) === etiqueta && (s.ciclo_id || (s.calentamiento && s.seccion === parte)))) return true;
-  return Object.values((db.entrenos[fecha] || {}).extra?.cb || {}).some(r => r?.g === grupo && r?.p === parte && r?.e !== undefined && r.e !== id);
+  return Object.values((db.entrenos[fecha] || {}).extra?.cb || {}).some(r => r?.g === grupo && r?.p === parte && r?.e !== undefined && r.e !== id && calentamientoBilboVivo(fecha, r.e, grupo, r));
 }
 function sugerenciaCalent(fecha, id, series) {
   if (tipoDe(id) !== "fuerza") return null;
@@ -9886,8 +9931,13 @@ function rechazarCalent(fecha, id, series) {
   const clave = claveCalent(fecha, id, series); if (!clave) return;
   // No caduca automáticamente: una programación pasada rechazada no debe reabrirse al responder en otra fecha.
   const r = leer("calent-respuesta-v2") || {};
-  r[clave] = true; // Se conserva también la clave de la aparición para clientes anteriores.
-  if (esBilboCalent(series)) r[claveRespuestaBilbo(fecha, id, (series.find(s => !s.calentamiento) || {}).grupo || "")] = true;
+  r[clave] = true; // Fuera de Bilbo se conserva la respuesta anterior.
+  if (esBilboCalent(series)) {
+    const grupo = (series.find(s => !s.calentamiento) || {}).grupo || "";
+    const respuesta = { o: seriesDelDia(fecha).filter(s => s.ejercicio_id === id && (s.grupo || "") === grupo && !s.calentamiento && s.ciclo_id).map(s => s.id) };
+    r[clave] = respuesta; // También truthy para clientes anteriores, pero ligada a IDs de esta planificación.
+    r[claveRespuestaBilbo(fecha, id, grupo)] = respuesta;
+  }
   escribir("calent-respuesta-v2", r);
 }
 
@@ -10960,7 +11010,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v292" + (BETA ? " beta" : "");
+const VERSION_APP = "v294" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

@@ -4487,15 +4487,16 @@ function bloque(dia, id, series, grupo, parte, copia) {
     mas.addEventListener("click", () => { abrirForm(); ponerModoForm("una"); tomarFoto(); fa.focus(); });
     ol.after(mas);
   }
-  // Calentamiento sugerido antes de la primera serie efectiva (hoy y sin haber empezado)
+  // Calentamiento pendiente: Bilbo en cualquier fecha; resto de fuerza conserva sus condiciones.
   const pasosCalent = sugerenciaCalent(dia.id, id, series);
   if (pasosCalent) {
     const cal = document.createElement("div");
     cal.className = "calent-sug";
     cal.innerHTML = '<span class="cs-t"></span><span class="cs-b"><button type="button" class="nav-btn cs-no">No</button><button type="button" class="anadir cs-si">Añadir</button></span>';
-    cal.querySelector(".cs-t").textContent = "¿Calentamiento? " + pasosCalent.map(p => (p.barra ? "barra" : num(p.peso) + " kg") + " × " + p.reps).join(" · ");
+    cal.querySelector(".cs-t").textContent = textoCalent(pasosCalent);
+    cal.querySelector(".cs-si").disabled = !pasosCalent.length;
     cal.querySelector(".cs-si").addEventListener("click", () => aceptarCalent(dia.id, id, grupo, series, pasosCalent));
-    cal.querySelector(".cs-no").addEventListener("click", () => { rechazarCalent(dia.id, id); pintarDia(dia); });
+    cal.querySelector(".cs-no").addEventListener("click", () => { rechazarCalent(dia.id, id, series); pintarDia(dia); });
     ol.after(cal);
   }
   // Rellena con la primera serie pendiente, o con la última hecha de este ejercicio
@@ -9731,35 +9732,124 @@ const usaBarraNombre = id => /sentadilla|banca|peso muerto|press militar|remo co
   && !/mancuerna|polea|maquina|kettle|smith|multipower|goblet/.test(norm(nombreEj(id)));
 const usaBarra = id => { const o = (ajustes().barras || {})[id]; return tipoDe(id) === "fuerza" && (o !== undefined ? o : usaBarraNombre(id)); };
 // Hoy, antes de la primera serie efectiva con peso: barra × 10 (si va con barra), 50 % × 5, 70 % × 3 y 85 % × 1
+// La respuesta pertenece a fecha/ejercicio/entrenamiento/parte/superserie/copia, no al ejercicio global.
+function claveCalent(fecha, id, series) {
+  const s = series.find(s => !s.calentamiento) || series[0];
+  return s ? fecha + "|" + JSON.stringify([id, s.grupo || "", s.seccion || "", s.bloque_id || "", n0(s.copia)]) : null;
+}
+// La aceptación se vincula a IDs de origen, aunque el calentamiento esté en otra parte.
+const PARTE_CALENT_BILBO = "Calentamiento específico para Bilbo";
+function calentAceptado(fecha, series) {
+  const ids = new Set(series.filter(s => !s.calentamiento).map(s => s.id));
+  return Object.values((db.entrenos[fecha] || {}).extra?.cb || {}).some(r => Array.isArray(r.o) && r.o.some(id => ids.has(id)));
+}
 function sugerenciaCalent(fecha, id, series) {
-  if (tipoDe(id) !== "fuerza" || fecha !== iso(new Date())) return null;
+  if (tipoDe(id) !== "fuerza") return null;
   const efectivas = series.filter(s => !s.calentamiento).sort((a, b) => a.orden - b.orden);
-  if (!efectivas.length || series.some(s => s.calentamiento) || efectivas.some(hecha)) return null;
-  if ((leer("calent-rechazado-v1") || {})[fecha + "|" + id]) return null;
-  const kg = pesoMostrado(efectivas[0]), barra = usaBarra(id) ? ajustes().barra : 0;
-  if (!(kg >= 40)) return null;
-  const pasos = barra ? [{ peso: barra, reps: 10, barra: true }] : [];
+  if (!efectivas.length || series.some(s => s.calentamiento) || efectivas.some(hecha) || calentAceptado(fecha, efectivas)) return null;
+  if ((leer("calent-respuesta-v2") || {})[claveCalent(fecha, id, series)]) return null;
+  const bilbo = efectivas.find(s => !!s.ciclo_id), kg = pesoMostrado(bilbo || efectivas[0]), barra = usaBarra(id) ? ajustes().barra : 0;
+  if (!bilbo) {
+    // Fuera de Bilbo se conserva exactamente la elegibilidad y progresión anterior.
+    if (fecha !== iso(new Date()) || !(kg >= 40)) return null;
+    const pasos = barra ? [{ peso: barra, reps: 10, barra: true }] : [];
+    [[0.5, 5], [0.7, 3], [0.85, 1]].forEach(([f, reps]) => {
+      const p = redondear(kg * f), previo = pasos.length ? pasos[pasos.length - 1].peso : 0;
+      if (p > previo && p < kg) pasos.push({ peso: p, reps });
+    });
+    return pasos.length >= 2 ? pasos : null;
+  }
+  // Bilbo pendiente se puede preparar en cualquier fecha y con cualquier carga positiva finita.
+  // [] mantiene visible la posibilidad, con explicación y Añadir deshabilitado si falta la carga.
+  if (!Number.isFinite(kg) || !(kg > 0)) return [];
+  const pasos = Number.isFinite(barra) && barra > 0 && barra <= kg ? [{ peso: barra, reps: 10, barra: true }] : [];
   [[0.5, 5], [0.7, 3], [0.85, 1]].forEach(([f, reps]) => {
     const p = redondear(kg * f), previo = pasos.length ? pasos[pasos.length - 1].peso : 0;
-    if (p > previo && p < kg) pasos.push({ peso: p, reps });
+    if (Number.isFinite(p) && p > previo && p < kg) pasos.push({ peso: p, reps });
   });
-  return pasos.length >= 2 ? pasos : null;
+  // Si el redondeo habitual no da cargas intermedias, un único paso al objetivo (nunca inventar una carga menor disponible).
+  if (!pasos.length) pasos.push({ peso: kg, reps: 5 });
+  return pasos;
 }
+const textoCalent = pasos => pasos.length ? "¿Calentamiento? " + pasos.map(p => (p.barra ? "barra" : num(p.peso) + " kg") + " × " + p.reps).join(" · ")
+  : "Calentamiento Bilbo: completa una carga objetivo válida en la programación o el ciclo para calcularlo.";
 function aceptarCalent(fecha, id, grupo, series, pasos) {
-  const primera = Math.min.apply(null, series.map(s => n0(s.orden)));
-  const nuevas = pasos.map((p, k) => ({ id: nuevoId(), fecha, ejercicio_id: id, orden: primera - pasos.length + k, peso: p.peso, reps: p.reps, distancia: 0, tiempo: 0,
-    descanso: 60, rec_dist: 0, pct: 0, ciclo_id: "", calentamiento: true, hecha: false, grupo: grupo || "", meso_id: "", bloque_id: "", ronda: 0, borrado: false }));
+  const clave = claveCalent(fecha, id, series);
+  const actuales = seriesDelDia(fecha).filter(s => s.ejercicio_id === id && claveCalent(fecha, id, [s]) === clave);
+  if (!clave || !actuales.some(s => !s.calentamiento) || actuales.some(hecha)) { setEstado("El contexto cambió; no se añadió calentamiento."); return []; }
+  if (actuales.some(s => s.calentamiento) || calentAceptado(fecha, actuales)) { pintarBloques(true); return []; }
+  // Un botón anterior no puede añadir la propuesta de otra carga ni reabrir una respuesta No.
+  if (actuales.some(s => !!s.ciclo_id)) {
+    pasos = sugerenciaCalent(fecha, id, actuales);
+    if (!pasos || !pasos.length) { setEstado("Completa una carga Bilbo válida o revisa la respuesta de esta ocurrencia; no se añadió calentamiento."); return []; }
+  }
+  const base = actuales.find(s => !s.calentamiento), g = base.grupo || "", parte = PARTE_CALENT_BILBO;
+  const dia = dias.find(d => d.id === fecha), caja = dia && [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].find(el => el.dataset.grupo === g);
+  if (!caja || !Array.isArray(pasos) || !pasos.length) { setEstado("No se pudo comprobar el destino del calentamiento.", true); return []; }
+  const secuencia = [...caja.children].filter(el => el.matches(".parte-caja, .bloque[data-clave]")).map(el => elementoMixtoParte(el, dia, g));
+  const destino = secuencia.find(p => p.nombre === parte) || { nombre: parte, items: [] };
+  const kp = fecha + "|" + g, ordenAntes = estadoOrden("p|" + kp), gruposAntes = ordenGrupos[fecha]?.slice() || null;
+  const gruposDespues = [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].map(el => el.dataset.grupo || "");
+  const delGrupo = seriesDelDia(fecha).filter(s => (s.grupo || "") === g), ordenSeriesAntes = new Map(delGrupo.map(s => [s.id, s.orden]));
+  const usadas = delGrupo.filter(s => s.ejercicio_id === id && !s.bloque_id && (s.seccion || "") === parte).map(s => n0(s.copia) > 1 ? n0(s.copia) : 1)
+    .concat((enEspera[fecha] || []).filter(k => ejDeClave(k) === id && (esperaGrupo[fecha + "|" + k] || "") === g && (esperaParte[fecha + "|" + k] || "") === parte).map(k => copiaDeClave(k) || 1));
+  const copia = usadas.length ? Math.max(...usadas) + 1 : 0;
+  const primera = Math.min(...delGrupo.map(s => n0(s.orden))) - pasos.length;
+  const nuevas = pasos.map((p, k) => ({ id: nuevoId(), fecha, ejercicio_id: id, orden: primera + k, peso: p.peso, reps: p.reps, distancia: 0, tiempo: 0,
+    descanso: 60, rec_dist: 0, pct: 0, ciclo_id: "", calentamiento: true, hecha: false, grupo: g, seccion: parte, copia, meso_id: "", bloque_id: "", ronda: 0, borrado: false }));
+  const token = nuevas[0].id;
+  registrarAntes("@orden", "p|" + kp, ordenAntes);
+  registrarAntes("@orden", "g|" + fecha, estadoOrden("g|" + fecha));
   nuevas.forEach(f => cambiar("series", f, true));
+  // Reutiliza el contenido anterior de la parte y añade otra tarjeta, sin mezclar ocurrencias.
+  destino.items.push({ clave: claveSerie(nuevas[0]), ids: nuevas.map(s => s.id) });
+  const datos = datosMixtosParte([destino, ...secuencia.filter(p => p.nombre !== parte)]);
+  ordenPartes[kp] = datos.nombres;
+  ponerPosPartes(kp, datos.pos);
+  if (gruposDespues.length > 1) ordenGrupos[fecha] = gruposDespues;
+  let orden = primera;
+  datos.series.forEach(filas => filas.slice().sort((a, b) => n0(a.orden) - n0(b.orden)).forEach(s => {
+    if (s.orden !== orden) cambiar("series", { ...s, orden }, true);
+    orden++;
+  }));
+  const ordenSeriesDespues = new Map(delGrupo.map(s => [s.id, db.series[s.id].orden])), ordenDespues = estadoOrden("p|" + kp);
+  const gruposGuardados = ordenGrupos[fecha]?.slice() || null;
+  guardarSesiones();
+  const guardarRelacion = quitar => {
+    const previo = db.entrenos[fecha] || { fecha, html: "", texto: "", rpe: 0, sensacion: "" }, extra = extraDe(fecha), cb = { ...(extra.cb || {}) };
+    if (quitar) delete cb[token]; else cb[token] = { o: actuales.filter(s => !s.calentamiento).map(s => s.id), c: nuevas.map(s => s.id) };
+    if (Object.keys(cb).length) extra.cb = cb; else delete extra.cb;
+    cambiar("entrenos", { ...previo, extra }, true);
+  };
+  guardarRelacion(false); // Marca el día pendiente inmediatamente, antes de cualquier respuesta antigua.
   persistir();
   pintarBloques(true);
-  avisoDeshacer("Calentamiento añadido · " + nombreEj(id), nuevas.map(f => ["series", { ...f, borrado: true }]));
-  return nuevas;
+  const deshacer = nuevas.map(f => ["series", { ...db.series[f.id], borrado: true }]);
+  deshacer.push(["fn", () => {
+    // Solo el orden que cambió esta acción; conserva los valores y las modificaciones posteriores.
+    ordenSeriesAntes.forEach((antes, sid) => { const s = db.series[sid]; if (s && s.orden === ordenSeriesDespues.get(sid) && s.orden !== antes) cambiar("series", { ...s, orden: antes }, true); });
+    const igual = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+    if (igual(ordenPartes[kp], ordenDespues.lista)) {
+      if (ordenAntes.lista) ordenPartes[kp] = ordenAntes.lista.slice(); else delete ordenPartes[kp];
+    }
+    const pos = { ...(posPartes[kp] || {}) };
+    new Set([...Object.keys(ordenAntes.pos || {}), ...Object.keys(ordenDespues.pos || {})]).forEach(n => {
+      if (!igual(pos[n], ordenDespues.pos?.[n])) return;
+      if (Object.hasOwn(ordenAntes.pos || {}, n)) pos[n] = ordenAntes.pos[n]; else delete pos[n];
+    });
+    ponerPosPartes(kp, pos);
+    if (igual(ordenGrupos[fecha], gruposGuardados)) { if (gruposAntes) ordenGrupos[fecha] = gruposAntes.slice(); else delete ordenGrupos[fecha]; }
+    guardarSesiones(); guardarRelacion(true); volcarExtra();
+  }]);
+  avisoDeshacer("Calentamiento añadido localmente · " + nombreEj(id), deshacer);
+  return nuevas.map(s => db.series[s.id]);
 }
-function rechazarCalent(fecha, id) {
-  const r = leer("calent-rechazado-v1") || {}, limite = iso(sumarDias(new Date(), -7));
-  Object.keys(r).forEach(k => { if (k.slice(0, 10) < limite) delete r[k]; });
-  r[fecha + "|" + id] = true;
-  escribir("calent-rechazado-v1", r);
+function rechazarCalent(fecha, id, series) {
+  const clave = claveCalent(fecha, id, series); if (!clave) return;
+  // No caduca automáticamente: una programación pasada rechazada no debe reabrirse al responder en otra fecha.
+  const r = leer("calent-respuesta-v2") || {};
+  r[clave] = true;
+  escribir("calent-respuesta-v2", r);
 }
 
 // ---------- Molestias y lesiones, y zonas que trabaja cada ejercicio ----------
@@ -10672,10 +10762,11 @@ function pintarEntreno() {
   $("enExtra").textContent = [hecha(s) ? "✓ Hecha" : "", kg && usaBarra(s.ejercicio_id) ? textoDiscos(kg) : "", o ? textoObjetivo(o) : "", descTexto(s),
     dolor.length ? "⚠ cuidado con: " + dolor.map(m => m.zona).join(", ") : ""].filter(Boolean).join(" · ");
   // Calentamiento sugerido al llegar a la primera serie de un ejercicio
-  const delEj = s.bloque_id ? [] : seriesDelDia(ent.dia.id).filter(x => x.ejercicio_id === s.ejercicio_id && !x.bloque_id && (x.grupo || "") === (s.grupo || ""));
+  const delEj = s.bloque_id ? [] : seriesDelDia(ent.dia.id).filter(x => x.ejercicio_id === s.ejercicio_id && claveCalent(ent.dia.id, s.ejercicio_id, [x]) === claveCalent(ent.dia.id, s.ejercicio_id, [s]));
   ent.calent = s.bloque_id ? null : sugerenciaCalent(ent.dia.id, s.ejercicio_id, delEj);
   $("enCalent").hidden = !ent.calent;
-  if (ent.calent) $("enCalentT").textContent = "¿Calentamiento? " + ent.calent.map(p => (p.barra ? "barra" : num(p.peso) + " kg") + " × " + p.reps).join(" · ");
+  $("enCalentSi").disabled = !(ent.calent && ent.calent.length);
+  if (ent.calent) $("enCalentT").textContent = textoCalent(ent.calent);
   // Campos para apuntar lo que de verdad se hizo
   const mov = tipo === "movilidad";
   const sc = !dist && !mov && sinCarga(s.ejercicio_id) && !cargaGuardada(s);
@@ -10806,13 +10897,14 @@ $("enDesmarcar").addEventListener("click", () => { const s = serieEnt(); if (!s 
 $("enCalentSi").addEventListener("click", () => {
   const s = serieEnt();
   if (!s || !ent.calent) return;
-  const delEj = seriesDelDia(ent.dia.id).filter(x => x.ejercicio_id === s.ejercicio_id && !x.bloque_id && (x.grupo || "") === (s.grupo || ""));
+  const delEj = seriesDelDia(ent.dia.id).filter(x => x.ejercicio_id === s.ejercicio_id && claveCalent(ent.dia.id, s.ejercicio_id, [x]) === claveCalent(ent.dia.id, s.ejercicio_id, [s]));
   const nuevas = aceptarCalent(ent.dia.id, s.ejercicio_id, s.grupo, delEj, ent.calent);
+  if (!nuevas.length) { pintarEntreno(); return; }
   ent.cola = colaEntreno(ent.dia.id, ent.grupo);
   ent.i = Math.max(0, ent.cola.indexOf(nuevas[0].id));
   pintarEntreno();
 });
-$("enCalentNo").addEventListener("click", () => { const s = serieEnt(); if (s) rechazarCalent(ent.dia.id, s.ejercicio_id); pintarEntreno(); });
+$("enCalentNo").addEventListener("click", () => { const s = serieEnt(); if (s) rechazarCalent(ent.dia.id, s.ejercicio_id, [s]); pintarEntreno(); });
 $("enSig").addEventListener("click", () => { if (ent.i < ent.cola.length - 1) { ent.i++; pintarEntreno(); } });
 function salirEntreno() {
   if ($("dlgEntreno").open) $("dlgEntreno").close();
@@ -10829,7 +10921,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v288" + (BETA ? " beta" : "");
+const VERSION_APP = "v289" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

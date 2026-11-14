@@ -928,13 +928,17 @@ async function leerTablaCompleta(tabla, desde = "") {
 }
 
 // Perfil: las cuentas nuevas quedan pendientes hasta que el administrador las aprueba
+let ultimaCargaPerfil = 0;
 async function cargarPerfil() {
+  const ctx = contextoSesion(), carga = ++ultimaCargaPerfil;
+  const vigente = () => { comprobarSesion(ctx); return carga === ultimaCargaPerfil; };
   const campos = "user_id,email,aprobado,es_admin,edita_catalogo,creado,novedades_vistas,ultimo_acceso,ultimo_dispositivo,ultima_version";
-  const r = await api("/rest/v1/perfiles?select=" + campos + "&user_id=eq." + encodeURIComponent(sesion.user_id) + "&limit=1");
+  const r = await api("/rest/v1/perfiles?select=" + campos + "&user_id=eq." + encodeURIComponent(ctx.usuario) + "&limit=1");
   if (!r.ok) throw new Error("perfil " + r.status);
-  const lista = await r.json(), mio = Array.isArray(lista) && lista.find(p => p.user_id === sesion.user_id);
+  const lista = await r.json(), mio = Array.isArray(lista) && lista.find(p => p.user_id === ctx.usuario);
+  if (!vigente()) return perfil;
   perfil = mio ? { aprobado: mio.aprobado, es_admin: mio.es_admin, edita_catalogo: mio.edita_catalogo, email: mio.email, novedades_vistas: mio.novedades_vistas || "" } : { aprobado: false, es_admin: false, edita_catalogo: false, email: sesion.email };
-  usuarios = [];
+  const nuevosUsuarios = [];
   actualizarVisibilidadUsuarios();   // oculta y vacía «Usuarios» en cuanto cambia el perfil; se muestra solo si es admin aprobado
   if (esAdminAprobado()) {
     let ultimo = "";
@@ -942,13 +946,16 @@ async function cargarPerfil() {
       const rr = await api("/rest/v1/perfiles?select=" + campos + "&order=user_id.asc&limit=500" + (ultimo ? "&user_id=gt." + encodeURIComponent(ultimo) : ""));
       if (!rr.ok) throw new Error("No se pudo cargar la lista de usuarios (" + rr.status + ").");
       const pagina = await rr.json();
+      if (!vigente()) return perfil;
       if (!Array.isArray(pagina)) throw new Error("Lista de usuarios no válida");
       if (!pagina.length) break;
       const siguiente = pagina[pagina.length - 1].user_id;
       if (!siguiente || siguiente === ultimo) throw new Error("La lista de usuarios no pudo avanzar.");
-      usuarios.push(...pagina); ultimo = siguiente;
+      nuevosUsuarios.push(...pagina); ultimo = siguiente;
     }
   }
+  if (!vigente()) return perfil;
+  usuarios = nuevosUsuarios;
   escribir("usuarios-v1", usuarios);
   escribir("perfil-v1", perfil);
   aplicarPermisosCatalogo();
@@ -11010,7 +11017,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v294" + (BETA ? " beta" : "");
+const VERSION_APP = "v295" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

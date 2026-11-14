@@ -9739,16 +9739,44 @@ function claveCalent(fecha, id, series) {
 }
 // La aceptación se vincula a IDs de origen, aunque el calentamiento esté en otra parte.
 const PARTE_CALENT_BILBO = "Calentamiento específico para Bilbo";
+const esBilboCalent = series => series.some(s => !s.calentamiento && !!s.ciclo_id);
+const claveRespuestaBilbo = (fecha, id, grupo) => fecha + "|" + JSON.stringify([id, grupo || ""]);
+const nombreParteBilbo = id => "Calentamiento Bilbo · " + nombreEj(id);
+function relacionBilboCompatible(fecha, id, grupo, r) {
+  if (r?.e !== undefined && r?.g !== undefined) return r.e === id && r.g === grupo;
+  // Legado: solo relacionar por IDs conocidos de origen Y calentamiento del mismo contexto, nunca por el rótulo.
+  const enContexto = s => s && s.fecha === fecha && s.ejercicio_id === id && (s.grupo || "") === grupo;
+  return Array.isArray(r?.o) && r.o.some(k => enContexto(db.series[k]) && !db.series[k].calentamiento)
+    && Array.isArray(r?.c) && r.c.some(k => enContexto(db.series[k]) && db.series[k].calentamiento);
+}
 function calentAceptado(fecha, series) {
+  const relaciones = Object.values((db.entrenos[fecha] || {}).extra?.cb || {}), base = series.find(s => !s.calentamiento);
+  if (base && esBilboCalent(series)) return relaciones.some(r => relacionBilboCompatible(fecha, base.ejercicio_id, base.grupo || "", r));
   const ids = new Set(series.filter(s => !s.calentamiento).map(s => s.id));
-  return Object.values((db.entrenos[fecha] || {}).extra?.cb || {}).some(r => Array.isArray(r.o) && r.o.some(id => ids.has(id)));
+  return relaciones.some(r => Array.isArray(r.o) && r.o.some(id => ids.has(id)));
+}
+function calentRechazado(fecha, id, series) {
+  const r = leer("calent-respuesta-v2") || {};
+  if (!esBilboCalent(series)) return !!r[claveCalent(fecha, id, series)];
+  const grupo = (series.find(s => !s.calentamiento) || {}).grupo || "";
+  if (r[claveRespuestaBilbo(fecha, id, grupo)]) return true;
+  // Un No antiguo se amplía solo si corresponde a una aparición Bilbo conocida en este entrenamiento/día.
+  return seriesDelDia(fecha).some(s => s.ejercicio_id === id && (s.grupo || "") === grupo && !s.calentamiento && s.ciclo_id && r[claveCalent(fecha, id, [s])]);
+}
+function conflictoNombreBilbo(fecha, id, grupo) {
+  const etiqueta = norm(nombreEj(id)), parte = nombreParteBilbo(id), delGrupo = seriesDelDia(fecha).filter(s => (s.grupo || "") === grupo);
+  if (delGrupo.some(s => s.ejercicio_id !== id && norm(nombreEj(s.ejercicio_id)) === etiqueta && (s.ciclo_id || (s.calentamiento && s.seccion === parte)))) return true;
+  return Object.values((db.entrenos[fecha] || {}).extra?.cb || {}).some(r => r?.g === grupo && r?.p === parte && r?.e !== undefined && r.e !== id);
 }
 function sugerenciaCalent(fecha, id, series) {
   if (tipoDe(id) !== "fuerza") return null;
   const efectivas = series.filter(s => !s.calentamiento).sort((a, b) => a.orden - b.orden);
   if (!efectivas.length || series.some(s => s.calentamiento) || efectivas.some(hecha) || calentAceptado(fecha, efectivas)) return null;
-  if ((leer("calent-respuesta-v2") || {})[claveCalent(fecha, id, series)]) return null;
+  if (calentRechazado(fecha, id, series)) return null;
   const bilbo = efectivas.find(s => !!s.ciclo_id), kg = pesoMostrado(bilbo || efectivas[0]), barra = usaBarra(id) ? ajustes().barra : 0;
+  if (bilbo && conflictoNombreBilbo(fecha, id, bilbo.grupo || "")) {
+    const aviso = []; aviso.aviso = "Hay ejercicios distintos con el mismo nombre. Antes de añadir, hay que decidir cómo distinguir sus calentamientos."; return aviso;
+  }
   if (!bilbo) {
     // Fuera de Bilbo se conserva exactamente la elegibilidad y progresión anterior.
     if (fecha !== iso(new Date()) || !(kg >= 40)) return null;
@@ -9771,8 +9799,8 @@ function sugerenciaCalent(fecha, id, series) {
   if (!pasos.length) pasos.push({ peso: kg, reps: 5 });
   return pasos;
 }
-const textoCalent = pasos => pasos.length ? "¿Calentamiento? " + pasos.map(p => (p.barra ? "barra" : num(p.peso) + " kg") + " × " + p.reps).join(" · ")
-  : "Calentamiento Bilbo: completa una carga objetivo válida en la programación o el ciclo para calcularlo.";
+const textoCalent = pasos => pasos.aviso || (pasos.length ? "¿Calentamiento? " + pasos.map(p => (p.barra ? "barra" : num(p.peso) + " kg") + " × " + p.reps).join(" · ")
+  : "Calentamiento Bilbo: completa una carga objetivo válida en la programación o el ciclo para calcularlo.");
 function aceptarCalent(fecha, id, grupo, series, pasos) {
   const clave = claveCalent(fecha, id, series);
   const actuales = seriesDelDia(fecha).filter(s => s.ejercicio_id === id && claveCalent(fecha, id, [s]) === clave);
@@ -9781,13 +9809,18 @@ function aceptarCalent(fecha, id, grupo, series, pasos) {
   // Un botón anterior no puede añadir la propuesta de otra carga ni reabrir una respuesta No.
   if (actuales.some(s => !!s.ciclo_id)) {
     pasos = sugerenciaCalent(fecha, id, actuales);
-    if (!pasos || !pasos.length) { setEstado("Completa una carga Bilbo válida o revisa la respuesta de esta ocurrencia; no se añadió calentamiento."); return []; }
+    if (!pasos || !pasos.length) { setEstado(pasos?.aviso || "Completa una carga Bilbo válida o revisa la respuesta de este ejercicio en el entrenamiento y día; no se añadió calentamiento."); return []; }
   }
-  const base = actuales.find(s => !s.calentamiento), g = base.grupo || "", parte = PARTE_CALENT_BILBO;
+  const base = actuales.find(s => !s.calentamiento), g = base.grupo || "", bilbo = esBilboCalent(actuales), parte = bilbo ? nombreParteBilbo(id) : PARTE_CALENT_BILBO;
   const dia = dias.find(d => d.id === fecha), caja = dia && [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].find(el => el.dataset.grupo === g);
   if (!caja || !Array.isArray(pasos) || !pasos.length) { setEstado("No se pudo comprobar el destino del calentamiento.", true); return []; }
   const secuencia = [...caja.children].filter(el => el.matches(".parte-caja, .bloque[data-clave]")).map(el => elementoMixtoParte(el, dia, g));
   const destino = secuencia.find(p => p.nombre === parte) || { nombre: parte, items: [] };
+  // La primera aparición Bilbo en el orden visible fija el ancla, aunque se acepte desde una copia posterior.
+  const ancla = bilbo ? secuencia.find(p => p.items.some(it => it.ids.some(k => {
+    const s = db.series[k]; return s && s.ejercicio_id === id && !s.calentamiento && !!s.ciclo_id;
+  }))) : null;
+  if (bilbo && (!ancla || ancla === destino)) { setEstado("No se puede distinguir la parte de origen de la de calentamiento; no se ha añadido nada.", true); return []; }
   const kp = fecha + "|" + g, ordenAntes = estadoOrden("p|" + kp), gruposAntes = ordenGrupos[fecha]?.slice() || null;
   const gruposDespues = [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].map(el => el.dataset.grupo || "");
   const delGrupo = seriesDelDia(fecha).filter(s => (s.grupo || "") === g), ordenSeriesAntes = new Map(delGrupo.map(s => [s.id, s.orden]));
@@ -9803,7 +9836,9 @@ function aceptarCalent(fecha, id, grupo, series, pasos) {
   nuevas.forEach(f => cambiar("series", f, true));
   // Reutiliza el contenido anterior de la parte y añade otra tarjeta, sin mezclar ocurrencias.
   destino.items.push({ clave: claveSerie(nuevas[0]), ids: nuevas.map(s => s.id) });
-  const datos = datosMixtosParte([destino, ...secuencia.filter(p => p.nombre !== parte)]);
+  const colocadas = secuencia.filter(p => p.nombre !== parte);
+  colocadas.splice(bilbo ? colocadas.indexOf(ancla) : 0, 0, destino);
+  const datos = datosMixtosParte(colocadas);
   ordenPartes[kp] = datos.nombres;
   ponerPosPartes(kp, datos.pos);
   if (gruposDespues.length > 1) ordenGrupos[fecha] = gruposDespues;
@@ -9817,7 +9852,10 @@ function aceptarCalent(fecha, id, grupo, series, pasos) {
   guardarSesiones();
   const guardarRelacion = quitar => {
     const previo = db.entrenos[fecha] || { fecha, html: "", texto: "", rpe: 0, sensacion: "" }, extra = extraDe(fecha), cb = { ...(extra.cb || {}) };
-    if (quitar) delete cb[token]; else cb[token] = { o: actuales.filter(s => !s.calentamiento).map(s => s.id), c: nuevas.map(s => s.id) };
+    if (quitar) delete cb[token]; else cb[token] = {
+      o: (bilbo ? seriesDelDia(fecha).filter(s => s.ejercicio_id === id && (s.grupo || "") === g && !s.calentamiento && s.ciclo_id) : actuales.filter(s => !s.calentamiento)).map(s => s.id),
+      c: nuevas.map(s => s.id), ...(bilbo ? { e: id, g, p: parte } : {})
+    };
     if (Object.keys(cb).length) extra.cb = cb; else delete extra.cb;
     cambiar("entrenos", { ...previo, extra }, true);
   };
@@ -9848,7 +9886,8 @@ function rechazarCalent(fecha, id, series) {
   const clave = claveCalent(fecha, id, series); if (!clave) return;
   // No caduca automáticamente: una programación pasada rechazada no debe reabrirse al responder en otra fecha.
   const r = leer("calent-respuesta-v2") || {};
-  r[clave] = true;
+  r[clave] = true; // Se conserva también la clave de la aparición para clientes anteriores.
+  if (esBilboCalent(series)) r[claveRespuestaBilbo(fecha, id, (series.find(s => !s.calentamiento) || {}).grupo || "")] = true;
   escribir("calent-respuesta-v2", r);
 }
 
@@ -10921,7 +10960,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v290" + (BETA ? " beta" : "");
+const VERSION_APP = "v291" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

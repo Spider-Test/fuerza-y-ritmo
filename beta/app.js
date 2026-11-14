@@ -4560,13 +4560,14 @@ function bloque(dia, id, series, grupo, parte, copia) {
     mas.addEventListener("click", () => { abrirForm(); ponerModoForm("una"); tomarFoto(); fa.focus(); });
     ol.after(mas);
   }
-  // Calentamiento sugerido antes de la primera serie efectiva (hoy y sin haber empezado)
+  // Calentamiento pendiente: Bilbo en cualquier fecha; resto de fuerza conserva sus condiciones.
   const pasosCalent = sugerenciaCalent(dia.id, id, series);
   if (pasosCalent) {
     const cal = document.createElement("div");
     cal.className = "calent-sug";
     cal.innerHTML = '<span class="cs-t"></span><span class="cs-b"><button type="button" class="nav-btn cs-no">No</button><button type="button" class="anadir cs-si">Añadir</button></span>';
-    cal.querySelector(".cs-t").textContent = "¿Calentamiento? " + pasosCalent.map(p => (p.barra ? "barra" : num(p.peso) + " kg") + " × " + p.reps).join(" · ");
+    cal.querySelector(".cs-t").textContent = textoCalent(pasosCalent);
+    cal.querySelector(".cs-si").disabled = !pasosCalent.length;
     cal.querySelector(".cs-si").addEventListener("click", () => aceptarCalent(dia.id, id, grupo, series, pasosCalent));
     cal.querySelector(".cs-no").addEventListener("click", () => { rechazarCalent(dia.id, id, series); pintarDia(dia); });
     ol.after(cal);
@@ -9790,24 +9791,45 @@ function calentAceptado(fecha, series) {
   return Object.values((db.entrenos[fecha] || {}).extra?.cb || {}).some(r => Array.isArray(r.o) && r.o.some(id => ids.has(id)));
 }
 function sugerenciaCalent(fecha, id, series) {
-  if (tipoDe(id) !== "fuerza" || fecha !== iso(new Date())) return null;
+  if (tipoDe(id) !== "fuerza") return null;
   const efectivas = series.filter(s => !s.calentamiento).sort((a, b) => a.orden - b.orden);
   if (!efectivas.length || series.some(s => s.calentamiento) || efectivas.some(hecha) || calentAceptado(fecha, efectivas)) return null;
   if ((leer("calent-respuesta-v2") || {})[claveCalent(fecha, id, series)]) return null;
-  const kg = pesoMostrado(efectivas[0]), barra = usaBarra(id) ? ajustes().barra : 0;
-  if (!(kg >= 40)) return null;
-  const pasos = barra ? [{ peso: barra, reps: 10, barra: true }] : [];
+  const bilbo = efectivas.find(s => !!s.ciclo_id), kg = pesoMostrado(bilbo || efectivas[0]), barra = usaBarra(id) ? ajustes().barra : 0;
+  if (!bilbo) {
+    // Fuera de Bilbo se conserva exactamente la elegibilidad y progresión anterior.
+    if (fecha !== iso(new Date()) || !(kg >= 40)) return null;
+    const pasos = barra ? [{ peso: barra, reps: 10, barra: true }] : [];
+    [[0.5, 5], [0.7, 3], [0.85, 1]].forEach(([f, reps]) => {
+      const p = redondear(kg * f), previo = pasos.length ? pasos[pasos.length - 1].peso : 0;
+      if (p > previo && p < kg) pasos.push({ peso: p, reps });
+    });
+    return pasos.length >= 2 ? pasos : null;
+  }
+  // Bilbo pendiente se puede preparar en cualquier fecha y con cualquier carga positiva finita.
+  // [] mantiene visible la posibilidad, con explicación y Añadir deshabilitado si falta la carga.
+  if (!Number.isFinite(kg) || !(kg > 0)) return [];
+  const pasos = Number.isFinite(barra) && barra > 0 && barra <= kg ? [{ peso: barra, reps: 10, barra: true }] : [];
   [[0.5, 5], [0.7, 3], [0.85, 1]].forEach(([f, reps]) => {
     const p = redondear(kg * f), previo = pasos.length ? pasos[pasos.length - 1].peso : 0;
-    if (p > previo && p < kg) pasos.push({ peso: p, reps });
+    if (Number.isFinite(p) && p > previo && p < kg) pasos.push({ peso: p, reps });
   });
-  return pasos.length >= 2 ? pasos : null;
+  // Si el redondeo habitual no da cargas intermedias, un único paso al objetivo (nunca inventar una carga menor disponible).
+  if (!pasos.length) pasos.push({ peso: kg, reps: 5 });
+  return pasos;
 }
+const textoCalent = pasos => pasos.length ? "¿Calentamiento? " + pasos.map(p => (p.barra ? "barra" : num(p.peso) + " kg") + " × " + p.reps).join(" · ")
+  : "Calentamiento Bilbo: completa una carga objetivo válida en la programación o el ciclo para calcularlo.";
 function aceptarCalent(fecha, id, grupo, series, pasos) {
   const clave = claveCalent(fecha, id, series);
   const actuales = seriesDelDia(fecha).filter(s => s.ejercicio_id === id && claveCalent(fecha, id, [s]) === clave);
   if (!clave || !actuales.some(s => !s.calentamiento) || actuales.some(hecha)) { setEstado("El contexto cambió; no se añadió calentamiento."); return []; }
   if (actuales.some(s => s.calentamiento) || calentAceptado(fecha, actuales)) { pintarBloques(true); return []; }
+  // Un botón anterior no puede añadir la propuesta de otra carga ni reabrir una respuesta No.
+  if (actuales.some(s => !!s.ciclo_id)) {
+    pasos = sugerenciaCalent(fecha, id, actuales);
+    if (!pasos || !pasos.length) { setEstado("Completa una carga Bilbo válida o revisa la respuesta de esta ocurrencia; no se añadió calentamiento."); return []; }
+  }
   const base = actuales.find(s => !s.calentamiento), g = base.grupo || "", parte = PARTE_CALENT_BILBO;
   const dia = dias.find(d => d.id === fecha), caja = dia && [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].find(el => el.dataset.grupo === g);
   if (!caja || !Array.isArray(pasos) || !pasos.length) { setEstado("No se pudo comprobar el destino del calentamiento.", true); return []; }
@@ -9871,8 +9893,8 @@ function aceptarCalent(fecha, id, grupo, series, pasos) {
 }
 function rechazarCalent(fecha, id, series) {
   const clave = claveCalent(fecha, id, series); if (!clave) return;
-  const r = leer("calent-respuesta-v2") || {}, limite = iso(sumarDias(new Date(), -7));
-  Object.keys(r).forEach(k => { if (k.slice(0, 10) < limite) delete r[k]; });
+  // No caduca automáticamente: una programación pasada rechazada no debe reabrirse al responder en otra fecha.
+  const r = leer("calent-respuesta-v2") || {};
   r[clave] = true;
   escribir("calent-respuesta-v2", r);
 }
@@ -10795,7 +10817,8 @@ function pintarEntreno() {
   const delEj = s.bloque_id ? [] : seriesDelDia(ent.dia.id).filter(x => x.ejercicio_id === s.ejercicio_id && claveCalent(ent.dia.id, s.ejercicio_id, [x]) === claveCalent(ent.dia.id, s.ejercicio_id, [s]));
   ent.calent = s.bloque_id ? null : sugerenciaCalent(ent.dia.id, s.ejercicio_id, delEj);
   $("enCalent").hidden = !ent.calent;
-  if (ent.calent) $("enCalentT").textContent = "¿Calentamiento? " + ent.calent.map(p => (p.barra ? "barra" : num(p.peso) + " kg") + " × " + p.reps).join(" · ");
+  $("enCalentSi").disabled = !(ent.calent && ent.calent.length);
+  if (ent.calent) $("enCalentT").textContent = textoCalent(ent.calent);
   // Campos para apuntar lo que de verdad se hizo
   const mov = tipo === "movilidad";
   // v271: un ejercicio sin carga (ver sinCarga) no pide kg si la serie no tiene ninguno guardado; si ya lo tiene, el campo se muestra para no ocultar el dato
@@ -10951,7 +10974,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v304" + (BETA ? " beta" : "");
+const VERSION_APP = "v305" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

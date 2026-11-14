@@ -41,7 +41,7 @@ const $ = id => document.getElementById(id);
 // ---------- Almacenamiento local (funciona sin conexión) ----------
 // La beta (carpeta /beta/ en la misma web) comparte el navegador con la principal: guarda todo con su propio prefijo.
 // «beta2:» sustituye a «beta:» (que apuntaba a producción): las sesiones, cambios pendientes y datos antiguos de «beta:» NO se leen ni se borran.
-const BETA = location.pathname.includes("/beta/"), PREFIJO = "fyr-diagnostico-editor-307:";
+const BETA = location.pathname.includes("/beta/"), PREFIJO = "fyr-diagnostico-editor-307-afinado:";
 const VERSION_VISIBLE = "26";   // la versión que se ve en la app (fija); la interna es VERSION_APP
 // La sesión es común a las pestañas de esta versión; los datos locales pertenecen
 // a una cuenta concreta durante toda la vida de la página. Cambiar de cuenta recarga.
@@ -11911,16 +11911,25 @@ $("buscarPlantilla").addEventListener("input", () => {
 (() => {
   const vv = window.visualViewport;
   if (!vv) return;
-  let campo = null, timer = 0, frame = 0, turno = 0, manual = false, ajustado = false, abierto = false, apoyo = null, contexto = null;
+  let campo = null, timer = 0, frame = 0, turno = 0, manual = false, ajustado = false, abierto = false, apoyo = null, contexto = null, referencia = null;
   const esCampo = el => el && el.matches("#vistaSemana .bloques .bloque form.nueva-serie input:not([type=checkbox]):not([type=radio])");
   const valido = () => campo && campo.isConnected && !campo.closest("[hidden], [inert], .plegado, .g-plegado, .p-plegada") && campo.getClientRects().length && document.activeElement === campo && !document.querySelector("dialog[open]");
   // Mismo margen de teclado ya empleado por la barra: no confundir las barras de Safari con el teclado.
   const teclado = () => matchMedia("(max-width: 760px)").matches && vv.scale <= 1.02 && innerHeight - vv.height > 150;
   const cancelar = () => { clearTimeout(timer); cancelAnimationFrame(frame); timer = frame = 0; turno++; };
-  const quitarContexto = () => { contexto?.remove(); contexto = null; };
+  const quitarContexto = () => { contexto?.remove(); contexto = null; referencia?.remove(); referencia = null; };
   const terminar = () => { cancelar(); quitarContexto(); campo = null; apoyo = null; manual = ajustado = abierto = false; };
   function limites() {
-    let arriba = vv.offsetTop, abajo = arriba + vv.height;
+    // Medir el origen de los fixed en las mismas coordenadas que el campo. En el registro de
+    // Safari ese origen se desplaza -offsetTop; sumar el offset sin esta conversión lo contaba dos veces.
+    if (!referencia) {
+      referencia = document.createElement("div"); referencia.className = "editor-serie-referencia";
+      referencia.setAttribute("aria-hidden", "true"); referencia.inert = true;
+      referencia.style.cssText = "position:fixed;left:0;top:0;width:1px;height:1px;visibility:hidden;pointer-events:none";
+      document.body.appendChild(referencia);
+    }
+    const origen = referencia.getBoundingClientRect();
+    let arriba = origen.top + vv.offsetTop, abajo = arriba + vv.height;
     const dia = campo.closest(".dia"), cab = dia?.querySelector(":scope > .dia-cab");
     for (const el of [document.querySelector("#app > .cabecera"), document.querySelector("#diaNav"), cab, document.querySelector("#cubiertaDia")]) {
       if (!el) continue;
@@ -11929,7 +11938,7 @@ $("buscarPlantilla").addEventListener("input", () => {
     }
     const barra = document.querySelector("#app > .tabbar"), r = barra?.getBoundingClientRect();
     if (r?.height && r.top > arriba && r.top < abajo && r.bottom >= abajo - 1) abajo = r.top;
-    return { arriba, abajo };
+    return { arriba, abajo, origenX: origen.left, origenY: origen.top };
   }
   function mostrarContexto(l) {
     if (!contexto) {
@@ -11939,8 +11948,8 @@ $("buscarPlantilla").addEventListener("input", () => {
       document.body.appendChild(contexto);
     }
     const r = campo.closest("form").getBoundingClientRect();
-    contexto.style.top = (l.arriba + 6) + "px";
-    contexto.style.left = Math.max(vv.offsetLeft + 8, r.left) + "px";
+    contexto.style.top = (l.arriba + 6 - l.origenY) + "px";
+    contexto.style.left = (Math.max(l.origenX + vv.offsetLeft + 8, r.left) - l.origenX) + "px";
     contexto.style.width = Math.max(0, Math.min(r.width, vv.width - 16)) + "px";
     contexto.hidden = l.abajo - l.arriba < campo.getBoundingClientRect().height + 60;
     if (!contexto.hidden && ajustado) {
@@ -11952,7 +11961,7 @@ $("buscarPlantilla").addEventListener("input", () => {
       });
       if (!libre(l.arriba + 6)) {
         const top = l.abajo - alto - 6;
-        if (libre(top)) contexto.style.top = top + "px";
+        if (libre(top)) contexto.style.top = (top - l.origenY) + "px";
         else contexto.hidden = true;   // el campo y Guardar/Cancelar tienen prioridad si no cabe
       }
     }
@@ -11962,11 +11971,17 @@ $("buscarPlantilla").addEventListener("input", () => {
     if (!valido()) { terminar(); return; }
     if (!teclado()) { quitarContexto(); return; }
     const l = limites(), margen = mostrarContexto(l), r = campo.getBoundingClientRect();
-    const arriba = l.arriba + margen + 6, abajo = l.abajo - 8;
-    // Priorizar el campo, no el centro de una tarjeta o formulario que puede contener50series.
+    // Espacio cómodo proporcional al control (20px para el campo de40px del iPhone),
+    // después de convertir coordenadas; no compensar offsetTop con un margen arbitrario.
+    const arriba = l.arriba + margen + 6, abajo = l.abajo - Math.min(24, Math.max(12, r.height / 2));
+    let inicio = r.top, fin = r.bottom;
+    const botones = [...campo.closest("form").querySelectorAll(".anadir,.cancelar-form")].map(el => el.getBoundingClientRect()).filter(r => r.height);
+    const primero = Math.min(inicio, ...botones.map(r => r.top)), ultimo = Math.max(fin, ...botones.map(r => r.bottom));
+    // Solo si el conjunto cabe: no centrar una tarjeta larga ni sacrificar el campo por sus botones.
+    if (ultimo - primero <= abajo - arriba) { inicio = primero; fin = ultimo; }
     let dy = 0;
-    if (r.bottom > abajo) dy = r.bottom - abajo;
-    if (r.top - dy < arriba) dy = r.top - arriba;
+    if (fin > abajo) dy = fin - abajo;
+    if (inicio - dy < arriba) dy = inicio - arriba;
     ajustado = true;   // antes del scroll: sus propios eventos no pueden generar otro ajuste
     if (Math.abs(dy) > 2) window.scrollBy({ top: dy, left: 0, behavior: "instant" });
   }

@@ -1936,6 +1936,24 @@ const dias = DIAS.map((_, i) => {
   return dia;
 });
 
+// Resumen derivado en la pista de la descripción: nunca forma parte del HTML editable ni de la nota guardada.
+function pintarResumenDescripcion(dia) {
+  const series = seriesDelDia(dia.id);
+  const lineas = [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].map(caja => {
+    const grupo = caja.dataset.grupo || "", del = series.filter(s => (s.grupo || "") === grupo);
+    // Las copias/partes son tarjetas independientes; en superseries contar los tramos, no repetirlos por ronda.
+    const ejercicios = [...caja.querySelectorAll(".bloque[data-clave]")].reduce((n, tarjeta) => {
+      const clave = tarjeta.dataset.clave;
+      if (clave.startsWith("v:")) return n;
+      if (clave.startsWith("b:")) return n + (itemsDe(del.filter(s => s.bloque_id === clave.slice(2)))[0]?.tramos?.length || 0);
+      return n + 1;
+    }, 0);
+    return (grupo || "Ejercicios sueltos") + " · " + ejercicios + (ejercicios === 1 ? " ejercicio" : " ejercicios") + " · " + del.length + (del.length === 1 ? " serie" : " series");
+  });
+  const pista = lineas.join("\n") || PISTAS[dia.i];
+  if (dia.ed.dataset.pista !== pista) dia.ed.dataset.pista = pista;
+}
+
 // Pone en cada día su texto guardado (sin tocar el que se está escribiendo)
 function rellenar() {
   dias.forEach(({ id, ed }) => {
@@ -4054,6 +4072,7 @@ function pintarDiaSinAncla(dia) {
   if (pieDia) cont.appendChild(pieDia);
   pintarRpe(dia);
   pintarCabDia(dia);
+  pintarResumenDescripcion(dia);
   if (selSeries) pintarSelSeries();
 }
 
@@ -11044,7 +11063,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v309" + (BETA ? " beta" : "");
+const VERSION_APP = "v310" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

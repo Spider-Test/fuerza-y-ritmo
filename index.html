@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="connect-src 'self' https://qqyedigitphvitejquxo.supabase.co blob: data:">
+<meta http-equiv="Content-Security-Policy" content="connect-src 'self' https://qtdvehlewuuljolistlw.supabase.co blob: data:">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Fuerza y Ritmo</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -27,7 +27,7 @@
   window.addEventListener("pageshow", actualizar);
 })();
 </script>
-<link rel="stylesheet" href="estilos.css?v=v309">
+<link rel="stylesheet" href="estilos.css?v=v292">
 </head>
 <body>
 
@@ -311,8 +311,8 @@
     <button class="cerrar" aria-label="Cerrar" autofocus>✕</button>
   </form>
   <div class="d-cuerpo">
-    <p id="detAvisoLectura" class="aviso-estim" hidden>Ficha en modo consulta: se abre desde el entrenamiento y aquí no se edita. Al cerrarla vuelves a la misma serie.</p>
     <p id="detAvisoComun" class="aviso-estim" hidden>Ejercicio del catálogo común: solo lo editan el administrador y quien él autorice. Tus series y tu 1RM son solo tuyos.</p>
+    <p id="detAvisoLectura" class="aviso-estim" hidden>Ficha en modo consulta: se abre desde el entrenamiento y aquí no se edita. Al cerrarla vuelves a la misma serie.</p>
     <label id="detCompSec" class="permiso" hidden><input type="checkbox" id="detComp"> En el catálogo común (lo ven todos los usuarios aprobados)</label>
     <section>
       <h3>Tipo</h3>
@@ -410,6 +410,23 @@
     </div>
   </form>
 </dialog>
+<dialog id="dlgFechaPlant" aria-label="Elegir fecha">
+  <form method="dialog" class="d-cab">
+    <h3 class="d-tit">Añadir a una fecha</h3>
+    <button class="cerrar" aria-label="Cerrar">✕</button>
+  </form>
+  <div class="d-cuerpo">
+    <p class="menu-det" id="fpResumen" style="padding:0"></p>
+    <label class="campo">Fecha <input id="fpFecha" type="date" min="1000-01-01" max="9999-12-31" aria-describedby="fpElegida"></label>
+    <p class="eb-nota" id="fpElegida" role="status"></p>
+    <p class="aviso" id="fpAviso" role="status"></p>
+    <div class="d-botones">
+      <button type="button" class="nav-btn" id="fpCancelar">Cancelar</button>
+      <button type="button" class="anadir" id="fpAnadir" disabled>Añadir</button>
+    </div>
+  </div>
+</dialog>
+
 <dialog id="dlgNombre" aria-labelledby="nomTit">
   <form method="dialog" class="d-form">
     <h3 id="nomTit"></h3>
@@ -420,6 +437,14 @@
       <button value="ok" class="anadir" data-enter>Guardar</button>
     </div>
   </form>
+</dialog>
+
+<dialog id="dlgCalent" aria-label="Calentamiento guardado">
+  <form method="dialog" class="d-cab">
+    <h3 class="d-tit" id="calTit">Calentamiento</h3>
+    <button class="cerrar" aria-label="Cerrar">✕</button>
+  </form>
+  <div class="d-cuerpo" id="calCuerpo"></div>
 </dialog>
 
 <dialog id="dlgBloque" aria-label="Nueva superserie">
@@ -436,31 +461,6 @@
     <div class="d-botones">
       <button type="button" class="nav-btn" id="blqVacio" title="Una superserie sin ejercicios: luego arrastras ejercicios del entreno dentro con ≡">Crear vacío</button>
       <button type="button" class="anadir" id="blqCrear">Crear superserie</button>
-    </div>
-  </div>
-</dialog>
-
-<dialog id="dlgCalent" aria-label="Calentamiento guardado">
-  <form method="dialog" class="d-cab">
-    <h3 class="d-tit" id="calTit">Calentamiento</h3>
-    <button class="cerrar" aria-label="Cerrar">✕</button>
-  </form>
-  <div class="d-cuerpo" id="calCuerpo"></div>
-</dialog>
-
-<dialog id="dlgFechaPlant" aria-label="Elegir fecha">
-  <form method="dialog" class="d-cab">
-    <h3 class="d-tit">Añadir a una fecha</h3>
-    <button class="cerrar" aria-label="Cerrar">✕</button>
-  </form>
-  <div class="d-cuerpo">
-    <p class="menu-det" id="fpResumen" style="padding:0"></p>
-    <label class="campo">Fecha <input id="fpFecha" type="date" min="1000-01-01" max="9999-12-31" aria-describedby="fpElegida"></label>
-    <p class="eb-nota" id="fpElegida" role="status"></p>
-    <p class="aviso" id="fpAviso" role="status"></p>
-    <div class="d-botones">
-      <button type="button" class="nav-btn" id="fpCancelar">Cancelar</button>
-      <button type="button" class="anadir" id="fpAnadir" disabled>Añadir</button>
     </div>
   </div>
 </dialog>
@@ -1050,6 +1050,6 @@
 <div class="toast" id="toast" role="status" hidden><span id="toastTxt"></span><button type="button" id="toastBtn">Deshacer</button></div>
 <div class="fiesta" id="fiesta" aria-hidden="true"></div>
 
-<script src="app.js?v=v309"></script>
+<script src="app.js?v=v292"></script>
 </body>
 </html>

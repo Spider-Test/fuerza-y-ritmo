@@ -445,7 +445,8 @@ function mejoresPorCondicion(lista) {
   return Object.values(cat).sort((a, b) => a.clave.localeCompare(b.clave, "es", { numeric: true }));
 }
 // 1RM estimado: solo con series de peso que no se comparan por condición (un paseo de 24 kg no es un 1RM de 24 kg)
-const cuentaRm = s => n0(s.peso) > 0 && !porCondicion(s);
+const cuentaRm = s => hecha(s) && !s.calentamiento && Number.isFinite(n0(s.peso)) && n0(s.peso) > 0
+  && Number.isInteger(n0(s.reps)) && n0(s.reps) > 0 && !porCondicion(s);
 function adivinarTipo(nombre) {
   const n = norm(nombre);
   if (/(movilidad|estiramiento|estirar|stretch|yoga|foam|rulo|apertura de cadera|gato.?camello|rotaciones? de|circunduccion|pigeon|paloma|cobra|90.?90|world.?s greatest)/.test(n)) return "movilidad";
@@ -679,6 +680,7 @@ function prsDe(lista, tipo, medida) {
   }
   let maxP = null, maxR = null;
   lista.forEach(s => {
+    if (n0(s.peso) > 0 && !cuentaRm(s)) return;   // Sin repeticiones realizadas válidas no hay récord de carga.
     if (n0(s.peso) > 0) { if (maxP !== null && n0(s.peso) > maxP) prs.add(s.id); maxP = Math.max(maxP ?? 0, n0(s.peso)); }
     else { if (maxR !== null && n0(s.reps) > maxR) prs.add(s.id); maxR = Math.max(maxR ?? 0, n0(s.reps)); }
   });
@@ -741,7 +743,7 @@ function estadisticas(id) {
     st.resumen = m > 0 ? "Récord: " + (med === "reps" ? m + " reps" : fmtSegs(m)) : st.sesiones.length + (st.sesiones.length === 1 ? " sesión" : " sesiones");
     return st;
   }
-  const pesadas = lista.filter(s => n0(s.peso) > 0);
+  const pesadas = lista.filter(cuentaRm);
   if (pesadas.length) {
     st.mejor = pesadas.reduce((m, s) => n0(s.peso) > n0(m.peso) || (n0(s.peso) === n0(m.peso) && n0(s.reps) > n0(m.reps)) ? s : m);
     st.mejorRm = pesadas.reduce((m, s) => rm(s) > rm(m) ? s : m);
@@ -9821,23 +9823,13 @@ function conflictoNombreBilbo(fecha, id, grupo) {
   return Object.values((db.entrenos[fecha] || {}).extra?.cb || {}).some(r => r?.g === grupo && r?.p === parte && r?.e !== undefined && r.e !== id && calentamientoBilboVivo(fecha, r.e, grupo, r));
 }
 function sugerenciaCalent(fecha, id, series) {
-  if (tipoDe(id) !== "fuerza") return null;
+  if (tipoDe(id) !== "fuerza" || !esBilboCalent(series)) return null;
   const efectivas = series.filter(s => !s.calentamiento).sort((a, b) => a.orden - b.orden);
   if (!efectivas.length || series.some(s => s.calentamiento) || efectivas.some(hecha) || calentAceptado(fecha, efectivas)) return null;
   if (calentRechazado(fecha, id, series)) return null;
   const bilbo = efectivas.find(s => !!s.ciclo_id), kg = pesoMostrado(bilbo || efectivas[0]), barra = usaBarra(id) ? ajustes().barra : 0;
   if (bilbo && conflictoNombreBilbo(fecha, id, bilbo.grupo || "")) {
     const aviso = []; aviso.aviso = "Hay ejercicios distintos con el mismo nombre. Antes de añadir, hay que decidir cómo distinguir sus calentamientos."; return aviso;
-  }
-  if (!bilbo) {
-    // Fuera de Bilbo se conserva exactamente la elegibilidad y progresión anterior.
-    if (fecha !== iso(new Date()) || !(kg >= 40)) return null;
-    const pasos = barra ? [{ peso: barra, reps: 10, barra: true }] : [];
-    [[0.5, 5], [0.7, 3], [0.85, 1]].forEach(([f, reps]) => {
-      const p = redondear(kg * f), previo = pasos.length ? pasos[pasos.length - 1].peso : 0;
-      if (p > previo && p < kg) pasos.push({ peso: p, reps });
-    });
-    return pasos.length >= 2 ? pasos : null;
   }
   // Bilbo pendiente se puede preparar en cualquier fecha y con cualquier carga positiva finita.
   // [] mantiene visible la posibilidad, con explicación y Añadir deshabilitado si falta la carga.
@@ -9856,7 +9848,7 @@ const textoCalent = pasos => pasos.aviso || (pasos.length ? "¿Calentamiento? " 
 function aceptarCalent(fecha, id, grupo, series, pasos) {
   const clave = claveCalent(fecha, id, series);
   const actuales = seriesDelDia(fecha).filter(s => s.ejercicio_id === id && claveCalent(fecha, id, [s]) === clave);
-  if (!clave || !actuales.some(s => !s.calentamiento) || actuales.some(hecha)) { setEstado("El contexto cambió; no se añadió calentamiento."); return []; }
+  if (!clave || !esBilboCalent(actuales) || !actuales.some(s => !s.calentamiento) || actuales.some(hecha)) { setEstado("El contexto cambió; no se añadió calentamiento."); return []; }
   if (actuales.some(s => s.calentamiento) || calentAceptado(fecha, actuales)) { pintarBloques(true); return []; }
   // Un botón anterior no puede añadir la propuesta de otra carga ni reabrir una respuesta No.
   if (actuales.some(s => !!s.ciclo_id)) {
@@ -10867,6 +10859,9 @@ function pintarEntreno() {
   const mov = tipo === "movilidad";
   const sc = !dist && !mov && sinCarga(s.ejercicio_id) && !cargaGuardada(s);
   ent.campos = sc ? (!(n0(s.reps) > 0) && (n0(s.tiempo) > 0 || s.max_tiempo) ? ["s", "reps"] : ["reps", "s"]) : dist ? (n0(s.distancia) > 0 ? ["m", "t"] : ["t", "m"]) : !mov && ((n0(s.tiempo) > 0 || s.max_tiempo) && !(n0(s.reps) > 0) || conDistFuerza(s) && !(n0(s.reps) > 0)) ? ["kg", "s"] : mov ? (n0(s.reps) > 0 || !(n0(s.tiempo) > 0) ? ["reps", "s"] : ["s", "reps"]) : ["kg", "reps"];
+  // Repeticiones antes de kg también en el recorrido de foco; mover la etiqueta completa conserva sus controles.
+  const primerCampo = $(ent.campos[0] === "kg" && ent.campos[1] === "reps" ? "enB" : "enA").closest(".en-campo");
+  if (primerCampo.parentElement.firstElementChild !== primerCampo) primerCampo.parentElement.prepend(primerCampo);
   const etiqueta = { kg: "Peso (kg)", reps: "Repeticiones" + (s.por_lado ? " por lado" : ""), m: enKm() ? "Kilómetros" : "Metros", t: "Tiempo", s: "Tiempo" + (s.por_lado ? " por lado" : "") + " (45 = segundos)" };
   const valor = c => c === "kg" ? (kg ? num(kg) : "") : c === "reps" ? ((s.ciclo_id === "auto" || esRango(s)) && !hecha(s) ? "" : n0(s.reps) || "")
     : c === "m" ? distCampo(s.distancia) : c === "s" ? (n0(s.tiempo) > 0 ? (n0(s.tiempo) < 60 ? String(n0(s.tiempo)) : fmtTiempo(s.tiempo)) : "") : n0(s.tiempo) ? fmtTiempo(s.tiempo) : "";
@@ -11017,7 +11012,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v295" + (BETA ? " beta" : "");
+const VERSION_APP = "v296" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

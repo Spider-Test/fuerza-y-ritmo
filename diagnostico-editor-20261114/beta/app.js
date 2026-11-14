@@ -41,7 +41,7 @@ const $ = id => document.getElementById(id);
 // ---------- Almacenamiento local (funciona sin conexión) ----------
 // La beta (carpeta /beta/ en la misma web) comparte el navegador con la principal: guarda todo con su propio prefijo.
 // «beta2:» sustituye a «beta:» (que apuntaba a producción): las sesiones, cambios pendientes y datos antiguos de «beta:» NO se leen ni se borran.
-const BETA = location.pathname.includes("/beta/"), PREFIJO = "fyr-diagnostico-editor-307-afinado:";
+const BETA = location.pathname.includes("/beta/"), PREFIJO = "fyr-diagnostico-editor-307-barra:";
 const VERSION_VISIBLE = "26";   // la versión que se ve en la app (fija); la interna es VERSION_APP
 // La sesión es común a las pestañas de esta versión; los datos locales pertenecen
 // a una cuenta concreta durante toda la vida de la página. Cambiar de cuenta recarga.
@@ -12023,6 +12023,33 @@ $("buscarPlantilla").addEventListener("input", () => {
   window.addEventListener("scroll", () => { if (!campo) return; if (!manual && !ajustado && abierto) preparar(); else if (contexto && valido()) mostrarContexto(limites()); }, { passive: true });
   new MutationObserver(() => { if (campo && !valido()) terminar(); else if (campo && contexto) mostrarContexto(limites()); }).observe($("vistaSemana"), { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden", "inert", "class"] });
   document.addEventListener("visibilitychange", () => { if (document.hidden) terminar(); });
+})();
+
+// INC-EDITOR-001: ocultación sin reflujo de la navegación durante el teclado del editor.
+(() => {
+  const vv = window.visualViewport, barra = document.querySelector("#app > .tabbar");
+  if (!vv || !barra) return;
+  let form = null, ocultada = false, inertAnterior = false;
+  const restaurar = () => {
+    if (!ocultada) return;
+    barra.classList.remove("editor-teclado-oculta"); barra.inert = inertAnterior; ocultada = false;
+  };
+  const actualizar = () => {
+    if (!form?.isConnected || form.closest("[hidden], [inert], .plegado, .g-plegado, .p-plegada") || document.hidden || document.querySelector("dialog[open]")) { form = null; restaurar(); return; }
+    const teclado = matchMedia("(max-width: 760px)").matches && vv.scale <= 1.02 && innerHeight - vv.height > 150 && getComputedStyle(barra).position === "fixed";
+    if (!teclado) { restaurar(); return; }
+    if (!ocultada) { inertAnterior = barra.inert; barra.inert = true; barra.classList.add("editor-teclado-oculta"); ocultada = true; }
+  };
+  document.addEventListener("focusin", ev => {
+    const f = ev.target.closest?.("#vistaSemana .bloques .bloque form.nueva-serie");
+    if (f && ev.target.matches("input:not([type=checkbox]):not([type=radio])")) form = f;
+    else if (!form?.contains(ev.target)) form = null;
+    actualizar();
+  });
+  document.addEventListener("focusout", () => queueMicrotask(() => { if (form && !form.contains(document.activeElement)) { form = null; restaurar(); } else actualizar(); }));
+  vv.addEventListener("resize", actualizar); vv.addEventListener("scroll", actualizar);
+  new MutationObserver(actualizar).observe($("vistaSemana"), { subtree: true, childList: true, attributes: true, attributeFilter: ["class", "hidden", "inert"] });
+  document.addEventListener("visibilitychange", actualizar);
 })();
 
 // ---------- Zoom: sin doble toque a tamaño normal; si se amplía con los dedos, el doble toque nativo de iOS vuelve atrás ----------

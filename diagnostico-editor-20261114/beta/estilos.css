@@ -2869,3 +2869,7 @@ dialog#dlgAviso { margin: auto; }
   color: var(--fg); background: var(--card); font-size: 13px; line-height: 18px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+
+/* Sin reflujo ni traslación; inert también impide foco/interacción en toda la navegación oculta. */
+#app > .tabbar.editor-teclado-oculta,
+#app > .tabbar.editor-teclado-oculta * { visibility: hidden !important; pointer-events: none !important; }

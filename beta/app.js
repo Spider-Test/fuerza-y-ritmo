@@ -4568,7 +4568,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
     cal.innerHTML = '<span class="cs-t"></span><span class="cs-b"><button type="button" class="nav-btn cs-no">No</button><button type="button" class="anadir cs-si">Añadir</button></span>';
     cal.querySelector(".cs-t").textContent = "¿Calentamiento? " + pasosCalent.map(p => (p.barra ? "barra" : num(p.peso) + " kg") + " × " + p.reps).join(" · ");
     cal.querySelector(".cs-si").addEventListener("click", () => aceptarCalent(dia.id, id, grupo, series, pasosCalent));
-    cal.querySelector(".cs-no").addEventListener("click", () => { rechazarCalent(dia.id, id); pintarDia(dia); });
+    cal.querySelector(".cs-no").addEventListener("click", () => { rechazarCalent(dia.id, id, series); pintarDia(dia); });
     ol.after(cal);
   }
   // Rellena con la primera serie pendiente, o con la última hecha de este ejercicio
@@ -9778,11 +9778,16 @@ const usaBarraNombre = id => /sentadilla|banca|peso muerto|press militar|remo co
   && !/mancuerna|polea|maquina|kettle|smith|multipower|goblet/.test(norm(nombreEj(id)));
 const usaBarra = id => { const o = (ajustes().barras || {})[id]; return tipoDe(id) === "fuerza" && (o !== undefined ? o : usaBarraNombre(id)); };
 // Hoy, antes de la primera serie efectiva con peso: barra × 10 (si va con barra), 50 % × 5, 70 % × 3 y 85 % × 1
+// La respuesta pertenece a fecha/ejercicio/entrenamiento/parte/superserie/copia, no al ejercicio global.
+function claveCalent(fecha, id, series) {
+  const s = series.find(s => !s.calentamiento) || series[0];
+  return s ? fecha + "|" + JSON.stringify([id, s.grupo || "", s.seccion || "", s.bloque_id || "", n0(s.copia)]) : null;
+}
 function sugerenciaCalent(fecha, id, series) {
   if (tipoDe(id) !== "fuerza" || fecha !== iso(new Date())) return null;
   const efectivas = series.filter(s => !s.calentamiento).sort((a, b) => a.orden - b.orden);
   if (!efectivas.length || series.some(s => s.calentamiento) || efectivas.some(hecha)) return null;
-  if ((leer("calent-rechazado-v1") || {})[fecha + "|" + id]) return null;
+  if ((leer("calent-respuesta-v2") || {})[claveCalent(fecha, id, series)]) return null;
   const kg = pesoMostrado(efectivas[0]), barra = usaBarra(id) ? ajustes().barra : 0;
   if (!(kg >= 40)) return null;
   const pasos = barra ? [{ peso: barra, reps: 10, barra: true }] : [];
@@ -9793,20 +9798,26 @@ function sugerenciaCalent(fecha, id, series) {
   return pasos.length >= 2 ? pasos : null;
 }
 function aceptarCalent(fecha, id, grupo, series, pasos) {
-  const primera = Math.min.apply(null, series.map(s => n0(s.orden)));
+  const clave = claveCalent(fecha, id, series);
+  const actuales = seriesDelDia(fecha).filter(s => s.ejercicio_id === id && claveCalent(fecha, id, [s]) === clave);
+  if (!clave || !actuales.some(s => !s.calentamiento) || actuales.some(hecha)) { setEstado("El contexto cambió; no se añadió calentamiento."); return []; }
+  if (actuales.some(s => s.calentamiento)) { pintarBloques(true); return []; }
+  const base = actuales.find(s => !s.calentamiento);
+  const primera = Math.min.apply(null, actuales.map(s => n0(s.orden)));
   const nuevas = pasos.map((p, k) => ({ id: nuevoId(), fecha, ejercicio_id: id, orden: primera - pasos.length + k, peso: p.peso, reps: p.reps, distancia: 0, tiempo: 0,
-    descanso: 60, rec_dist: 0, pct: 0, ciclo_id: "", calentamiento: true, hecha: false, grupo: grupo || "", meso_id: "", bloque_id: "", ronda: 0, borrado: false }));
+    descanso: 60, rec_dist: 0, pct: 0, ciclo_id: "", calentamiento: true, hecha: false, grupo: grupo || "", seccion: base.seccion || "", copia: n0(base.copia), meso_id: "", bloque_id: "", ronda: 0, borrado: false }));
   nuevas.forEach(f => cambiar("series", f, true));
   persistir();
   pintarBloques(true);
-  avisoDeshacer("Calentamiento añadido · " + nombreEj(id), nuevas.map(f => ["series", { ...f, borrado: true }]));
+  avisoDeshacer("Calentamiento añadido localmente · " + nombreEj(id), nuevas.map(f => ["series", { ...f, borrado: true }]));
   return nuevas;
 }
-function rechazarCalent(fecha, id) {
-  const r = leer("calent-rechazado-v1") || {}, limite = iso(sumarDias(new Date(), -7));
+function rechazarCalent(fecha, id, series) {
+  const clave = claveCalent(fecha, id, series); if (!clave) return;
+  const r = leer("calent-respuesta-v2") || {}, limite = iso(sumarDias(new Date(), -7));
   Object.keys(r).forEach(k => { if (k.slice(0, 10) < limite) delete r[k]; });
-  r[fecha + "|" + id] = true;
-  escribir("calent-rechazado-v1", r);
+  r[clave] = true;
+  escribir("calent-respuesta-v2", r);
 }
 
 // ---------- Molestias y lesiones, y zonas que trabaja cada ejercicio ----------
@@ -10724,7 +10735,7 @@ function pintarEntreno() {
   $("enExtra").textContent = [hecha(s) ? "✓ Hecha" : "", kg && usaBarra(s.ejercicio_id) ? textoDiscos(kg) : "", o ? textoObjetivo(o) : "", descTexto(s),
     dolor.length ? "⚠ cuidado con: " + dolor.map(m => m.zona).join(", ") : ""].filter(Boolean).join(" · ");
   // Calentamiento sugerido al llegar a la primera serie de un ejercicio
-  const delEj = s.bloque_id ? [] : seriesDelDia(ent.dia.id).filter(x => x.ejercicio_id === s.ejercicio_id && !x.bloque_id && (x.grupo || "") === (s.grupo || ""));
+  const delEj = s.bloque_id ? [] : seriesDelDia(ent.dia.id).filter(x => x.ejercicio_id === s.ejercicio_id && claveCalent(ent.dia.id, s.ejercicio_id, [x]) === claveCalent(ent.dia.id, s.ejercicio_id, [s]));
   ent.calent = s.bloque_id ? null : sugerenciaCalent(ent.dia.id, s.ejercicio_id, delEj);
   $("enCalent").hidden = !ent.calent;
   if (ent.calent) $("enCalentT").textContent = "¿Calentamiento? " + ent.calent.map(p => (p.barra ? "barra" : num(p.peso) + " kg") + " × " + p.reps).join(" · ");
@@ -10859,13 +10870,14 @@ $("enDesmarcar").addEventListener("click", () => { const s = serieEnt(); if (!s 
 $("enCalentSi").addEventListener("click", () => {
   const s = serieEnt();
   if (!s || !ent.calent) return;
-  const delEj = seriesDelDia(ent.dia.id).filter(x => x.ejercicio_id === s.ejercicio_id && !x.bloque_id && (x.grupo || "") === (s.grupo || ""));
+  const delEj = seriesDelDia(ent.dia.id).filter(x => x.ejercicio_id === s.ejercicio_id && claveCalent(ent.dia.id, s.ejercicio_id, [x]) === claveCalent(ent.dia.id, s.ejercicio_id, [s]));
   const nuevas = aceptarCalent(ent.dia.id, s.ejercicio_id, s.grupo, delEj, ent.calent);
+  if (!nuevas.length) { pintarEntreno(); return; }
   ent.cola = colaEntreno(ent.dia.id, ent.grupo);
   ent.i = Math.max(0, ent.cola.indexOf(nuevas[0].id));
   pintarEntreno();
 });
-$("enCalentNo").addEventListener("click", () => { const s = serieEnt(); if (s) rechazarCalent(ent.dia.id, s.ejercicio_id); pintarEntreno(); });
+$("enCalentNo").addEventListener("click", () => { const s = serieEnt(); if (s) rechazarCalent(ent.dia.id, s.ejercicio_id, [s]); pintarEntreno(); });
 $("enSig").addEventListener("click", () => { if (ent.i < ent.cola.length - 1) { ent.i++; pintarEntreno(); } });
 function salirEntreno() {
   if ($("dlgEntreno").open) $("dlgEntreno").close();
@@ -10882,7 +10894,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v302" + (BETA ? " beta" : "");
+const VERSION_APP = "v303" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

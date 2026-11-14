@@ -10912,6 +10912,9 @@ function pintarEntreno() {
   // v271: un ejercicio sin carga (ver sinCarga) no pide kg si la serie no tiene ninguno guardado; si ya lo tiene, el campo se muestra para no ocultar el dato
   const sc = !dist && !mov && sinCarga(s.ejercicio_id) && !cargaGuardada(s);
   ent.campos = sc ? (!(n0(s.reps) > 0) && (n0(s.tiempo) > 0 || s.max_tiempo) ? ["s", "reps"] : ["reps", "s"]) : dist ? (n0(s.distancia) > 0 ? ["m", "t"] : ["t", "m"]) : !mov && ((n0(s.tiempo) > 0 || s.max_tiempo) && !(n0(s.reps) > 0) || conDistFuerza(s) && !(n0(s.reps) > 0)) ? ["kg", "s"] : mov ? (n0(s.reps) > 0 || !(n0(s.tiempo) > 0) ? ["reps", "s"] : ["s", "reps"]) : ["kg", "reps"];
+  // Repeticiones antes de kg también en el recorrido de foco; mover la etiqueta completa conserva sus controles.
+  const primerCampo = $(ent.campos[0] === "kg" && ent.campos[1] === "reps" ? "enB" : "enA").closest(".en-campo");
+  if (primerCampo.parentElement.firstElementChild !== primerCampo) primerCampo.parentElement.prepend(primerCampo);
   const etiqueta = { kg: "Peso (kg)", reps: "Repeticiones" + (s.por_lado ? " por lado" : ""), m: enKm() ? "Kilómetros" : "Metros", t: "Tiempo", s: "Tiempo" + (s.por_lado ? " por lado" : "") + " (45 = segundos)" };
   const valor = c => c === "kg" ? (kg ? num(kg) : "") : c === "reps" ? ((s.ciclo_id === "auto" || esRango(s)) && !hecha(s) ? "" : n0(s.reps) || "")
     : c === "m" ? distCampo(s.distancia) : c === "s" ? (n0(s.tiempo) > 0 ? (n0(s.tiempo) < 60 ? String(n0(s.tiempo)) : fmtTiempo(s.tiempo)) : "") : n0(s.tiempo) ? fmtTiempo(s.tiempo) : "";
@@ -11062,7 +11065,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v312" + (BETA ? " beta" : "");
+const VERSION_APP = "v313" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

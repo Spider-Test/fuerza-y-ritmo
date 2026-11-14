@@ -1,0 +1,2863 @@
+/* Layout: días en rejilla en pantallas anchas; en el móvil, una lista de días grandes. Pestaña aparte para el catálogo de ejercicios. */
+:root {
+  --bg: #eef1ee;
+  --card: #ffffff;
+  --fg: #17201b;
+  --muted: #64716a;
+  --line: #d3dad5;
+  --accent: #1d7a4f;
+  --accent-soft: #e0f0e7;
+  --gold: #a86b00;
+  --gold-soft: #fbefd5;
+  --error: #c0392b;
+  --fuerza: #b4532a; --fuerza-soft: #fbe7dc;
+  --carrera: #2563a8; --carrera-soft: #e2ecf8;
+  --natacion: #0b7f80; --natacion-soft: #d8f1f0;
+  --movilidad: #7a4fb5; --movilidad-soft: #efe7f8;
+  --pulso: #0f766e; --bilbo: #7c3aed; --bilbo-futura: #5b6470;
+  --display: "Avenir Next Condensed", "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #101512; --card: #18201b; --fg: #e6ece8; --muted: #8e9b94;
+    --line: #2a352f; --accent: #4cc48a; --accent-soft: #1c3428;
+    --gold: #f0b94a; --gold-soft: #3a2e14; --error: #ff7b6b; color-scheme: dark;
+    --fuerza: #f29a6e; --fuerza-soft: #3b2418;
+    --carrera: #7fb1ec; --carrera-soft: #172a41;
+    --natacion: #5fd2cd; --natacion-soft: #113433;
+    --movilidad: #c3a3ef; --movilidad-soft: #2a1f3b;
+    --pulso: #67e8df; --bilbo: #c4b5fd; --bilbo-futura: #c5cfda;
+  }
+}
+
+/* Apertura breve al reabrir la app: usa automáticamente el tema actual. */
+.apertura { position:fixed; inset:0; z-index:20000; display:grid; place-items:center; padding:24px; background:var(--bg); pointer-events:none; opacity:0; }
+.apertura.activa { opacity:1; animation: apertura-salir .25s ease-out .76s forwards; }
+.logo-apertura { display:block; width:clamp(128px, 34vw, 168px); height:auto; overflow:visible; opacity:0; transform:scale(.94); filter:drop-shadow(0 10px 24px color-mix(in srgb,var(--accent) 18%,transparent)); }
+.logo-arco { fill:none; stroke:var(--accent); stroke-width:30; stroke-linecap:round; }
+.logo-pesa { fill:var(--fg); }
+.apertura.activa .logo-apertura { animation: apertura-parpadeo .86s ease-in-out both; }
+@keyframes apertura-parpadeo { 0% { opacity:0; transform:scale(.94); } 34% { opacity:1; transform:scale(1.02); } 48% { opacity:.48; transform:scale(.98); } 68% { opacity:1; transform:scale(1.015); } 100% { opacity:1; transform:scale(1); } }
+@keyframes apertura-salir { to { opacity:0; visibility:hidden; } }
+@media (prefers-reduced-motion: reduce) { .apertura.activa, .apertura.activa .logo-apertura { animation:none !important; } .apertura.activa { display:none; } }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; min-height: 100%; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-top: max(12px, env(safe-area-inset-top, 0px));
+  padding-bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) + 64px);
+  -webkit-text-size-adjust: 100%;
+}
+h1, h3 { font-family: var(--display); text-transform: uppercase; margin: 0; }
+h1 { font-weight: 700; font-size: 26px; letter-spacing: 0.04em; }
+/* Versión de pruebas (carpeta /beta/): una etiqueta para no confundirla con la principal */
+html.beta h1::after { content: "BETA"; margin-left: 8px; padding: 2px 6px; border-radius: 6px; background: #c2410c; color: #fff; font-size: 11px; letter-spacing: 0.08em; vertical-align: middle; }
+h3 { font-weight: 700; font-size: 15px; letter-spacing: 0.08em; color: var(--muted); }
+button, input, textarea { font-family: var(--body); color: var(--fg); }
+button { cursor: pointer; }
+button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+input, textarea { font-size: 16px; border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 8px 10px; min-width: 0; }
+.nav-btn {
+  flex: none; height: 34px; min-width: 34px; padding: 0 10px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--card); color: var(--fg);
+  font-weight: 600; font-size: 15px; display: inline-flex; align-items: center; justify-content: center; text-decoration: none;
+}
+.enlace { background: none; border: 0; color: var(--accent); font-size: 15px; padding: 6px; }
+.vacio-lista { color: var(--muted); margin: 8px 0; line-height: 1.45; }
+
+/* Inicio de sesión */
+#login { max-width: 360px; width: 100%; margin: 12vh auto 0; display: flex; flex-direction: column; gap: 14px; }
+#login p { margin: 0; color: var(--muted); line-height: 1.45; }
+#login form > div { display: flex; flex-direction: column; gap: 14px; }
+#login label { display: flex; flex-direction: column; gap: 6px; font-weight: 600; font-size: 14px; }
+#login input { font-size: 17px; padding: 12px; border-radius: 10px; }
+.primario { font-size: 17px; font-weight: 600; padding: 13px; border-radius: 10px; border: 0; background: var(--accent); color: var(--card); }
+.primario:disabled { opacity: 0.6; }
+#loginError { color: var(--error); font-size: 14px; min-height: 1em; }
+
+/* Estructura */
+#app { display: flex; flex-direction: column; gap: 12px; }
+.cabecera { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; }
+.tabs { display: flex; background: var(--line); border-radius: 10px; padding: 3px; gap: 2px; }
+.tabs button { border: 0; background: transparent; padding: 7px 16px; border-radius: 8px; font-weight: 600; font-size: 15px; color: var(--muted); }
+.tabs button[aria-selected="true"], .tabs button[aria-pressed="true"] { background: var(--card); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,0.12); }
+#vistaSemana, #vistaEjercicios, #vistaMarcas, #marcasCont { display: flex; flex-direction: column; gap: 12px; }
+.nav { display: flex; align-items: center; gap: 8px; }
+.nav-btn.flecha { font-size: 20px; line-height: 1; padding: 0; }
+#hoyBtn { color: var(--accent); }
+.semana-info { display: flex; flex-direction: column; align-items: center; min-width: 9.5em; line-height: 1.2; }
+#rango { font-weight: 600; font-variant-numeric: tabular-nums; }
+#relativa { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
+#relativa.actual { color: var(--accent); }
+.pie { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px; color: var(--muted); }
+#estado.error { color: var(--error); }
+#salirBtn { font-size: 13px; color: var(--muted); }
+
+/* Días */
+.semana { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; align-items: start; }
+.dia { display: flex; flex-direction: column; min-width: 0; background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.dia.hoy { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.dia-cab { display: flex; align-items: center; gap: 6px; padding: 6px 6px 6px 10px; border-bottom: 1px solid var(--line); }
+.dia.hoy .dia-cab { background: var(--accent-soft); }
+.dia-nombre { font-family: var(--display); font-weight: 700; font-size: 18px; text-transform: uppercase; letter-spacing: 0.05em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dia.hoy .dia-nombre { color: var(--accent); }
+.dia-fecha { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; margin-left: auto; white-space: nowrap; }
+.negrita { flex: none; width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); font-weight: 700; font-size: 15px; padding: 0; }
+.negrita[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--card); }
+.editor { min-height: 90px; outline: none; padding: 8px 10px; line-height: 1.45; overflow-wrap: anywhere; white-space: pre-wrap; -webkit-user-select: text; user-select: text; }
+.editor b, .editor strong { font-weight: 700; }
+.editor.vacio::before { content: attr(data-pista); color: var(--muted); opacity: 0.7; pointer-events: none; }
+
+/* Ejercicios dentro de un día */
+.bloques { display: flex; flex-direction: column; gap: 8px; padding: 0 8px; }
+.bloques:not(:empty) { padding-top: 8px; border-top: 1px dashed var(--line); }
+.bloque { border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px 8px; display: flex; flex-direction: column; gap: 4px; }
+.bloque-cab { display: flex; align-items: center; gap: 6px; }
+.bloque-toggle { flex: none; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 8px; padding: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.bloque-toggle:hover, .bloque-toggle:focus-visible { background: var(--accent-soft); color: var(--accent); }
+.bloque-toggle .flecha-dia { transform: rotate(90deg); }
+.bloque.carrera-plegada > :not(.bloque-cab) { display: none !important; }
+.bloque.carrera-plegada .bloque-toggle .flecha-dia { transform: none; }
+.bloque.carrera-plegada { padding-bottom: 6px; }
+.ej-nombre { flex: 1; min-width: 0; text-align: left; border: 0; background: none; padding: 2px 0; font-weight: 700; font-size: 15px; overflow-wrap: anywhere; }
+.ico { color: var(--accent); font-size: 12px; margin-left: 4px; font-weight: 600; }
+.tipo-tag { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 0 5px; margin-left: 6px; vertical-align: 2px; }
+.quitar, .borrar { flex: none; border: 0; background: none; color: var(--muted); font-size: 14px; width: 26px; height: 26px; border-radius: 6px; padding: 0; }
+.series { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.series li { display: flex; align-items: center; gap: 8px; padding: 2px 0; font-variant-numeric: tabular-nums; }
+.series .n { width: 1.4em; flex: none; color: var(--muted); font-size: 13px; text-align: right; }
+.series .sv { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; column-gap: 8px; }
+.desc { color: var(--muted); font-size: 0.85em; }
+.pr { flex: none; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; color: var(--gold); background: var(--gold-soft); border-radius: 5px; padding: 1px 6px; }
+.nueva-serie { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
+.ns-fila { display: flex; align-items: center; gap: 6px; }
+.ns-fila input { flex: 1; width: 0; padding: 6px 8px; text-align: center; font-variant-numeric: tabular-nums; }
+.por { color: var(--muted); }
+.anadir { flex: none; border: 0; border-radius: 8px; background: var(--accent); color: var(--card); font-weight: 700; padding: 7px 12px; font-size: 14px; white-space: nowrap; }
+.add-ej { margin: 8px; border: 1px dashed var(--line); background: none; border-radius: 10px; padding: 8px; color: var(--accent); font-weight: 600; font-size: 14px; }
+
+/* Catálogo */
+.barra { display: flex; gap: 8px; }
+.barra input { flex: 1; }
+#catalogo { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.tarjeta { text-align: left; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.t-nombre { font-weight: 700; font-size: 16px; }
+.t-mejor { color: var(--fg); font-variant-numeric: tabular-nums; }
+.t-ultima { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* Ventanas */
+dialog { border: 0; padding: 0; border-radius: 16px; background: var(--card); color: var(--fg); width: min(560px, calc(100vw - 24px)); max-height: 88vh; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+dialog::backdrop { background: rgba(0,0,0,0.45); }
+.d-cab { position: sticky; top: 0; background: var(--card); display: flex; align-items: center; gap: 8px; padding: 12px 12px 10px 16px; border-bottom: 1px solid var(--line); z-index: 1; }
+.d-cab input { flex: 1; font-weight: 700; font-size: 18px; border-color: transparent; padding: 6px 8px; margin-left: -8px; }
+.d-cab input:hover, .d-cab input:focus { border-color: var(--line); }
+.cerrar { flex: none; border: 0; background: var(--bg); width: 32px; height: 32px; border-radius: 16px; font-size: 15px; color: var(--muted); }
+.d-cuerpo { padding: 14px 16px 18px; display: flex; flex-direction: column; gap: 18px; }
+.d-cuerpo section { display: flex; flex-direction: column; gap: 8px; }
+.seg button { flex: 1; }
+.fila { display: flex; gap: 8px; flex-wrap: wrap; }
+.fila input { flex: 1 1 200px; }
+.video { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; background: #000; }
+.video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+#detEmbed { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+#detEmbed:empty { display: none; }
+.abrir-video { display: inline-flex; align-self: flex-start; gap: 6px; padding: 8px 12px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); font-weight: 600; text-decoration: none; }
+#detNotas { width: 100%; min-height: 64px; resize: vertical; line-height: 1.4; }
+.records { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.rec { background: var(--bg); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.rec .r-et { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.rec .r-val { font-family: var(--display); font-weight: 700; font-size: 24px; font-variant-numeric: tabular-nums; }
+.rec .r-sub { font-size: 12px; color: var(--muted); }
+.rec.oro .r-val { color: var(--gold); }
+.marcas { list-style: none; margin: 0; padding: 0; }
+.marcas li { display: grid; grid-template-columns: 5.5em 1fr auto; gap: 10px; padding: 7px 0; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; align-items: baseline; }
+.marcas .m-d { font-weight: 700; }
+.marcas .m-f { color: var(--muted); font-size: 13px; }
+.graf { width: 100%; height: auto; display: block; }
+.g-rejilla { stroke: var(--line); stroke-width: 1; }
+.gn-txt { fill: var(--fg); }
+.g-area { fill: var(--accent); opacity: 0.12; }
+.g-linea { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+.g-punto { fill: var(--card); stroke: var(--accent); stroke-width: 2; }
+.g-fin { fill: var(--accent); }
+.g-txt { fill: var(--muted); font-size: 10px; font-family: var(--body); }
+.historial { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.historial li { display: grid; grid-template-columns: 6.5em 1fr; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.historial .h-f { color: var(--muted); font-size: 14px; }
+.historial .h-s { display: flex; flex-direction: column; gap: 2px; }
+.historial .es-pr { color: var(--gold); font-weight: 700; }
+.peligro { align-self: flex-start; border: 1px solid var(--line); background: none; color: var(--error); border-radius: 8px; padding: 8px 12px; font-weight: 600; }
+.peligro.confirmar { background: var(--error); color: var(--card); border-color: var(--error); }
+#listaEj { display: flex; flex-direction: column; padding: 6px 8px 12px; max-height: 55vh; overflow-y: auto; }
+.opcion { text-align: left; border: 0; background: none; padding: 12px 10px; border-radius: 8px; font-size: 16px; border-bottom: 1px solid var(--line); }
+.opcion:hover, .opcion:focus { background: var(--bg); }
+.crear-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px; border-bottom: 1px solid var(--line); }
+.crear-fila .cf-t { width: 100%; color: var(--accent); font-weight: 700; overflow-wrap: anywhere; }
+.opcion-tipo { border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 8px 14px; font-size: 15px; font-weight: 600; }
+.opcion-tipo.sugerido { background: var(--accent); border-color: var(--accent); color: var(--card); }
+
+@media (max-width: 760px) {
+  body { font-size: 17px; }
+  h1 { font-size: 30px; }
+  .cabecera .tabs { width: 100%; }
+  .cabecera .tabs button { flex: 1; padding: 9px 0; font-size: 16px; }
+  .nav { width: 100%; justify-content: space-between; }
+  .nav-btn { height: 44px; min-width: 44px; border-radius: 10px; font-size: 16px; }
+  .nav-btn.flecha { font-size: 24px; }
+  .semana-info { flex: 1; }
+  #rango { font-size: 17px; }
+  .semana { grid-template-columns: 1fr; gap: 14px; }
+  .dia { border-radius: 14px; }
+  .dia-cab { padding: 10px 10px 10px 14px; gap: 10px; }
+  .dia-nombre { font-size: 26px; }
+  .dia-fecha { font-size: 15px; }
+  .negrita { width: 40px; height: 40px; font-size: 19px; border-radius: 9px; }
+  .editor { min-height: 120px; padding: 12px 14px; font-size: 17px; line-height: 1.5; }
+  .bloques { padding: 0 10px; }
+  .bloque { padding: 8px 10px 10px; }
+  .ej-nombre { font-size: 17px; }
+  .series li { font-size: 17px; padding: 4px 0; }
+  .quitar, .borrar { width: 36px; height: 36px; font-size: 16px; }
+  .ns-fila input { font-size: 18px; padding: 9px 8px; }
+  .anadir { padding: 11px 14px; font-size: 16px; }
+  .add-ej { margin: 10px; padding: 12px; font-size: 16px; }
+  /* Arriba, para que el teclado del iPhone no tape las opciones; el menú sin campos sigue abajo */
+  dialog { width: calc(100vw - 16px); max-width: calc(100vw - 16px); max-height: 85vh; margin: max(8px, env(safe-area-inset-top, 0px)) auto auto; border-radius: 16px; }
+  #menu { margin: auto auto max(8px, env(safe-area-inset-bottom, 0px)); }
+  #listaEj { max-height: 45vh; }
+}
+
+/* Sesiones, series planificadas y menús */
+.menu-btn { flex: none; border: 1px solid var(--line); background: var(--card); color: var(--muted); width: 28px; height: 28px; border-radius: 6px; padding: 0; font-size: 16px; font-weight: 700; line-height: 1; }
+.grupo-cab { display: flex; align-items: center; gap: 8px; padding: 4px 2px 0; }
+.grupo-cab .g-nombre { font-family: var(--display); font-weight: 700; font-size: 16px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.grupo-cab .g-prog { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.series .sv { border: 0; background: none; padding: 0; text-align: left; font: inherit; color: inherit; }
+.series li.plan .sv { color: var(--muted); }
+.series li.editando { background: var(--accent-soft); border-radius: 6px; }
+.marcar { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--accent); background: none; padding: 0; margin-left: 2px; }
+.marcar:hover { background: var(--accent-soft); }
+.meso-banda { margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); font-weight: 600; font-size: 14px; text-align: center; }
+.d-tit { flex: 1; color: var(--fg); font-size: 18px; letter-spacing: 0.05em; }
+.menu-det { margin: 0; padding: 10px 16px 0; color: var(--muted); font-size: 14px; line-height: 1.4; }
+.menu-det:empty { display: none; }
+.menu-op { display: flex; flex-direction: column; padding: 6px 8px 14px; }
+.peligro-op { color: var(--error); }
+.d-form { display: flex; flex-direction: column; gap: 10px; padding: 16px; }
+.d-form h3 { color: var(--fg); font-size: 18px; }
+.d-form .menu-det { padding: 0; }
+.d-botones { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; align-items: center; }
+.campo { display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 600; color: var(--muted); flex: none; }
+.fila > .campo { flex: 1 1 160px; }
+.campo input, .campo textarea { color: var(--fg); font-weight: 400; }
+.campo input, .campo select { flex: none; }   /* dentro de .fila, que no se estiren a lo alto */
+.aviso { margin: 0; color: var(--error); font-size: 14px; min-height: 1em; }
+.meso-dia { display: grid; grid-template-columns: 6.5em 1fr auto; gap: 8px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); }
+.md-n { font-weight: 600; }
+.md-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.md-vacio { color: var(--muted); font-size: 14px; }
+.md-lista { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 0 8px 6.5em; }
+.chip { border: 1px solid var(--accent); background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 4px 10px; font-size: 13px; font-weight: 600; }
+.chip-op { background: var(--card); }
+.plan-sec { display: flex; flex-direction: column; gap: 10px; }
+.sec-cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.lista-tarjetas { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.usuario { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+.u-info { display: flex; flex-direction: column; min-width: 0; }
+.u-email { font-weight: 600; overflow-wrap: anywhere; }
+.u-fecha { font-size: 13px; color: var(--muted); }
+.u-estado { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 14px; }
+.con-aviso { color: var(--gold) !important; }
+#pendiente { max-width: 380px; margin: 12vh auto 0; display: flex; flex-direction: column; gap: 14px; line-height: 1.45; }
+#pendiente p { margin: 0; color: var(--muted); }
+#pendiente b { color: var(--fg); overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .menu-btn { width: 40px; height: 40px; font-size: 20px; border-radius: 9px; }
+  .marcar { width: 30px; height: 30px; }
+  .grupo-cab .g-nombre { font-size: 18px; }
+  .meso-dia { grid-template-columns: 5.5em 1fr auto; }
+  .md-lista { padding-left: 0; }
+}
+
+/* Bloques repetibles */
+.add-fila { display: flex; gap: 8px; margin: 8px; }
+.add-fila .add-ej { flex: 1; margin: 0; }
+.bloque-rep { border-style: dashed; border-color: var(--accent); }
+.bloque-rep .bloque-cab { gap: 8px; }
+.br-tit { flex: 1; min-width: 0; font-weight: 700; font-size: 15px; overflow-wrap: anywhere; }
+.bloque-rep .g-prog { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.rondas { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.ronda { display: grid; grid-template-columns: 2.2em 1fr; gap: 4px; align-items: start; padding: 6px 0; border-top: 1px solid var(--line); }
+.ronda:first-child { border-top: 0; }
+.r-lab { font-family: var(--display); font-weight: 700; color: var(--accent); padding-top: 4px; font-variant-numeric: tabular-nums; }
+.ronda .n { color: var(--accent); }
+.br-que { font-size: 13px; font-weight: 700; color: var(--accent); }
+.tramo { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-top: 1px solid var(--line); }
+.tramo .in-c, .tramo .ns-fila input { padding: 8px; text-align: center; }
+.tr-cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 700; }
+#blqAnadir { margin: 0; }
+@media (max-width: 760px) {
+  .br-tit { font-size: 17px; }
+  .ronda { grid-template-columns: 2.4em 1fr; }
+  .r-lab { font-size: 18px; padding-top: 6px; }
+  .add-fila { margin: 10px; }
+}
+
+/* % del RM, Bilbo y temporizador */
+.modo, .modo-dist { flex: none; min-width: 40px; height: 32px; border: 1px solid var(--line); background: var(--card); color: var(--muted); border-radius: 8px; font-weight: 700; padding: 0 8px; }
+.modo.activo, .modo-dist.activo { background: var(--accent); border-color: var(--accent); color: var(--card); }
+.ns-extra { display: flex; flex-direction: column; gap: 4px; }
+.ns-extra:has(.calc:empty):has(.bilbo-op[hidden]):not(:has(.ops-fuerza)) { display: none; }
+.calc { font-size: 13px; color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; }
+.calc:empty { display: none; }
+.bilbo-op { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--gold); }
+.bilbo-op input { width: 18px; height: 18px; accent-color: var(--gold); }
+.aviso-bilbo { margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--gold-soft); color: var(--gold); font-weight: 600; font-size: 14px; }
+.bilbo-cab { display: flex; flex-direction: column; gap: 2px; }
+.bc-t { font-weight: 700; font-size: 16px; }
+.bc-s { font-size: 13px; color: var(--muted); }
+.tabla-scroll { overflow-x: auto; }
+.tabla-bilbo { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 14px; }
+.tabla-bilbo th { text-align: right; font-size: 12px; color: var(--muted); font-weight: 600; padding: 6px 6px; border-bottom: 1px solid var(--line); }
+.tabla-bilbo td { text-align: right; padding: 6px; border-bottom: 1px solid var(--line); }
+.tabla-bilbo th:nth-child(2), .tabla-bilbo td:nth-child(2) { text-align: left; }
+.tabla-bilbo tfoot td { font-weight: 700; border-bottom: 0; }
+.tabla-bilbo tfoot td:first-child { text-align: left; }
+.tabla-bilbo .es-pr { color: var(--gold); font-weight: 700; }
+.bilbo-ant { border-top: 1px solid var(--line); padding-top: 8px; }
+.bilbo-ant summary { cursor: pointer; font-size: 14px; color: var(--muted); font-weight: 600; }
+.bilbo-form { display: flex; flex-direction: column; gap: 8px; }
+.rm-fila { align-items: center; }
+.rm-fila input { flex: 0 1 120px; }
+.rm-fila .menu-det { padding: 0; flex: 1 1 200px; }
+.crear-dist { color: var(--accent); font-weight: 700; }
+@media (max-width: 760px) {
+  .modo, .modo-dist { height: 42px; min-width: 46px; font-size: 16px; }
+}
+
+/* Varias series de golpe, sugerencias y compartir */
+.veces { flex: none; border: 1px solid var(--line); background: var(--card); color: var(--fg); border-radius: 8px; padding: 6px 4px; font-size: 14px; font-weight: 600; }
+.crear-fila .cf-t { border: 0; background: none; padding: 0; text-align: left; font-size: 15px; }
+.sug-tit { margin: 10px 10px 2px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.sugerida { color: var(--muted); }
+@media (max-width: 760px) {
+  .veces { padding: 10px 4px; font-size: 16px; }
+}
+
+/* Colores por tipo de entrenamiento y filtro del buscador */
+.tipo-tag.t-fuerza { color: var(--fuerza); background: var(--fuerza-soft); border-color: transparent; }
+.tipo-tag.t-carrera { color: var(--carrera); background: var(--carrera-soft); border-color: transparent; }
+.tipo-tag.t-natacion { color: var(--natacion); background: var(--natacion-soft); border-color: transparent; }
+.tipo-tag.t-movilidad { color: var(--movilidad); background: var(--movilidad-soft); border-color: transparent; }
+.filtro-tipo { margin: 10px 12px 0; }
+.filtro-tipo button { flex: 1; padding: 7px 4px; font-size: 14px; }
+.filtro-tipo button.t-fuerza[aria-pressed="true"] { background: var(--fuerza); color: var(--card); }
+.filtro-tipo button.t-carrera[aria-pressed="true"] { background: var(--carrera); color: var(--card); }
+.filtro-tipo button.t-natacion[aria-pressed="true"] { background: var(--natacion); color: var(--card); }
+.filtro-tipo button.t-movilidad[aria-pressed="true"] { background: var(--movilidad); color: var(--card); }
+.opcion-tipo.t-fuerza.sugerido { background: var(--fuerza); border-color: var(--fuerza); }
+.opcion-tipo.t-carrera.sugerido { background: var(--carrera); border-color: var(--carrera); }
+.opcion-tipo.t-natacion.sugerido { background: var(--natacion); border-color: var(--natacion); }
+.opcion-tipo.t-movilidad.sugerido { background: var(--movilidad); border-color: var(--movilidad); }
+@media (max-width: 760px) {
+  .filtro-tipo button { padding: 9px 2px; font-size: 15px; }
+}
+
+/* Marcas, forma y objetivos de carrera */
+.objetivo { flex-basis: 100%; font-size: 0.85em; font-weight: 600; color: var(--carrera); }
+.aviso-estim { margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--carrera-soft); color: var(--carrera); font-size: 13px; line-height: 1.4; }
+.nota { padding: 0; }
+.tabla-marcas td:first-child, .tabla-marcas th:first-child { text-align: left; }
+.fila-pulsable { cursor: pointer; }
+.fila-pulsable.activa td { color: var(--carrera); font-weight: 700; }
+@media (max-width: 760px) {
+  .cabecera .tabs button { font-size: 14px; }
+}
+
+/* Catálogo común */
+.permiso { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--muted); width: 100%; }
+.permiso input { width: 18px; height: 18px; accent-color: var(--accent); }
+#detalle input:disabled, #detalle textarea:disabled { opacity: 0.7; }
+
+/* Ayuda, resumen semanal, esfuerzo (RPE), Crear con IA y copia de seguridad */
+.titulo { display: flex; align-items: center; gap: 8px; }
+.ayuda-btn { flex: none; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); background: var(--card); color: var(--accent); font-weight: 800; font-size: 15px; padding: 0; }
+.sem-resumenes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 8px; }
+.sem-resumenes > details { min-width: 0; }
+.sem-resumenes > details[open] { grid-column: 1 / -1; }
+.resumen-sem { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 0 12px; }
+.resumen-sem summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 10px 0; cursor: pointer; list-style: none; }
+.resumen-sem summary::-webkit-details-marker { display: none; }
+.resumen-sem summary::before { content: "▸"; color: var(--muted); font-size: 12px; transition: transform 0.15s; }
+.resumen-sem[open] summary::before { transform: rotate(90deg); }
+.rs-t { font-family: var(--display); font-weight: 700; font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em; }
+.rs-l { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.resumen-sem .records { padding-bottom: 12px; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); }
+.resumen-sem .rec .r-val { font-size: 20px; }
+.lesiones-sem { min-width: 220px; }
+.lesiones-sem summary { align-items: center; }
+.lesiones-sem .rs-l { color: var(--error); font-weight: 650; }
+.molestias-semana { padding: 0 0 12px; }
+.molestias-semana .menu-det { margin-top: 8px; }
+.molestias-semana .lista-tarjetas { margin-top: 8px; }
+.rpe-dia { margin: 0 8px 8px; border: 0; background: none; color: var(--muted); font-size: 13px; text-align: left; padding: 4px 2px; overflow-wrap: anywhere; }
+.rpe-dia.con-rpe { color: var(--fg); background: var(--bg); border-radius: 8px; padding: 6px 10px; }
+.rpe-escala { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; }
+.rpe-escala button { border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 9px 0; font-weight: 700; font-size: 15px; font-variant-numeric: tabular-nums; }
+.rpe-escala button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--card); }
+.campo select, .ia-paso select { font-size: 16px; border: 1px solid var(--line); background: var(--card); color: var(--fg); border-radius: 8px; padding: 8px 10px; font-weight: 400; }
+.ia-paso { display: flex; flex-direction: column; gap: 10px; }
+.ia-paso textarea { font-size: 14px; line-height: 1.4; resize: vertical; }
+#iaTexto { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--muted); }
+.ia-tit { color: var(--fg); font-size: 18px; }
+.ia-vista { display: flex; flex-direction: column; gap: 10px; }
+.rutina-ses { background: var(--bg); border-radius: 10px; padding: 8px 12px; font-size: 14px; }
+.rutina-ses ul { margin: 4px 0 0; padding-left: 18px; color: var(--muted); line-height: 1.45; }
+.d-botones .nota { margin-right: auto; }
+.botonera { display: flex; flex-wrap: wrap; gap: 8px; }
+.botonera .nav-btn { height: auto; min-height: 34px; padding: 6px 12px; cursor: pointer; }
+.ayuda p { margin: 0; line-height: 1.5; }
+.ayuda details { border-top: 1px solid var(--line); padding: 10px 0 0; display: flex; flex-direction: column; gap: 8px; }
+.ayuda details > p { margin-top: 8px; color: var(--muted); }
+.ayuda details > p b { color: var(--fg); }
+.ayuda summary { font-weight: 700; cursor: pointer; padding-bottom: 2px; }
+.d-cuerpo.ayuda { gap: 10px; }
+@media (max-width: 760px) {
+  .sem-resumenes { grid-template-columns: minmax(0, 1fr) minmax(0, auto); gap: 6px; }
+  .lesiones-sem { min-width: 0; }
+  .lesiones-sem .rs-t { font-size: 13px; }
+  .lesiones-sem summary { gap: 4px; }
+  .lesiones-sem .rs-l { font-size: 12px; }
+  .ayuda-btn { width: 34px; height: 34px; font-size: 17px; }
+  .rpe-escala { grid-template-columns: repeat(5, 1fr); }
+  .rpe-escala button { padding: 12px 0; font-size: 17px; }
+  .rpe-dia { font-size: 14px; padding: 8px 4px; }
+}
+
+/* ===== Rediseño: aspecto de app de deporte, pestañas abajo, día de hoy primero y modo entreno ===== */
+:root {
+  --bg: #f1f3f2; --line: #dde3df; --accent: #0f7a4c; --accent-soft: #dcf1e6; --error-soft: #fbe3df;
+  --sombra: 0 1px 2px rgba(16, 24, 20, 0.06), 0 4px 14px rgba(16, 24, 20, 0.05);
+  --toast-bg: #17201b; --toast-fg: #f1f5f2; --toast-acento: #7ee2b0;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0c110e; --card: #161d19; --line: #26302a; --accent: #44d08f; --accent-soft: #15301f; --error-soft: #3a1c18;
+          --sombra: 0 1px 2px rgba(0, 0, 0, 0.4); --toast-bg: #e8eeea; --toast-fg: #111713; --toast-acento: #0b6b43; }
+}
+body { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 104px); }
+.cabecera { flex-wrap: nowrap; justify-content: space-between; }
+.ayuda-btn { width: 40px; height: 40px; font-size: 18px; }
+.dia, .tarjeta, .resumen-sem, .plan-sec, .usuario { box-shadow: var(--sombra); border-color: transparent; }
+@media (prefers-color-scheme: dark) { .dia, .tarjeta, .resumen-sem, .plan-sec, .usuario { border-color: var(--line); } }
+
+/* Barra de pestañas fija abajo, estilo iOS */
+.tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; justify-content: center; gap: 2px;
+  padding: 6px max(8px, env(safe-area-inset-left, 0px)) calc(4px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-right, 0px));
+  background: color-mix(in srgb, var(--card) 86%, transparent); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); border-top: 1px solid var(--line); }
+.tabbar button { flex: 1; max-width: 150px; min-height: 50px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  border: 0; background: none; color: var(--muted); font-size: 11px; font-weight: 600; border-radius: 10px; padding: 2px 0; }
+.tabbar svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.tabbar button[aria-selected="true"] { color: var(--accent); }
+.tabbar button[aria-selected="true"] svg { stroke-width: 2.3; }
+.tabbar .con-aviso { color: var(--gold) !important; }
+
+/* Cabecera del día: ligera; ⋯ discreto; negrita solo al escribir */
+.dia-cab { gap: 6px; padding: 4px 4px 4px 4px; }
+.dia-abrir { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; border: 0; background: none; padding: 6px 8px; border-radius: 8px; text-align: left; min-height: 40px; }
+.dia-abrir:hover { background: var(--bg); }
+.dia-abrir .dia-fecha { margin-left: 0; }
+.menu-btn { border: 0; background: none; width: 36px; height: 36px; font-size: 20px; color: var(--muted); }
+.negrita { display: none; }
+.dia.escribiendo .negrita { display: inline-flex; align-items: center; justify-content: center; }
+.anillo { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 600; }
+.anillo svg { width: 22px; height: 22px; }
+.anillo circle { fill: none; stroke-width: 4.5; }
+.a-fondo { stroke: var(--line); }
+.a-hecho { stroke: var(--accent); stroke-linecap: round; }
+.anillo.completo { color: var(--accent); }
+.editor { min-height: 56px; }
+.dia-resumen { display: none; width: 100%; text-align: left; border: 0; background: none; color: var(--muted); font-size: 15px; padding: 0 14px 12px 36px; min-height: 36px; overflow-wrap: anywhere; }
+.dia.plegado .dia-resumen { display: block; }
+.dia.plegado .negrita { display: none !important; }
+.dia.plegado .dia-cab { border-bottom: 0; }
+/* Desplegable con animación suave (sin animación si se pide menos movimiento) */
+.dia-cuerpo { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 0.25s ease; }
+.dia-cuerpo-in { min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+.dia.plegado .dia-cuerpo { grid-template-rows: 0fr; }
+.flecha-dia { display: inline-block; width: 14px; color: var(--muted); font-size: 13px; transition: transform 0.2s; align-self: center; }
+.dia:not(.plegado) .flecha-dia { transform: rotate(90deg); }
+.dia-max { flex: none; border: 0; background: none; color: var(--muted); width: 36px; height: 36px; border-radius: 8px; font-size: 17px; padding: 0; }
+.dia-max:hover { background: var(--bg); color: var(--accent); }
+.solo-dia .dia-max, .solo-dia .flecha-dia { display: none; }
+@media (prefers-reduced-motion: reduce) { .dia-cuerpo, .flecha-dia { transition: none; } }
+@media (max-width: 760px) { .dia-max { width: 44px; height: 44px; font-size: 19px; } }
+.empezar { display: block; width: calc(100% - 16px); margin: 4px 8px 8px; font-size: 17px; }
+.bloque.t-fuerza { border-left: 3px solid var(--fuerza); }
+.bloque.t-carrera { border-left: 3px solid var(--carrera); }
+.bloque.t-natacion { border-left: 3px solid var(--natacion); }
+.bloque.t-movilidad { border-left: 3px solid var(--movilidad); }
+
+/* Progreso de la semana y vista de un solo día */
+.sem-barra { height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; margin-top: -4px; }
+.sem-barra span { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.3s; }
+.dia-nav { display: flex; align-items: center; gap: 8px; }
+.dia-nav-t { flex: 1; min-width: 0; text-align: center; font-family: var(--display); font-weight: 700; font-size: 20px; text-transform: uppercase; letter-spacing: 0.05em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dia-nav .volver { color: var(--accent); }
+.solo-dia #resumenSem { display: none !important; }
+.solo-dia .semana { grid-template-columns: 1fr; max-width: 720px; width: 100%; margin: 0 auto; }
+.solo-dia .dia-abrir { pointer-events: none; }
+
+/* Campos con − y + */
+.paso { flex: 1; min-width: 0; display: flex; align-items: stretch; }
+.paso input { flex: 1; width: 0; min-width: 0; border-radius: 0; text-align: center; }
+.paso button { flex: none; width: 32px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font-size: 18px; font-weight: 700; padding: 0; }
+.paso button.menos { border-radius: 8px 0 0 8px; border-right: 0; }
+.paso button.mas { border-radius: 0 8px 8px 0; border-left: 0; }
+.paso button:active { background: var(--accent-soft); }
+
+/* Deslizar series */
+.series li.desliza { touch-action: pan-y pinch-zoom; position: relative; border-radius: 8px; }
+.series li[data-dir="der"] { background: var(--accent-soft); }
+.series li[data-dir="izq"] { background: var(--error-soft); }
+.series li.listo[data-dir="der"] { box-shadow: inset 4px 0 0 var(--accent); }
+.series li.listo[data-dir="izq"] { box-shadow: inset -4px 0 0 var(--error); }
+
+/* Aviso con Deshacer y celebración de récords */
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 78px); z-index: 30; display: flex; align-items: center; gap: 10px;
+  max-width: calc(100vw - 24px); width: max-content; padding: 6px 6px 6px 16px; border-radius: 14px; background: var(--toast-bg); color: var(--toast-fg); font-size: 15px; font-weight: 600; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25); }
+.toast span { overflow-wrap: anywhere; }
+.toast button { flex: none; min-height: 44px; padding: 0 14px; border: 0; border-radius: 10px; background: none; color: var(--toast-acento); font-weight: 800; font-size: 15px; }
+.toast.pr { background: var(--gold); color: #1e1400; }
+.toast.pr button { color: #1e1400; }
+dialog .toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 84px); }
+.fiesta { position: fixed; inset: 0; pointer-events: none; z-index: 40; overflow: hidden; }
+.fiesta i { position: absolute; top: -16px; width: 8px; height: 14px; border-radius: 2px; opacity: 0; }
+.fiesta.on i { animation: caer 1.4s cubic-bezier(0.3, 0.6, 0.5, 1) forwards; }
+@keyframes caer { 0% { transform: translateY(0) rotate(0); opacity: 1; } 100% { transform: translateY(75vh) rotate(560deg); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .fiesta { display: none; } .sem-barra span { transition: none; } }
+
+/* Modo entreno a pantalla completa */
+dialog.pantalla { width: 100vw; max-width: 100vw; height: 100vh; height: 100dvh; max-height: 100dvh; margin: 0; border-radius: 0; box-shadow: none; }
+dialog.pantalla[open] { display: flex; flex-direction: column; }
+.en-cab { display: flex; align-items: center; gap: 12px; padding: max(12px, env(safe-area-inset-top, 0px)) 16px 10px; border-bottom: 1px solid var(--line); }
+.en-prog { flex: 1; display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
+.en-barra { height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.en-barra span { display: block; height: 100%; background: var(--accent); }
+.en-cuerpo { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 18px 16px; width: 100%; max-width: 560px; margin: 0 auto; }
+.en-cuerpo p { margin: 0; }
+.en-grupo { color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; font-size: 13px; }
+.en-ej { margin: 0; font-family: var(--display); font-size: 32px; line-height: 1.1; text-transform: uppercase; letter-spacing: 0.02em; overflow-wrap: anywhere; }
+.en-ej .tipo-tag { font-size: 12px; vertical-align: middle; }
+.en-video { align-self: flex-start; flex-shrink: 0; min-height: 44px; height: auto; padding: 8px 12px; border-radius: 10px; color: var(--accent); background: var(--accent-soft); font-size: 14px; font-weight: 650; white-space: normal; text-align: left; }
+.en-serie { color: var(--muted); font-weight: 600; }
+.en-valor { font-family: var(--display); font-weight: 700; font-size: 44px; line-height: 1.05; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.en-valor.hecha { color: var(--accent); }
+.en-extra { color: var(--muted); font-size: 15px; line-height: 1.45; }
+.en-extra:empty { display: none; }
+.en-campos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.en-campo { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.en-campo .paso { height: 54px; }
+.en-campo .paso button { width: 46px; font-size: 22px; }
+.en-campo input { font-size: 22px; font-weight: 700; color: var(--fg); }
+.en-hecha { min-height: 58px; font-size: 20px; }
+.en-descanso { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px; border-radius: 16px; background: var(--accent-soft); color: var(--accent); }
+.en-descanso.fin { background: var(--gold-soft); color: var(--gold); }
+.en-d-t { font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; font-size: 13px; }
+.en-d-n { font-family: var(--display); font-weight: 700; font-size: 60px; line-height: 1; font-variant-numeric: tabular-nums; }
+.en-d-b { display: flex; gap: 8px; }
+.en-d-b .nav-btn { min-height: 44px; min-width: 76px; }
+.en-fin { display: flex; flex-direction: column; gap: 10px; align-items: stretch; text-align: center; }
+.en-pie { display: flex; gap: 10px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); }
+.en-pie .nav-btn { flex: 1; min-height: 50px; font-size: 16px; }
+.en-pie .nav-btn:disabled { opacity: 0.4; }
+
+/* Plan y Marcas en tarjetas separadas */
+#vistaPlan { display: flex; flex-direction: column; gap: 14px; }
+.plan-nav { position: sticky; top: 0; z-index: 4; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 8px; border-radius: 14px; background: var(--card); box-shadow: var(--sombra); }
+.plan-nav-btn { min-height: 42px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; color: var(--fg); background: transparent; font: inherit; font-weight: 650; cursor: pointer; }
+.plan-nav-btn.activa { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
+.plan-sec[hidden] { display: none !important; }
+@media (max-width: 430px) { .plan-nav { grid-template-columns: 1fr; position: static; } }
+.informe-controles { align-items: flex-end; gap: 10px; }
+.informe-controles > .campo { min-width: 180px; }
+.informe-controles #periodoInforme, .informe-fecha-boton { box-sizing: border-box; width: 100%; height: 40px; min-height: 40px; font-size: 15px; }
+.informe-fecha-campo { position: relative; }
+.informe-fecha { position: relative; display: block; }
+.informe-fecha-boton { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--fg); text-align: left; font-weight: 400; }
+.informe-fecha-boton::after { content: "▾"; color: var(--muted); font-size: 13px; }
+.calendario-informe { position: absolute; z-index: 8; top: calc(100% + 8px); left: 0; width: min(340px, calc(100vw - 32px)); padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); box-shadow: 0 12px 32px rgba(0,0,0,.28); }
+.cal-informe-cab { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.cal-informe-cab strong { font-size: 16px; text-transform: capitalize; }
+.cal-informe-dias { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.cal-informe-dias > span, .cal-informe-dias > button { display: flex; align-items: center; justify-content: center; min-width: 0; min-height: 40px; padding: 0; border-radius: 8px; }
+.cal-informe-dias > span { color: var(--muted); font-size: 12px; font-weight: 700; }
+.cal-informe-dias > button { border: 1px solid transparent; background: transparent; color: var(--fg); font-size: 15px; font-variant-numeric: tabular-nums; }
+.cal-informe-dias > button:hover, .cal-informe-dias > button:focus-visible { border-color: var(--accent); outline: none; }
+.cal-informe-dias > button.hoy { border-color: var(--line); }
+.cal-informe-dias > button.seleccionado { background: var(--accent); color: var(--card); font-weight: 700; }
+.informe-controles #descargarInforme { align-self: flex-end; height: 40px; min-height: 40px; padding: 0 12px; font-size: 14px; }
+@media (max-width: 600px) { .informe-controles > .campo { flex-basis: 100%; min-width: 0; } .informe-controles #descargarInforme { width: 100%; } }
+.plan-sec { background: var(--card); border-radius: 14px; padding: 14px 16px; }
+#marcasCont { gap: 14px; }
+
+@media (max-width: 760px) {
+  h1 { font-size: 24px; }
+  .dia-nombre { font-size: 22px; }
+  .dia-cab { padding: 4px; }
+  .menu-btn { width: 44px; height: 44px; font-size: 22px; }
+  .negrita { width: 44px; height: 44px; }
+  .editor { min-height: 72px; }
+  .paso button { width: 36px; }
+  .ns-fila .paso { height: 44px; }
+  .marcar { margin: 6px 4px; }
+  .quitar, .borrar { width: 44px; height: 44px; }
+  .modo, .modo-dist { height: 44px; }
+  .veces { min-height: 44px; }
+  .anadir { min-height: 44px; }
+  .tarjeta { min-height: 44px; }
+  .semana { gap: 10px; }
+  .dia-nav-t { font-size: 18px; }
+}
+
+/* ===== Escritorio: contenido centrado, menos cajas y botones secundarios al pasar el ratón ===== */
+@media (min-width: 761px) {
+  body { padding-bottom: 40px; padding-left: max(32px, env(safe-area-inset-left, 0px)); padding-right: max(32px, env(safe-area-inset-right, 0px)); }
+  #app { max-width: 1200px; margin: 0 auto; gap: 16px; }
+  #vistaEjercicios, #vistaListas, #vistaPlan, #vistaMarcas { width: 100%; max-width: 760px; margin: 0 auto; }
+  /* Semana como lista vertical limpia; con sitio de sobra (más abajo), 7 columnas iguales */
+  .semana, #navSemana, .sem-barra, .resumen-sem, .meso-banda, .dia-nav { width: 100%; max-width: 760px; margin-left: auto; margin-right: auto; }
+  .semana { grid-template-columns: 1fr; gap: 12px; }
+  /* Pestañas arriba, centradas */
+  .tabbar { position: sticky; top: 8px; bottom: auto; left: auto; right: auto; align-self: center; gap: 4px; padding: 5px; border: 0; border-radius: 14px; box-shadow: var(--sombra); }
+  .tabbar button { flex: none; max-width: none; flex-direction: row; gap: 8px; min-height: 40px; padding: 0 16px; font-size: 15px; }
+  .tabbar svg { width: 20px; height: 20px; }
+  .tabbar button[aria-selected="true"] { background: var(--accent-soft); }
+  .toast, dialog .toast { bottom: 24px; }
+  /* Menos cajas dentro de cajas: los ejercicios, como una línea de color a la izquierda */
+  .bloque { border: 0; border-left: 3px solid var(--line); border-radius: 0 8px 8px 0; padding: 4px 4px 6px 12px; }
+  .bloque-rep { border-left-style: dashed; border-left-color: var(--accent); }
+  .bloques:not(:empty) { border-top: 0; }
+  .dia-cab { border-bottom: 0; }
+}
+@media (min-width: 1240px) {
+  .semana, #navSemana, .sem-barra, .resumen-sem, .meso-banda { max-width: none; }
+  #vistaSemana:not(.solo-dia) .semana { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; }
+  /* El día desplegado se ensancha para que sus series quepan en una o dos líneas; los plegados quedan como columnas estrechas */
+  #vistaSemana:not(.solo-dia) .semana { display: flex; align-items: flex-start; }
+  #vistaSemana:not(.solo-dia) .semana > .dia { flex: 1 1 0; min-width: 0; }
+  #vistaSemana:not(.solo-dia) .semana > .dia:not(.plegado) { flex-grow: 2.2; }
+  /* Columnas estrechas: el formulario de cada ejercicio aparece al pasar el ratón o al escribir */
+  #vistaSemana:not(.solo-dia) .dia-nombre { font-size: 17px; }
+  /* Cabecera en dos líneas: el día arriba; el progreso y los botones debajo */
+  #vistaSemana:not(.solo-dia) .dia-cab { flex-wrap: wrap; row-gap: 0; }
+  #vistaSemana:not(.solo-dia) .dia-abrir { flex: 1 1 100%; flex-wrap: wrap; column-gap: 6px; row-gap: 0; padding: 4px 6px; }
+  #vistaSemana:not(.solo-dia) .dia-abrir .dia-nombre { overflow: visible; }
+  #vistaSemana:not(.solo-dia) .anillo { margin-left: 6px; margin-right: auto; }
+  #vistaSemana:not(.solo-dia) .anillo[hidden] + .negrita, #vistaSemana:not(.solo-dia) .anillo[hidden] ~ .dia-max { margin-left: auto; }
+  #vistaSemana:not(.solo-dia) .dia-max, #vistaSemana:not(.solo-dia) .dia-cab .menu-btn { width: 28px; height: 30px; }
+  /* Que el anillo, ⤢ y ⋯ quepan en una sola línea aunque la columna sea estrecha */
+  #vistaSemana:not(.solo-dia) .dia-cab { column-gap: 2px; }
+  #vistaSemana:not(.solo-dia) .anillo { min-width: 0; }
+  #vistaSemana:not(.solo-dia) .dia-resumen { padding: 0 10px 10px; font-size: 13px; }
+  #vistaSemana:not(.solo-dia) .series li { font-size: 14px; }
+  #vistaSemana:not(.solo-dia) .paso button { display: none; }
+  #vistaSemana:not(.solo-dia) .paso input { border-radius: 8px; }
+  #vistaSemana:not(.solo-dia) .ns-fila { flex-wrap: wrap; }
+  #vistaSemana:not(.solo-dia) .bloque:not(:hover):not(:focus-within):has(.series li) .nueva-serie { display: none; }
+  #vistaSemana:not(.solo-dia) .add-fila { flex-direction: column; gap: 6px; }
+  #vistaSemana:not(.solo-dia) .add-ej { padding: 6px; font-size: 13px; }
+  #vistaSemana:not(.solo-dia) .empezar { font-size: 14px; padding: 9px; }
+  #vistaSemana:not(.solo-dia) .rpe-dia { font-size: 12px; }
+}
+@media (hover: hover) and (pointer: fine) {
+  .menu-btn, .series .borrar, .bloque .quitar, .add-ej { transition: opacity 0.15s; }
+  .menu-btn, .series .borrar, .bloque .quitar { opacity: 0; }
+  .dia:hover .dia-cab .menu-btn, .grupo-cab:hover .menu-btn, .bloque-rep:hover .menu-btn, .bloque:hover .quitar, .series li:hover .borrar,
+  .menu-btn:focus-visible, .series .borrar:focus-visible, .bloque .quitar:focus-visible { opacity: 1; }
+  .dia:not(:hover):not(:focus-within) .add-ej { opacity: 0.55; }
+}
+
+/* Sugerencias */
+.sug-btn { height: auto; min-height: 44px; padding: 8px 12px; justify-content: flex-start; text-align: left; }
+.sug { border-top: 1px solid var(--line); padding: 10px 0; display: flex; flex-direction: column; gap: 6px; }
+.sug-cab { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sug-tipo { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; border-radius: 5px; padding: 1px 6px; background: var(--accent-soft); color: var(--accent); }
+.sug-tipo.t-fallo { background: var(--error-soft); color: var(--error); }
+.sug-tipo.t-otro { background: var(--bg); color: var(--muted); }
+.sug-de { flex: 1; min-width: 0; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.sug-texto { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; }
+.sug:not(.leida) .sug-texto { font-weight: 600; }
+.sug.leida { opacity: 0.65; }
+.pie { flex-wrap: wrap; }
+
+/* Día plegado: el título del entreno en una línea */
+.dia-resumen.es-titulo { color: var(--fg); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Discos, calentamiento y molestias */
+.discos { flex-basis: 100%; font-size: 0.8em; color: var(--muted); font-variant-numeric: tabular-nums; }
+.series li.calent .sv-p { color: var(--muted); font-style: italic; }
+.series li.calent .n { color: var(--muted); font-weight: 700; }
+.calent-sug { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border-radius: 10px; background: var(--gold-soft); color: var(--gold); font-size: 14px; font-weight: 600; }
+.calent-sug .cs-t { flex: 1 1 180px; font-variant-numeric: tabular-nums; }
+.calent-sug .cs-b { display: flex; gap: 6px; margin-left: auto; }
+.calent-sug .nav-btn, .calent-sug .anadir { min-height: 36px; }
+.molestia-tag { font-size: 11px; font-weight: 700; color: var(--error); background: var(--error-soft); border-radius: 5px; padding: 0 6px; margin-left: 6px; vertical-align: 2px; white-space: nowrap; }
+.chip.zona[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--card); }
+.chip.zona:disabled { opacity: 0.7; cursor: default; }
+.tarjeta.molestia-resuelta { opacity: 0.6; }
+@media (max-width: 760px) { .calent-sug .nav-btn, .calent-sug .anadir { min-height: 44px; } .chip.zona { padding: 8px 12px; font-size: 14px; } }
+
+.ayuda .novedades { border-top: 0; background: var(--accent-soft); border-radius: 10px; padding: 8px 12px; }
+.ayuda .novedades summary { color: var(--accent); }
+.ayuda .novedades > p { color: var(--fg); }
+
+/* Reordenar: asa ≡ y elemento arrastrándose */
+.grupo { display: flex; flex-direction: column; gap: 8px; }
+.asa { flex: none; width: 32px; height: 32px; border: 0; background: none; color: var(--muted); font-size: 18px; padding: 0; border-radius: 6px; cursor: grab; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+.asa:active { cursor: grabbing; }
+.series li .asa { margin-left: auto; }
+.arrastrando { position: relative; z-index: 5; background: var(--card); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22); border-radius: 10px; opacity: 0.97; }
+.bloque-cab .menu-btn { width: 32px; height: 32px; }
+@media (max-width: 760px) { .asa { width: 40px; height: 44px; font-size: 20px; } .bloque-cab .menu-btn { width: 40px; height: 44px; } .bloque-toggle { width: 40px; height: 40px; } }
+@media (hover: hover) and (pointer: fine) {
+  .asa { opacity: 0; transition: opacity 0.15s; }
+  .series li:hover .asa, .bloque:hover > .bloque-cab .asa, .grupo-cab:hover .asa, .bloque:hover > .bloque-cab .menu-btn, .asa:focus-visible, .arrastrando .asa { opacity: 1; }
+}
+
+/* Plan: secciones desplegables */
+#vistaPlan > .plan-sec[data-sec] { gap: 0; }
+.sec-toggle { display: flex; align-items: center; gap: 8px; border: 0; background: none; padding: 4px 0; min-height: 40px; text-align: left; color: inherit; flex: 1; min-width: 0; }
+.sec-toggle h3 { margin: 0; }
+.sec-n { color: var(--muted); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.plan-sec .sec-cab { flex-wrap: wrap; }
+.sec-cuerpo { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 0.25s ease; }
+.sec-cuerpo-in { min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 10px; padding: 10px 4px 4px; margin: 0 -4px; }
+.plan-sec.cerrada .sec-cuerpo { grid-template-rows: 0fr; }
+.plan-sec.cerrada .sec-cuerpo-in { padding-top: 0; padding-bottom: 0; }
+.plan-sec:not(.cerrada) .sec-toggle .flecha-dia { transform: rotate(90deg); }
+#buscarPlantilla { flex: 1 1 180px; min-width: 0; font-size: 15px; padding: 6px 10px; }
+@media (prefers-reduced-motion: reduce) { .sec-cuerpo { transition: none; } }
+@media (max-width: 760px) { .sec-toggle { min-height: 44px; } #buscarPlantilla { flex-basis: 100%; font-size: 16px; } }
+
+/* Importar carreras */
+.imp-elegir { display: inline-flex; align-items: center; cursor: pointer; }
+.imp-lista { display: flex; flex-direction: column; gap: 12px; }
+.imp-act { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--bg); }
+.imp-cab { display: flex; align-items: flex-start; gap: 10px; font-weight: 600; line-height: 1.35; cursor: pointer; }
+.imp-cab input { width: 20px; height: 20px; margin-top: 1px; accent-color: var(--accent); flex: none; }
+.imp-modo { font-size: 15px; border: 1px solid var(--line); background: var(--card); color: var(--fg); border-radius: 8px; padding: 6px 8px; }
+.imp-vueltas { display: flex; flex-direction: column; }
+.imp-v { display: grid; grid-template-columns: 1.8em 1fr auto; gap: 8px; align-items: center; padding: 4px 0; border-top: 1px solid var(--line); font-size: 14px; font-variant-numeric: tabular-nums; }
+.imp-v select { font-size: 14px; border: 1px solid var(--line); background: var(--card); color: var(--fg); border-radius: 8px; padding: 4px 6px; }
+.imp-n { color: var(--muted); text-align: right; }
+.imp-v.c-serie .imp-d { font-weight: 700; color: var(--carrera); }
+.imp-v.c-rec .imp-d, .imp-v.c-parado .imp-d, .imp-v.c-calent .imp-d, .imp-v.c-calma .imp-d { color: var(--muted); }
+.imp-v.c-ignorar .imp-d { text-decoration: line-through; color: var(--muted); }
+@media (max-width: 760px) { .imp-v select, .imp-modo { font-size: 16px; min-height: 40px; } }
+
+/* ===== Más compacto y ligero ===== */
+/* Bloques sin borde discontinuo; el día de hoy, con un borde fino de color */
+.bloque-rep { border-style: solid; border-color: transparent; border-left: 3px solid var(--accent); border-radius: 0 10px 10px 0; }
+.dia.hoy { border-color: transparent; box-shadow: var(--sombra), inset 3px 0 0 var(--accent); }
+.dia.hoy .dia-cab { background: none; }
+.dia.hoy .dia-nombre { color: var(--accent); }
+/* En la vista de un día, la fecha ya está arriba: la cabecera de la tarjeta solo deja sus botones */
+.solo-dia .dia-abrir { visibility: hidden; }
+.solo-dia .dia-cab { min-height: 0; padding-top: 0; padding-bottom: 0; }
+/* Círculo de marcar: 22 px a la vista y 44 px al tocar */
+.marcar { position: relative; }
+.marcar::after { content: ""; position: absolute; inset: -11px; }
+@media (max-width: 760px) {
+  body { font-size: 16px; padding-left: max(14px, env(safe-area-inset-left, 0px)); padding-right: max(14px, env(safe-area-inset-right, 0px)); }
+  h1 { font-size: 21px; }
+  .dia-nombre { font-size: 18px; }
+  .dia-fecha { font-size: 13px; }
+  .dia-cab { padding: 2px 2px 2px 4px; gap: 2px; }
+  .editor { min-height: 44px; padding: 8px 12px; font-size: 16px; line-height: 1.45; }
+  .bloques { padding: 0 8px; gap: 6px; }
+  .bloques:not(:empty) { padding-top: 6px; }
+  .grupo { gap: 6px; }
+  .bloque { padding: 4px 4px 6px 10px; gap: 2px; border: 0; border-left: 3px solid var(--line); border-radius: 0 8px 8px 0; }
+  .ej-nombre, .br-tit { font-size: 16px; }
+  .grupo-cab .g-nombre { font-size: 15px; }
+  .series li { font-size: 15.5px; padding: 1px 0; gap: 6px; min-height: 40px; }
+  .series .n { font-size: 12px; }
+  .marcar { width: 22px; height: 22px; margin: 0 4px; border-width: 2px; }
+  .desc, .discos, .objetivo { font-size: 13px; }
+  .ns-fila input { font-size: 16px; padding: 7px 6px; }
+  .ns-fila .paso { height: 40px; }
+  .paso button { width: 32px; font-size: 17px; }
+  .modo, .modo-dist { height: 40px; min-width: 40px; font-size: 15px; }
+  .veces { min-height: 40px; font-size: 16px; }   /* 16 px o más: el iPhone no amplía la pantalla al escribir */
+  .anadir { min-height: 40px; padding: 8px 12px; font-size: 15px; }
+  .quitar, .borrar { width: 36px; height: 40px; font-size: 14px; }
+  .asa { width: 34px; height: 40px; font-size: 18px; }
+  .menu-btn { width: 40px; height: 40px; font-size: 20px; }
+  .dia-max { width: 40px; height: 40px; font-size: 17px; }
+  .add-fila { margin: 6px 8px 8px; gap: 6px; }
+  .add-ej { padding: 9px; font-size: 15px; }
+  .empezar { font-size: 16px; padding: 11px; margin: 2px 8px 8px; }
+  .rpe-dia { margin: 0 8px 6px; font-size: 13px; }
+  .dia-resumen { font-size: 14px; padding: 0 12px 10px 30px; }
+  .semana { gap: 8px; }
+  .records { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+  .rec .r-val { font-size: 21px; }
+  .dia-nav-t { font-size: 17px; }
+  .calent-sug { font-size: 13px; padding: 6px 8px; }
+}
+
+/* Efectos de cristal reservados para elementos flotantes y ventanas. */
+:root {
+  --vidrio: color-mix(in srgb, var(--card) 62%, transparent);
+  --vidrio-denso: color-mix(in srgb, var(--card) 80%, transparent);
+  --vidrio-luz: rgba(255, 255, 255, 0.55);
+  --vidrio-brillo: linear-gradient(180deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.04) 60%);
+  --vidrio-sombra: 0 10px 30px rgba(20, 30, 25, 0.14), 0 1px 3px rgba(20, 30, 25, 0.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root { --vidrio: color-mix(in srgb, var(--card) 58%, transparent); --vidrio-denso: color-mix(in srgb, var(--card) 78%, transparent);
+          --vidrio-luz: rgba(255, 255, 255, 0.14); --vidrio-brillo: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0) 60%);
+          --vidrio-sombra: 0 10px 30px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.3); }
+}
+.tabbar, dialog:not(.pantalla), .toast, .en-pie, .en-cab {
+  -webkit-backdrop-filter: blur(24px) saturate(170%); backdrop-filter: blur(24px) saturate(170%);
+}
+/* Barra de pestañas: cápsula flotante */
+.tabbar { background: var(--vidrio-brillo), var(--vidrio); border: 1px solid var(--vidrio-luz); box-shadow: var(--vidrio-sombra), inset 0 1px 0 var(--vidrio-luz); }
+@media (max-width: 760px) {
+  .tabbar { left: 12px; right: 12px; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); padding: 4px 6px; border-radius: 28px; }
+  .tabbar button { min-height: 52px; border-radius: 22px; }
+  .tabbar button[aria-selected="true"] { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+  body { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 96px); }
+  .toast, dialog .toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 84px); }
+  /* Cabecera fija al hacer scroll */
+  body { padding-top: 0; }
+  .cabecera { position: sticky; top: 0; z-index: 15; margin: 0 calc(-1 * max(14px, env(safe-area-inset-left, 0px))); padding: max(10px, env(safe-area-inset-top, 0px)) max(14px, env(safe-area-inset-right, 0px)) 8px;
+    background: var(--bg); background-image: none; border-bottom: 1px solid var(--line); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+/* Ventanas y hojas */
+dialog:not(.pantalla) { background: var(--vidrio-brillo), var(--vidrio-denso); border: 1px solid var(--vidrio-luz); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.3), inset 0 1px 0 var(--vidrio-luz); }
+/* La cabecera fija del diálogo es opaca: si fuera transparente, el texto se vería por debajo al desplazarlo */
+dialog:not(.pantalla) .d-cab { background: var(--card); border-radius: 16px 16px 0 0; border-bottom-color: color-mix(in srgb, var(--line) 70%, transparent); }
+dialog details, dialog .plan-sec { scroll-margin-top: 64px; }
+dialog::backdrop { background: rgba(0, 0, 0, 0.35); }
+.toast { background: color-mix(in srgb, var(--toast-bg) 82%, transparent); border: 1px solid rgba(255, 255, 255, 0.18); }
+.toast.pr { background: color-mix(in srgb, var(--gold) 88%, transparent); }
+/* Modo entreno: barras de arriba y abajo de cristal sobre el fondo */
+.en-cab, .en-pie { background: var(--vidrio-brillo), var(--vidrio); border-color: var(--vidrio-luz); }
+/* Sin cristal: sin soporte, o si se pide menos transparencia o más contraste */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .tabbar, dialog:not(.pantalla), .en-cab, .en-pie { background: var(--card); }
+  .toast { background: var(--toast-bg); }
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .tabbar, dialog:not(.pantalla), .en-cab, .en-pie { background: var(--card); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .toast { background: var(--toast-bg); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .toast.pr { background: var(--gold); }
+}
+/* 7 columnas: el ⋯ y el asa del ejercicio solo aparecen al pasar el ratón, para dejar sitio al nombre */
+@media (min-width: 1240px) {
+  #vistaSemana:not(.solo-dia) .bloque:not(:hover):not(:focus-within) > .bloque-cab .asa,
+  #vistaSemana:not(.solo-dia) .bloque:not(:hover):not(:focus-within) > .bloque-cab .menu-btn { display: none; }
+  #vistaSemana:not(.solo-dia) .bloque-cab .asa, #vistaSemana:not(.solo-dia) .bloque-cab .menu-btn { width: 26px; }
+  #vistaSemana:not(.solo-dia) .ej-nombre { overflow-wrap: break-word; }
+}
+
+/* Selección múltiple de plantillas */
+.sel-barra { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-weight: 700; }
+.sel-barra #selPlantN { flex: 1; }
+.tarjeta.seleccionable { position: relative; padding-left: 44px; -webkit-user-select: none; user-select: none; }
+.tarjeta.seleccionable::before { content: ""; position: absolute; left: 14px; top: 14px; width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--muted); background: var(--card); }
+.tarjeta.seleccionable[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--accent); }
+.tarjeta.seleccionable[aria-pressed="true"]::before { border-color: var(--accent); background: var(--accent); box-shadow: inset 0 0 0 3px var(--card); }
+.lista-tarjetas .tarjeta { -webkit-touch-callout: none; }
+.sel-acciones { position: fixed; z-index: 21; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 80px); display: flex; gap: 4px; padding: 5px; border-radius: 22px; max-width: calc(100vw - 24px);
+  background: var(--vidrio-brillo), var(--vidrio-denso); border: 1px solid var(--vidrio-luz); box-shadow: var(--vidrio-sombra); -webkit-backdrop-filter: blur(24px) saturate(170%); backdrop-filter: blur(24px) saturate(170%); }
+.sel-acciones button { border: 0; background: none; color: var(--fg); font-weight: 700; font-size: 14px; padding: 0 12px; min-height: 44px; border-radius: 16px; white-space: nowrap; }
+.sel-acciones button:hover:not(:disabled) { background: var(--bg); }
+.sel-acciones button:disabled { opacity: 0.4; }
+.sel-acciones .peligro-op { color: var(--error); }
+@media (min-width: 761px) { .sel-acciones { bottom: 24px; } }
+@media (max-width: 420px) { .sel-acciones button { padding: 0 8px; font-size: 13px; } }
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) { .sel-acciones { background: var(--card); -webkit-backdrop-filter: none; backdrop-filter: none; } }
+body.seleccionando { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 150px); }
+@media (min-width: 761px) { body.seleccionando { padding-bottom: 96px; } }
+
+/* Serie hecha: su número o ✓ es un botón para volver a pendiente */
+.n-hecha { border: 0; background: none; padding: 0; font: inherit; font-size: 13px; color: var(--muted); width: 1.6em; min-height: 32px; border-radius: 6px; cursor: pointer; position: relative; flex: none; text-align: right; }
+.ronda .n-hecha { color: var(--accent); font-weight: 700; text-align: center; }
+.n-hecha::after { content: ""; position: absolute; inset: -6px -8px; }
+.n-hecha:hover { color: var(--accent); background: var(--accent-soft); }
+.nueva-serie .desmarcar, .br-form .desmarcar { align-self: flex-start; font-size: 14px; padding: 4px 0; }
+.en-desmarcar { align-self: center; min-height: 44px; }
+
+/* Plantillas: buscador y Seleccionar en una fila, dentro de la sección (se pliegan con ella) */
+.plant-barra { align-items: center; }
+.plant-barra #buscarPlantilla { flex: 1 1 auto; min-width: 0; }
+.plant-barra .nav-btn { flex: none; }
+@media (max-width: 760px) { .plant-barra #buscarPlantilla { flex-basis: auto; } }
+
+/* Ejercicios: secciones desplegables por tipo */
+#catalogo { display: flex; flex-direction: column; gap: 12px; }
+.cat-sec { background: var(--card); border-radius: 14px; padding: 8px 14px; box-shadow: var(--sombra); }
+.cat-sec .sec-toggle { width: 100%; }
+.cat-sec h3 { margin: 0; }
+.cat-sec.t-fuerza h3 { color: var(--fuerza); }
+.cat-sec.t-carrera h3 { color: var(--carrera); }
+.cat-sec.t-natacion h3 { color: var(--natacion); }
+.cat-sec.t-movilidad h3 { color: var(--movilidad); }
+.cat-sec.cerrada .sec-cuerpo { grid-template-rows: 0fr; }
+.cat-sec.cerrada .sec-cuerpo-in { padding-top: 0; padding-bottom: 0; }
+.cat-sec:not(.cerrada) .sec-toggle .flecha-dia { transform: rotate(90deg); }
+.cat-sec .sec-cuerpo-in { padding: 6px 4px 8px; }
+.cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
+.cat-grid .tarjeta { background: var(--bg); box-shadow: none; }
+@media (prefers-color-scheme: dark) { .cat-sec { border: 1px solid var(--line); } }
+
+/* Al desplazar para ver un desplegable abierto: margen para la cabecera fija y la barra de pestañas */
+.dia, .plan-sec, .cat-sec { scroll-margin-top: 12px; scroll-margin-bottom: 16px; }
+.ayuda details { scroll-margin: 64px 0 12px; }
+@media (max-width: 760px) { .dia, .plan-sec, .cat-sec { scroll-margin-top: calc(env(safe-area-inset-top, 0px) + 64px); scroll-margin-bottom: calc(env(safe-area-inset-bottom, 0px) + 92px); } }
+@media (min-width: 761px) { .dia, .plan-sec, .cat-sec { scroll-margin-top: 72px; } }
+.sug-borrar-leidas { align-self: flex-start; font-size: 14px; padding: 4px 0; }
+.sug-cab .borrar { flex: none; }
+
+/* Arrastre fluido: solo transform; los vecinos se apartan con una transición corta */
+.arrastrando { transition: none !important; will-change: transform; z-index: 6; }
+.apartandose { transition: transform 0.15s ease; will-change: transform; }
+@media (prefers-reduced-motion: reduce) { .apartandose { transition: none; } }
+
+/* Sin zoom por doble toque (el pellizco sigue funcionando) */
+html, body, button, a, input, select, textarea, label, summary, .tarjeta { touch-action: manipulation; }
+/* Con zoom, el doble toque nativo vuelve al tamaño normal (y no pulsa lo de debajo) */
+html.ampliado, html.ampliado body, html.ampliado button, html.ampliado a, html.ampliado input, html.ampliado select, html.ampliado textarea,
+html.ampliado label, html.ampliado summary, html.ampliado .tarjeta, html.ampliado .series li.desliza { touch-action: auto; }
+
+/* Ejercicio con series: limpio como un bloque; «+ Serie» abre el formulario */
+.bloque-cab .g-prog { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
+.mas-serie { align-self: flex-start; font-size: 14px; font-weight: 700; padding: 4px 2px; min-height: 32px; }
+@media (max-width: 760px) { .mas-serie { min-height: 40px; font-size: 15px; } }
+
+/* Sumatorio de distancia (carrera en km, natación en metros) al final de cada sesión y del día */
+.total-dist { margin: 6px 0 2px; padding: 8px 10px; border-radius: 10px; background: var(--accent-soft); font-size: 14px; font-variant-numeric: tabular-nums; }
+.total-dist p { margin: 0; line-height: 1.4; }
+.total-dist p + p { margin-top: 4px; }
+.total-dist span { color: var(--muted); font-size: 13px; }
+.total-dist.del-dia { margin-top: 10px; border: 1px solid var(--accent); }
+.en-total { white-space: pre-line; color: var(--muted); font-variant-numeric: tabular-nums; margin: 4px 0 12px; }
+
+/* Ejercicio suelto: ×N series iguales y OK; al editarlo se puede cambiar el ejercicio */
+.veces-l { flex: none; display: flex; align-items: center; gap: 2px; font-weight: 700; color: var(--muted); }
+.veces-l[hidden], .cambiar-ej[hidden] { display: none; }
+.ns-fila .veces-l .veces { flex: none; width: 3.2em; padding: 6px 4px; text-align: center; font-weight: 700; }
+.anadir.ok { min-width: 3.4em; }
+.cambiar-ej { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.cambiar-ej select { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--fg); font-size: 14px; }
+.ej-resumen { font-size: 13px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; margin-left: 6px; }
+@media (max-width: 760px) { .ns-fila .veces-l .veces { padding: 10px 4px; font-size: 18px; } .cambiar-ej select { min-height: 44px; font-size: 16px; } }
+
+/* Móvil: cabecera compacta y controles de acordeón accesibles al recorrer contenido abierto. */
+@media (max-width: 760px) {
+  :root { --sticky-cabecera: calc(max(10px, env(safe-area-inset-top, 0px)) + 48px); }
+
+  #app > .cabecera {
+    justify-content: flex-end;
+    min-height: 0;
+    padding-bottom: 4px;
+    background: var(--bg) !important;
+    background-image: none !important;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+    box-shadow: none;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+  #app > .cabecera h1 { display: none; }
+  #app > .cabecera .ayuda-btn {
+    width: 36px;
+    height: 36px;
+    margin-left: auto;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--card) 88%, transparent);
+  }
+
+  /* Día abierto: fecha y navegación sin una tarjeta grande ni un botón Semana que ocupe media fila. */
+  #vistaSemana .dia-nav:not([hidden]) {
+    position: sticky;
+    top: var(--sticky-cabecera);
+    z-index: 14;
+    grid-template-columns: max-content 40px minmax(52px, auto) 40px;
+    gap: 4px;
+    padding: 5px 8px;
+    border: 0;
+    border-radius: 12px;
+    background: var(--bg) !important;
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  #vistaSemana .dia-nav-t {
+    padding: 0 2px 4px;
+    font-size: clamp(17px, 4.6vw, 20px);
+  }
+  #vistaSemana #volverSemana {
+    width: auto;
+    min-width: 0;
+    height: 38px;
+    min-height: 38px;
+    padding: 0 5px;
+    border: 0;
+    background: transparent;
+    font-size: 13px;
+  }
+  #vistaSemana #diaAnt, #vistaSemana #diaSig {
+    width: 40px;
+    height: 40px;
+    min-height: 40px;
+    border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--card) 82%, transparent);
+    font-size: 22px;
+  }
+  #vistaSemana #diaHoy {
+    width: auto;
+    min-width: 52px;
+    height: 38px;
+    min-height: 38px;
+    padding: 0 11px;
+    border-radius: 10px;
+    font-size: 14px;
+  }
+  #vistaSemana .dia-nav:has(#diaHoy[hidden]) {
+    grid-template-columns: max-content 40px 40px;
+    grid-template-areas: "titulo titulo titulo" "semana anterior siguiente";
+  }
+
+  /* Los títulos de los días, categorías y partes se quedan accesibles sin acumular cabeceras. */
+  #vistaSemana:not(.solo-dia) { --sticky-entreno: calc(var(--sticky-cabecera) + 44px); }
+  #vistaSemana.solo-dia { --sticky-entreno: calc(var(--sticky-cabecera) + 84px); }
+  #vistaSemana:not(.solo-dia) .dia:not(.plegado) > .dia-cab { top: var(--sticky-cabecera); }
+  #vistaSemana .dia:not(.plegado) .dia-cuerpo-in { overflow: clip; }
+  #vistaSemana .parte-caja:not(.p-plegada) > .parte-cab {
+    position: sticky;
+    top: var(--sticky-entreno);
+    z-index: 10;
+    background: color-mix(in srgb, var(--pc) 20%, var(--card));
+    box-shadow: 0 4px 10px rgba(12, 26, 18, 0.12);
+  }
+  #vistaSemana .grupo:not(.g-plegado) > .grupo-cab {
+    position: sticky;
+    top: var(--sticky-entreno);
+    z-index: 9;
+    padding: 4px 6px;
+    border-radius: 8px;
+    background: var(--card);
+    box-shadow: 0 3px 8px rgba(12, 26, 18, 0.10);
+  }
+  #vistaSemana .parte-caja .grupo:not(.g-plegado) > .grupo-cab {
+    top: calc(var(--sticky-entreno) + 42px);
+  }
+
+  #vistaEjercicios .cat-sec:not(.cerrada) > .sec-toggle,
+  #vistaMarcas .cat-sec:not(.cerrada) > .sec-toggle {
+    top: var(--sticky-cabecera);
+  }
+  #vistaListas .lista-sec:not(.cerrada) > .lista-cab {
+    position: sticky;
+    top: calc(var(--sticky-cabecera) + 58px);
+    z-index: 12;
+    padding: 4px 8px;
+    border-radius: 10px;
+    background: var(--card);
+    box-shadow: 0 4px 10px rgba(12, 26, 18, 0.12);
+  }
+  #vistaPlan > .plan-sec:not(.cerrada) > .sec-toggle,
+  #vistaPlan > .plan-sec:not(.cerrada) > .sec-cab:has(> .sec-toggle) {
+    position: sticky;
+    top: var(--sticky-cabecera);
+    z-index: 12;
+    background: var(--card);
+    box-shadow: 0 4px 10px rgba(12, 26, 18, 0.10);
+  }
+  #vistaSemana .sem-resumenes > details[open] > summary,
+  #vistaMarcas .informe-sec[open] > .informe-toggle {
+    position: sticky;
+    top: var(--sticky-cabecera);
+    z-index: 10;
+    background: inherit;
+  }
+}
+
+/* Importar: fecha editable cuando el archivo no la trae (CSV de vueltas) */
+.imp-fecha { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 14px; font-weight: 600; }
+.imp-fecha input { padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--fg); font-size: 16px; }
+
+/* Desnivel de las carreras importadas */
+.series .desnivel { flex-basis: 100%; font-size: 0.8em; color: var(--muted); font-variant-numeric: tabular-nums; }
+.series .desnivel.fuerte { color: var(--gold); font-weight: 600; }
+#ajDesnivel { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--fg); font-size: 15px; }
+
+/* Elegir series del día para agruparlas en un bloque */
+.sel-acciones .sel-n { align-self: center; padding: 0 8px; font-size: 14px; font-weight: 700; color: var(--muted); white-space: nowrap; }
+body.sel-series .series li[data-sid] { cursor: pointer; }
+body.sel-series .series li[data-sid]::before { content: ""; flex: none; width: 20px; height: 20px; margin-right: 6px; border: 2px solid var(--line); border-radius: 6px; }
+body.sel-series .series li.sel { background: var(--accent-soft); border-radius: 8px; }
+body.sel-series .series li.sel::before { background: var(--accent); border-color: var(--accent); }
+.imp-marca { margin-right: 4px; width: 18px; height: 18px; vertical-align: middle; }
+.imp-agrupar { margin-top: 8px; gap: 8px; flex-wrap: wrap; }
+
+/* Novedades sin ver: punto en el «?» y un pulso suave (sin animación si se pide menos movimiento) */
+.ayuda-btn { position: relative; }
+.ayuda-btn.nuevo::after { content: ""; position: absolute; top: -2px; right: -2px; width: 10px; height: 10px; border-radius: 50%; background: var(--gold); border: 2px solid var(--card); }
+.ayuda-btn.nuevo { animation: pulso-nov 2.4s ease-in-out infinite; }
+@keyframes pulso-nov { 0%, 100% { box-shadow: 0 0 0 0 rgba(212, 160, 23, 0.45); } 50% { box-shadow: 0 0 0 7px rgba(212, 160, 23, 0); } }
+@media (prefers-reduced-motion: reduce) { .ayuda-btn.nuevo { animation: none; } }
+#iaDiaOp { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+.campo.chk { flex-direction: row; align-items: center; gap: 8px; }
+
+/* Zonas de pulso Z1–Z5 */
+.zonas-fc { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.zf-barra { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--line); }
+.zf-1 { background: #9ca3af; } .zf-2 { background: #3b82f6; } .zf-3 { background: #22c55e; } .zf-4 { background: #f59e0b; } .zf-5 { background: #ef4444; }
+.zf-texto { font-size: 12px; color: var(--fg); font-weight: 550; font-variant-numeric: tabular-nums; }
+.por-que { font-size: 13px; }
+
+/* Marcas: apartados desplegables con sus secciones dentro */
+.marcas-sec { margin-bottom: 12px; }
+.marcas-sec .plan-sec { box-shadow: none; padding-left: 0; padding-right: 0; background: none; }
+.marcas-sec.t-carrera h3 { color: var(--carrera, var(--fg)); }
+.marcas-sec.t-natacion h3 { color: var(--natacion, var(--fg)); }
+.marcas-sec.t-movilidad h3 { color: var(--movilidad, var(--fg)); }
+.marcas-sec.t-pulso h3, .marcas-sec.t-pulso .sec-n { color: var(--pulso); }
+.marcas-sec.t-bilbo h3, .marcas-sec.t-bilbo .sec-n { color: var(--bilbo); }
+
+/* Mis carreras */
+.carrera-prox { border-left: 3px solid var(--gold); margin-bottom: 8px; }
+
+/* Calendario del mes */
+.cal-btn { font-size: 18px; }
+.cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.cal-mes { font-weight: 800; text-transform: capitalize; font-size: 17px; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-cab { text-align: center; font-size: 12px; font-weight: 700; color: var(--muted); padding: 2px 0; }
+.cal-dia { position: relative; aspect-ratio: 1; min-height: 40px; border: 1px solid transparent; border-radius: 10px; background: var(--bg); color: var(--fg); font-weight: 600; font-size: 15px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 0; }
+.cal-dia.fuera { opacity: 0.4; }
+.cal-dia.hoy { border-color: var(--accent); color: var(--accent); }
+.cal-dia.en-vista { background: var(--accent-soft); }
+.cal-punto { width: 7px; height: 7px; border-radius: 50%; border: 2px solid var(--muted); }
+.cal-punto.hecho { background: var(--accent); border-color: var(--accent); }
+.cal-punto.medio { background: linear-gradient(90deg, var(--accent) 50%, transparent 50%); border-color: var(--accent); }
+.cal-punto.t-carrera.hecho { background: var(--carrera); border-color: var(--carrera); }
+.cal-punto.t-natacion.hecho { background: var(--natacion); border-color: var(--natacion); }
+.cal-punto.t-movilidad.hecho { background: var(--movilidad); border-color: var(--movilidad); }
+.cal-punto.t-fuerza.hecho { background: var(--fuerza); border-color: var(--fuerza); }
+
+/* Usuarios: último acceso */
+.u-acceso { display: block; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 2px; }
+.u-activo { margin-left: 6px; font-size: 11px; font-weight: 700; color: var(--accent); background: var(--accent-soft); border-radius: 5px; padding: 0 6px; vertical-align: 1px; }
+
+/* ===== Colores del logo «Fuerza y Ritmo»: azul marino de marca, verde de acento y fondos fríos ===== */
+:root {
+  --bg: #edf1f5; --card: #ffffff; --fg: #14212c; --muted: #5d6d7b; --line: #d5dee6;
+  --accent: #178a58; --accent-soft: #dcf2e7;
+  --marca: #14324a; --on-marca: #ffffff; --titulo: #14324a;
+  --sombra: 0 1px 2px rgba(20, 40, 60, 0.07), 0 4px 14px rgba(20, 40, 60, 0.06);
+  --toast-bg: #14324a; --toast-fg: #f1f5f8; --toast-acento: #7ee2b0;
+  --vidrio-sombra: 0 10px 30px rgba(20, 40, 60, 0.16), 0 1px 3px rgba(20, 40, 60, 0.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b1620; --card: #132230; --fg: #e4ecf2; --muted: #8ea0b0; --line: #22384b;
+    --accent: #4cc48a; --accent-soft: #163a2c;
+    --marca: #4cc48a; --on-marca: #0b1620; --titulo: #e4ecf2;
+    --toast-bg: #e4ecf2; --toast-fg: #0b1620; --toast-acento: #178a58;
+  }
+}
+h1 { color: var(--titulo); }
+/* Más a juego con el logo: cabecera y pestañas en azul marino, con el verde de las zancadas como acento */
+:root { --bg: #e4ebf2; --azul: #14324a; --azul-cristal: color-mix(in srgb, #14324a 90%, transparent); --verde: #4cc48a; }
+@media (prefers-color-scheme: dark) { :root { --bg: #08121b; --azul: #11304a; --azul-cristal: color-mix(in srgb, #11304a 88%, transparent); } }
+.cabecera { background: var(--azul) !important; background-image: none !important; border-bottom: 0 !important; color: #fff; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+.cabecera h1 { color: #fff; }
+.cabecera .ayuda-btn { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.35); color: var(--verde); }
+.tabbar { background: var(--azul-cristal) !important; border-color: rgba(255, 255, 255, 0.12) !important; }
+.tabbar button { color: rgba(255, 255, 255, 0.72); }
+.tabbar button[aria-selected="true"] { color: var(--verde); background: rgba(76, 196, 138, 0.18) !important; }
+.primario { background: var(--accent); color: #fff; }
+@media (prefers-color-scheme: dark) { .primario { color: #08121b; } }
+@media (min-width: 761px) { .cabecera { padding: 12px 18px; border-radius: 16px; } }
+
+/* Varios entrenos el mismo día: cada uno en su caja */
+.dia.varios-entrenos .grupo { border: 1px solid var(--line); border-radius: 12px; padding: 8px; background: color-mix(in srgb, var(--accent-soft) 35%, transparent); }
+.dia.varios-entrenos .grupo + .grupo { margin-top: 6px; }
+.add-grupo { margin-top: 2px; }
+.add-grupo .add-ej { font-size: 13px; padding: 6px; }
+
+/* Partes de un entreno: cada una con su color (cabecera, fondo suave de sus ejercicios y botones) */
+:root { --p0: #2563a8; --p1: #178a58; --p2: #b45309; --p3: #7c3aed; --p4: #0e7490; }
+@media (prefers-color-scheme: dark) { :root { --p0: #7fb1ec; --p1: #4cc48a; --p2: #f0b94a; --p3: #b79cf5; --p4: #5fd2cd; } }
+.parte-c0 { --pc: var(--p0); } .parte-c1 { --pc: var(--p1); } .parte-c2 { --pc: var(--p2); } .parte-c3 { --pc: var(--p3); } .parte-c4 { --pc: var(--p4); }
+.parte-cab { display: flex; align-items: center; gap: 8px; margin: 0; padding: 6px 10px; border-radius: 10px; background: color-mix(in srgb, var(--pc) 16%, var(--card)); border-left: 4px solid var(--pc); }
+.parte-cab .p-nombre { flex: 1; min-width: 0; font-family: var(--display); font-weight: 700; font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pc); overflow-wrap: anywhere; }
+.parte-cab .menu-btn { opacity: 1 !important; }
+.bloque.en-parte { background: var(--card); border-radius: 10px; }
+.add-parte { margin: 0; }
+.add-parte .add-ej { font-size: 13px; padding: 6px; color: var(--pc); border-color: color-mix(in srgb, var(--pc) 40%, var(--line)); }
+.add-fila { flex-wrap: wrap; }
+.rutina-parte { list-style: none; margin-left: -1em; font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); }
+/* Botones de añadir del día (Ejercicio, Bloque, Entreno, Parte): 2 × 2 en el móvil */
+@media (max-width: 760px) { .dia-cuerpo-in > .add-fila { display: grid; grid-template-columns: 1fr 1fr; } }
+
+/* Confirmación de borrado: ventana centrada con Cancelar y Eliminar */
+.dlg-confirmar { width: min(360px, calc(100vw - 40px)); }
+.dlg-confirmar .d-cuerpo { padding: 20px 18px 16px; text-align: center; }
+.conf-tit { font-family: var(--body); text-transform: none; font-size: 18px; font-weight: 700; margin: 0 0 8px; color: var(--fg); }
+.conf-txt { margin: 0 0 16px; color: var(--muted); font-size: 15px; line-height: 1.4; }
+.conf-botones { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.conf-botones button { min-height: 46px; font-size: 16px; font-weight: 700; border-radius: 12px; }
+.conf-si { border: 0; background: var(--error); color: #fff; }
+
+/* «Hoy»: visible y en verde cuando no estás en hoy */
+.btn-hoy { color: #fff !important; background: var(--accent) !important; border-color: var(--accent) !important; font-weight: 700; padding: 0 14px; }
+@media (prefers-color-scheme: dark) { .btn-hoy { color: #08121b !important; } }
+
+/* Vista previa desplegable de ejercicios */
+.menu-extra { padding: 0 16px 8px; max-height: 45vh; overflow: auto; }
+.vp-det { border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; margin: 6px 0; background: var(--card); }
+.vp-det summary { cursor: pointer; font-weight: 700; font-size: 14px; }
+.vp-lista { margin: 6px 0 2px; padding-left: 1.2em; font-size: 14px; line-height: 1.45; }
+#mesoDias .vp-det { margin: 2px 0 8px 6.5em; }
+@media (max-width: 760px) { #mesoDias .vp-det { margin-left: 0; } }
+
+/* Importar documento */
+.doc-btn { cursor: pointer; }
+#iaPrompt.con-doc > .campo:not(:has(#iaTexto)), #iaPrompt.con-doc > #iaCamposPlan, #iaPrompt.con-doc > #iaCamposSesion { display: none; }
+.ia-doc-nota { margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); font-size: 14px; line-height: 1.4; }
+
+.lado-op { display: inline-flex; align-items: center; gap: 6px; font-size: .9rem; color: var(--muted); }
+
+/* Varios entrenos en un día: cada uno se pliega tocando su nombre */
+.g-toggle { display: flex; align-items: baseline; gap: 6px; border: 0; background: none; padding: 4px 0; text-align: left; cursor: pointer; font: inherit; color: inherit; }
+.g-toggle .flecha-dia { transform: rotate(90deg); }
+.g-toggle .gn-txt { flex: 0 0 auto; max-width: 75%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.g-toggle .g-res { flex: 1 1 auto; }
+.grupo.g-plegado .g-toggle .flecha-dia { transform: none; }
+.solo-dia .g-toggle .flecha-dia { display: inline-block; }
+.g-toggle .g-res { display: none; font-family: var(--body); font-size: 12px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.grupo.g-plegado .g-res { display: inline; }
+.grupo.g-plegado > :not(.grupo-cab) { display: none !important; }
+.grupo.g-plegado { padding-bottom: 4px !important; }
+@media (max-width: 760px) { .g-toggle { min-height: 40px; align-items: center; } }
+
+/* Vídeo desplegado dentro del día */
+.ver-video { cursor: pointer; padding: 6px 4px; margin: -6px 0; text-decoration: underline; text-underline-offset: 2px; }
+
+
+/* Miniatura del vídeo (ficha) y visor centrado */
+.video-mini { position: relative; display: block; width: 100%; max-width: 420px; aspect-ratio: 16 / 9; padding: 0; border: 0; border-radius: 10px; overflow: hidden; background: #000; cursor: pointer; }
+.video-mini.vertical { max-width: 200px; aspect-ratio: 9 / 16; }
+.video-mini img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.video-mini span { position: absolute; inset: 0; margin: auto; width: 56px; height: 40px; border-radius: 12px; background: rgba(0, 0, 0, 0.7); color: #fff; font-size: 20px; display: flex; align-items: center; justify-content: center; }
+#visorVideo { zoom: 1; margin: auto !important; inset: 0; padding: 0; border: 0; background: transparent; box-shadow: none; max-width: none !important; max-height: none !important; width: auto !important; overflow: visible; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+#visorVideo::backdrop { background: rgba(0, 0, 0, 0.82); }
+#visorVideo .vv-caja { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+#visorVideo .vv-cab { display: flex; align-items: center; gap: 12px; width: 100%; color: #fff; font-weight: 700; font-size: 16px; }
+#visorVideo .vv-tit { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#visorVideo .vv-cerrar { flex: none; width: 40px; height: 40px; border-radius: 20px; border: 0; background: rgba(255, 255, 255, 0.18); color: #fff; font-size: 18px; cursor: pointer; }
+#visorVideo .vv-marco { width: min(94vw, calc((100dvh - 140px) * 16 / 9)); aspect-ratio: 16 / 9; background: #000; border-radius: 12px; overflow: hidden; }
+#visorVideo.vertical .vv-marco { width: min(94vw, calc((100dvh - 140px) * 9 / 16)); aspect-ratio: 9 / 16; }
+#visorVideo .vv-cab { max-width: min(94vw, calc((100dvh - 140px) * 16 / 9)); }
+#visorVideo.vertical .vv-cab { max-width: min(94vw, calc((100dvh - 140px) * 9 / 16)); }
+#visorVideo .vv-marco iframe { width: 100%; height: 100%; border: 0; display: block; }
+#visorVideo .vv-yt { color: #fff; font-size: 14px; opacity: 0.85; }
+
+/* Partes: una caja de su color con sus ejercicios dentro; se pliega tocando su nombre */
+.parte-caja { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; padding: 0 6px 6px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--pc) 45%, var(--line)); background: color-mix(in srgb, var(--pc) 8%, var(--card)); }
+.parte-caja > .parte-cab { margin: 0 -6px; border-radius: 11px 11px 0 0; border-left: 0; }
+.parte-caja.p-plegada { padding-bottom: 0; }
+.parte-caja.p-plegada > .parte-cab { border-radius: 11px; }
+.parte-caja.p-plegada > :not(.parte-cab) { display: none !important; }
+.p-toggle { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; border: 0; background: none; padding: 2px 0; text-align: left; cursor: pointer; font: inherit; color: inherit; }
+.p-toggle .flecha-dia { transform: rotate(90deg); color: var(--pc); }
+.parte-caja.p-plegada .p-toggle .flecha-dia { transform: none; }
+.solo-dia .p-toggle .flecha-dia { display: inline-block; }
+@media (max-width: 760px) { .p-toggle { min-height: 36px; } }
+
+/* Orden dentro de cada parte (A1, A2…), vídeo junto a cada ejercicio del bloque y más aire */
+.etq-orden { display: inline-block; margin-right: 8px; padding: 1px 7px; border-radius: 6px; background: var(--pc, var(--accent)); color: var(--card); font-family: var(--display); font-size: 13px; font-weight: 700; letter-spacing: 0.04em; vertical-align: 2px; }
+.bloque-rep .series li { align-items: center; padding: 3px 0; }
+.bloque-rep .series { gap: 4px; }
+.br-video { flex: none; width: 34px; height: 30px; margin-left: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--accent); font-size: 13px; cursor: pointer; }
+.br-menu { flex: none; opacity: 1 !important; }
+.br-video + .br-menu { margin-left: 2px; }
+.bloque-rep .series li > .br-menu:first-of-type { margin-left: auto; }
+.br-video:hover { background: var(--accent-soft); }
+
+/* Descripción de un ejercicio o bloque (tempo, banda, EEP…) */
+.ej-nota { display: block; width: 100%; text-align: left; margin: 0 0 4px; padding: 5px 9px; border: 0; border-radius: 8px; background: var(--gold-soft); color: var(--fg); font-size: 13px; line-height: 1.35; font-style: italic; cursor: pointer; white-space: pre-line; overflow-wrap: anywhere; }
+.ns-series { justify-content: flex-start; }
+.ns-series[hidden] { display: none; }
+.ns-series .veces-l { gap: 6px; font-size: 14px; }
+.v-menos, .v-mas { flex: none; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--fg); font-size: 18px; line-height: 1; cursor: pointer; }
+.ops-fuerza { display: flex; flex-wrap: wrap; gap: 4px; font-size: 13px; }
+.seg-medida { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--card); }
+.seg-medida button { border: 0; border-left: 1px solid var(--line); background: none; padding: 7px 4px; font: inherit; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.seg-medida button:first-of-type { border-left: 0; }
+.seg-medida button[aria-pressed="true"] { background: var(--accent); color: var(--card); }
+@media (max-width: 760px) { .seg-medida button { min-height: 38px; font-size: 13px; padding: 6px 2px; } }
+.mas-nota { display: block; padding: 6px 0 0; font-size: 13px; text-align: left; }
+.nota-tramo { display: block; font-size: 12px; font-style: italic; color: var(--muted); }
+.en-nota { margin: -4px 0 4px; padding: 6px 10px; border-radius: 8px; background: var(--gold-soft); font-style: italic; font-size: 15px; white-space: pre-line; }
+#txtInput { width: 100%; resize: vertical; font: inherit; font-size: 16px; }
+.peligro-txt { color: var(--error); margin-right: auto; }
+
+/* Cada letra (B1, B2… / C1, C2…) en su desplegable dentro de la parte */
+.letra-caja { display: flex; flex-direction: column; gap: 6px; padding: 4px; border-radius: 10px; border: 1px dashed color-mix(in srgb, var(--pc, var(--accent)) 45%, var(--line)); }
+.letra-cab { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: none; padding: 4px 4px; text-align: left; cursor: pointer; font: inherit; color: var(--fg); }
+.letra-cab .flecha-dia { transform: rotate(90deg); color: var(--pc, var(--accent)); }
+.letra-caja.l-plegada .letra-cab .flecha-dia { transform: none; }
+.letra-cab .etq-orden { margin-right: 0; }
+.letra-cab .l-nombres { flex: 1; min-width: 0; font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.letra-caja.l-plegada > :not(.letra-cab) { display: none !important; }
+.solo-dia .letra-cab .flecha-dia { display: inline-block; }
+@media (max-width: 760px) { .letra-cab { min-height: 38px; } }
+
+.copiar-cortar { display: flex; gap: 16px; flex-wrap: wrap; }
+.copiar-cortar[hidden] { display: none; }
+.add-pegar { color: var(--gold) !important; border-color: color-mix(in srgb, var(--gold) 50%, var(--line)) !important; }
+
+/* Listas de entrenamientos */
+#vistaListas { display: flex; flex-direction: column; gap: 12px; }
+#vistaListas[hidden] { display: none; }
+.listas-barra { align-items: center; }
+.listas-tit { flex: 1; margin: 0; font-family: var(--display); font-size: 18px; text-transform: uppercase; letter-spacing: 0.04em; }
+.lista-cab { display: flex; align-items: center; gap: 4px; }
+.lista-cab .sec-toggle { flex: 1; min-width: 0; }
+.lista-ents { display: flex; flex-direction: column; gap: 6px; }
+.lista-ent { border: 1px solid var(--line); border-radius: 10px; background: var(--card); padding: 6px 8px; }
+.lista-ent.es-siguiente { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+.le-cab { display: flex; align-items: center; gap: 8px; }
+.le-n { flex: none; width: 1.6em; text-align: center; font-family: var(--display); font-weight: 700; color: var(--accent); }
+.le-nombre { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; border: 0; background: none; padding: 4px 0; text-align: left; cursor: pointer; font: inherit; color: var(--fg); }
+.le-tit { font-weight: 700; overflow-wrap: anywhere; }
+.le-res { font-size: 12px; color: var(--muted); }
+.le-sig { margin-left: 8px; padding: 1px 6px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; vertical-align: 1px; }
+.le-dia { flex: none; padding: 6px 10px; font-size: 13px; }
+.le-prev { padding: 4px 0 4px 2em; }
+.lista-bloque { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; padding: 0 6px 6px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line)); background: color-mix(in srgb, var(--accent) 6%, var(--card)); }
+.lista-sep { display: flex; align-items: center; gap: 6px; margin: 0 -6px; padding: 4px 8px; border-radius: 11px 11px 0 0; background: var(--accent-soft); }
+.lista-bloque.lb-plegado .lista-sep { border-radius: 11px; }
+.lista-bloque.lb-plegado { padding-bottom: 0; }
+.lista-bloque.lb-plegado > :not(.lista-sep) { display: none !important; }
+.ls-toggle { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; border: 0; background: none; padding: 4px 0; text-align: left; cursor: pointer; font: inherit; color: inherit; }
+.ls-toggle .flecha-dia { transform: rotate(90deg); color: var(--accent); }
+.lista-bloque.lb-plegado .ls-toggle .flecha-dia { transform: none; }
+.ls-tit { font-family: var(--display); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); }
+.ls-n { font-size: 12px; color: var(--muted); }
+.lb-cuerpo { display: flex; flex-direction: column; gap: 6px; }
+.lb-cuerpo:empty::before { content: "Bloque vacío: arrastra aquí entrenamientos con ≡ o añádelos abajo."; font-size: 13px; color: var(--muted); padding: 6px 2px; }
+.lb-add { margin: 0; }
+@media (max-width: 760px) { .ls-toggle { min-height: 40px; } }
+.lista-sec .menu-btn, .lista-sec .asa { opacity: 1 !important; }
+@media (max-width: 760px) { .le-dia { min-height: 40px; } .le-nombre { min-height: 40px; } }
+
+/* Código para compartir, grande y fácil de copiar */
+.codigo-comp { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); }
+.cc-et { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.cc-cod { flex: 1; font-family: ui-monospace, Menlo, monospace; font-size: 24px; font-weight: 700; letter-spacing: 0.12em; color: var(--fg); user-select: all; -webkit-user-select: all; }
+
+/* Usuarios: última conexión destacada; inicio de sesión aparte */
+.u-acceso .u-con { font-weight: 700; color: var(--fg); }
+.u-acceso .u-vieja { display: block; color: var(--error); font-weight: 600; }
+.u-acceso .u-vieja[hidden] { display: none; }
+.u-acceso .u-login { display: block; font-size: 12px; opacity: 0.75; }
+
+/* Aviso de versión nueva */
+.aviso-version { position: fixed; z-index: 60; left: 50%; transform: translateX(-50%); top: max(10px, env(safe-area-inset-top, 0px)); width: min(560px, calc(100vw - 24px));
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border-radius: 12px; background: var(--gold-soft); color: var(--fg); border: 1px solid var(--gold); box-shadow: 0 8px 24px rgba(0,0,0,0.2); font-size: 14px; font-weight: 600; }
+.aviso-version span { flex: 1; min-width: 200px; }
+
+/* Textos que no se parten a mitad de palabra: el nombre baja de línea entre palabras y las etiquetas van enteras */
+.ej-nombre, .br-tit, .le-tit, .grupo-cab .g-nombre, .parte-cab .p-nombre { overflow-wrap: break-word; word-break: normal; hyphens: manual; }
+.tipo-tag, .ico, .ver-video, .etq-orden, .molestia-tag { white-space: nowrap; display: inline-block; }
+/* Móvil: el nombre del ejercicio ocupa la primera línea entera (con ⋯ y ≡); el resumen y el progreso, debajo */
+@media (max-width: 760px) {
+  .bloque:not(.bloque-rep) > .bloque-cab { flex-wrap: wrap; row-gap: 0; }
+  .bloque:not(.bloque-rep) > .bloque-cab .ej-nombre { flex: 1 1 0; }
+  .bloque:not(.bloque-rep) > .bloque-cab .ej-resumen, .bloque:not(.bloque-rep) > .bloque-cab .g-prog { order: 10; }
+  .bloque:not(.bloque-rep) > .bloque-cab .ej-resumen { flex-basis: auto; margin-left: 0; }
+  .bloque:not(.bloque-rep) > .bloque-cab .ej-resumen + .g-prog, .bloque:not(.bloque-rep) > .bloque-cab .g-prog { margin-left: 8px; }
+  .bloque:not(.bloque-rep) > .bloque-cab::after { content: ""; order: 9; flex-basis: 100%; }
+}
+
+/* Selectores de tipo (ficha y buscador): caben siempre; en el móvil, en dos filas si hace falta */
+#detTipo, #selTipo { display: grid; grid-template-columns: repeat(auto-fit, minmax(76px, 1fr)); gap: 4px; flex-wrap: wrap; }
+#detTipo button, #selTipo button { min-width: 0; padding-left: 6px; padding-right: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#detalle .d-cuerpo, #detalle section { min-width: 0; }
+
+/* Número de series a la izquierda, en la misma fila que kg × reps (o metros, tiempo…) */
+.veces-izq { flex: none; display: flex; flex-direction: column; align-items: center; gap: 0; margin-right: 4px; }
+.veces-izq[hidden] { display: none; }
+.ns-fila .veces-izq .veces { width: 2.6em; flex: none; text-align: center; font-weight: 700; padding: 6px 2px; border: 1px solid var(--accent); border-radius: 8px; color: var(--accent); background: var(--accent-soft); }
+.vz-et { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--accent); line-height: 1.2; }
+@media (max-width: 760px) {
+  .ns-fila .veces-izq .veces { width: 2.4em; font-size: 18px; padding: 8px 2px; }
+  .ns-principal .paso button { display: none; }   /* en el móvil, casillas anchas sin − y + */
+  .ns-principal .paso input { border-radius: 8px; }
+}
+
+/* Series × repeticiones (peso) */
+.x-series { flex: none; font-weight: 700; color: var(--muted); margin: 0 2px; }
+.veces-izq[hidden] + .x-series { display: none; }
+.kg-par { flex: none; color: var(--muted); font-weight: 600; }
+
+/* Formulario más limpio: «Reps ▾» y «Por lado» en una sola línea pequeña */
+.seg-medida[hidden] { display: none !important; }
+.ops-fuerza { display: flex; align-items: center; gap: 12px; }
+.medida-btn { white-space: nowrap; flex: none; border: 1px solid var(--line); background: var(--card); color: var(--accent); border-radius: 8px; padding: 4px 10px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.cambiar-ej-btn { font-size: 13px; padding: 2px 0; text-align: left; }
+@media (max-width: 760px) {
+  .nueva-serie { gap: 6px; }
+  .medida-btn { min-height: 34px; }
+  .ops-fuerza .lado-op { font-size: 13px; }
+}
+
+/* Descanso compacto; en fuerza va en la línea de «Reps ▾ · Por lado» con OK al final */
+.ns-desc.desc-en-ops { flex: 1 1 auto; margin-left: auto; justify-content: flex-end; gap: 6px; min-width: 0; }
+.ns-desc.desc-en-ops .in-c { flex: 0 1 110px; width: 110px; min-width: 70px; text-align: center; }
+.ops-fuerza { flex-wrap: nowrap; }
+.ops-fuerza .lado-op { white-space: nowrap; flex: none; }
+.ns-extra:has(.desc-en-ops) { display: flex !important; }
+@media (max-width: 760px) {
+  .ns-desc.desc-en-ops .in-c { flex-basis: 78px; width: 78px; min-width: 60px; font-size: 16px; padding: 7px 4px; }
+  .ops-fuerza .medida-btn { padding: 4px 8px; }
+  .ops-fuerza { gap: 8px; }
+}
+
+/* Línea «Reps ▾ · Por lado · ⏱ descanso · OK»: todo a la misma altura y alineado */
+.ops-fuerza { align-items: center; width: 100%; }
+.ops-fuerza .medida-btn, .ns-desc.desc-en-ops .in-c, .ns-desc.desc-en-ops .anadir { height: 38px; min-height: 38px; box-sizing: border-box; }
+.ns-desc.desc-en-ops { display: flex; align-items: center; gap: 6px; margin-left: auto; flex: none; }
+.ns-desc.desc-en-ops .desc-ic { color: var(--muted); font-size: 16px; }
+.ns-desc.desc-en-ops .in-c { width: 64px; flex: none; text-align: center; padding: 6px 4px; border-radius: 8px; }
+.ns-desc.desc-en-ops .anadir { padding: 0 14px; }
+@media (max-width: 760px) { .ns-desc.desc-en-ops .in-c { width: 60px; flex-basis: 60px; min-width: 0; } }
+
+/* Fuerza: [3 series] junto al nombre; fila «[reps] Reps ▾   [peso] kg» */
+.veces-cab { flex: none; display: flex; flex-direction: row; align-items: center; gap: 4px; margin: 0 0 0 auto; }
+.veces-cab .vz-et { font-size: 11px; }
+.bloque:has(> form.nueva-serie[hidden]) .veces-cab, .veces-cab[hidden] { display: none !important; }
+.fila-fuerza { gap: 8px; align-items: center; }
+.fila-fuerza .paso { flex: 1 1 0; min-width: 0; }
+.fila-fuerza .medida-btn { height: 38px; margin-right: 6px; }
+.fila-fuerza .modo { flex: none; }
+.ops-fuerza:not(:has(.medida-btn)) { gap: 10px; }
+@media (max-width: 760px) { .veces-cab .veces { width: 2.6em; font-size: 18px; } }
+
+/* Peso corporal (dominadas, fondos, plancha…): sin casilla de kg en el formulario */
+.bloque.sin-peso .fila-fuerza .paso:has(.in-a), .bloque.sin-peso .fila-fuerza .modo { display: none; }
+#detMedida { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+#detMedida button { min-width: 0; padding-left: 4px; padding-right: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Ordenador, semana en 7 columnas: columnas estrechas sin letras sueltas ni cosas que se salgan */
+@media (min-width: 1240px) {
+  #vistaSemana:not(.solo-dia) .grupo, #vistaSemana:not(.solo-dia) .parte-caja, #vistaSemana:not(.solo-dia) .letra-caja { padding-left: 3px; padding-right: 3px; margin-left: 0; margin-right: 0; }
+  #vistaSemana:not(.solo-dia) .parte-caja > .parte-cab { margin: 0 -3px; padding: 4px 6px; }
+  #vistaSemana:not(.solo-dia) .bloque { padding-left: 7px; padding-right: 3px; }
+  #vistaSemana:not(.solo-dia) .bloque > .bloque-cab { flex-wrap: wrap; row-gap: 2px; }
+  #vistaSemana:not(.solo-dia) .bloque > .bloque-cab .ej-nombre, #vistaSemana:not(.solo-dia) .bloque > .bloque-cab .br-tit { flex: 1 1 100%; word-break: normal; overflow-wrap: break-word; hyphens: auto; }
+  #vistaSemana:not(.solo-dia) .bloque > .bloque-cab .ej-resumen { display: none; }
+  #vistaSemana:not(.solo-dia) .bloque > .bloque-cab .veces-cab { margin-left: 0; }
+  #vistaSemana:not(.solo-dia) .parte-cab .p-nombre, #vistaSemana:not(.solo-dia) .grupo-cab .gn-txt, #vistaSemana:not(.solo-dia) .letra-cab .l-nombres { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; font-size: 13px; }
+  #vistaSemana:not(.solo-dia) .p-toggle, #vistaSemana:not(.solo-dia) .g-toggle { min-width: 0; overflow: hidden; }
+  #vistaSemana:not(.solo-dia) .fila-fuerza, #vistaSemana:not(.solo-dia) .ops-fuerza, #vistaSemana:not(.solo-dia) .ns-principal { flex-wrap: wrap; row-gap: 4px; }
+  #vistaSemana:not(.solo-dia) .ns-desc.desc-en-ops { margin-left: 0; flex: 1 1 100%; justify-content: flex-start; }
+  #vistaSemana:not(.solo-dia) .series li { word-break: normal; overflow-wrap: break-word; }
+  #vistaSemana:not(.solo-dia) .bloque:not(:hover):not(:focus-within):has(.series li) .veces-cab { display: none !important; }
+  #vistaSemana:not(.solo-dia) .veces-cab { flex: 1 1 100%; order: 5; justify-content: flex-start; }
+  #vistaSemana:not(.solo-dia) .ns-desc.desc-en-ops .in-c { width: 56px; flex-basis: 56px; }
+}
+
+/* Cancelar, junto a OK */
+.cancelar-form { flex: none; border: 1px solid var(--line); background: var(--card); color: var(--muted); border-radius: 8px; padding: 0 10px; height: 38px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+@media (max-width: 760px) { .cancelar-form { padding: 0 8px; } .ns-desc.desc-en-ops .in-c { width: 54px; flex-basis: 54px; } }
+
+/* Una fila por serie */
+.filas-extra { display: flex; flex-direction: column; gap: 6px; }
+.filas-extra:empty { display: none; }
+.fila-x { display: grid; grid-template-columns: 1.6em 1fr auto 1fr auto; align-items: center; gap: 6px; }
+.fila-x input { width: 100%; min-width: 0; text-align: center; padding: 6px 4px; }
+.fila-x[data-hecha] { opacity: 0.55; }
+.fx-n, .ns-principal.con-num::before { font-weight: 700; color: var(--muted); font-size: 13px; text-align: center; }
+.ns-principal.con-num::before { content: "1"; flex: none; width: 1.6em; }
+.fx-u { font-size: 12px; color: var(--muted); }
+@media (max-width: 760px) { .fila-x input { font-size: 16px; padding: 8px 4px; } }
+
+/* Bloques: kg/% y «igual en las otras rondas» */
+.br-form .br-modo { flex: none; }
+.br-form .br-calc { margin: 0; font-size: 13px; color: var(--muted); }
+.br-todas { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--muted); }
+.br-todas[hidden] { display: none; }
+
+/* Bloques de fuerza: reps a la izquierda y kg o % a la derecha */
+.br-fuerza > .ns-fila:first-of-type .in-b, .tr-fuerza .in-b { order: 1; }
+.br-fuerza > .ns-fila:first-of-type .br-medida, .tr-fuerza .tr-medida { order: 2; flex: none; height: 34px; }
+.br-fuerza > .ns-fila:first-of-type .por, .tr-fuerza .por { order: 3; }
+.br-fuerza > .ns-fila:first-of-type .in-a, .tr-fuerza .in-a { order: 4; }
+.br-fuerza > .ns-fila:first-of-type .br-modo, .tr-fuerza .tr-modo { order: 5; }
+.tramo .tr-modo { flex: none; }
+.tramo .tr-calc { margin: 0; font-size: 13px; color: var(--muted); text-align: right; }
+
+/* Arrastre con hueco: lo arrastrado flota y un hueco marca dónde cae */
+.arrastre-fijo { position: relative; z-index: 1000 !important; pointer-events: none; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25); will-change: transform; }
+.hueco-arrastre { flex: none; box-sizing: border-box; border: 2px dashed var(--accent); border-radius: 10px; background: var(--accent-soft); margin: 4px 0; }
+.hueco-arrastre.oculto { visibility: hidden; }
+
+/* Registro de Bilbo: los ciclos uno al lado del otro, como en la hoja */
+.dlg-ancho { width: min(1150px, calc(100vw - 24px)); max-width: none; }
+@media (min-width: 761px) { dialog.dlg-ancho { width: min(1150px, calc((100vw - 24px) / var(--zoom))); } }
+.breg-res { margin: 0 0 10px; font-size: 14px; }
+.breg-graf { max-width: 520px; margin-bottom: 10px; }
+.breg-ciclos { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x proximity; padding-bottom: 6px; }
+.breg-ciclo { flex: 0 0 min(370px, 100%); min-width: 0; scroll-snap-align: start; border: 1px solid var(--line); border-radius: 12px; padding: 10px; background: var(--card); }
+.breg-ciclo.activo { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.breg-ciclo h4 { margin: 0; font-size: 15px; }
+.breg-ciclo .menu-det { margin: 2px 0 6px; }
+.breg-futura td { color: var(--bilbo-futura); font-style: italic; }
+.breg-ciclo .tabla-bilbo { font-size: 13px; }
+.breg-ciclo .tabla-bilbo th, .breg-ciclo .tabla-bilbo td { padding: 5px 4px; white-space: nowrap; }
+@media (max-width: 420px) { .breg-ciclo { padding: 8px 6px; } .breg-ciclo .tabla-bilbo { font-size: 12px; } .breg-ciclo .tabla-bilbo th, .breg-ciclo .tabla-bilbo td { padding: 4px 3px; } }
+.tabla-bilbo tfoot td { font-weight: 700; border-bottom: 0; }
+.tabla-bilbo th:first-child, .tabla-bilbo td:first-child { text-align: left; }
+
+/* Bloque vacío */
+.bloque-vacio { border-style: dashed !important; }
+.bloque-vacio .bv-txt { margin: 4px 0; font-size: 13px; color: var(--muted); }
+
+/* «＋ Añadir» plegable */
+.add-fila.plegada > .add-ej { display: none !important; }
+.add-toggle { flex: 1; grid-column: 1 / -1; margin: 0; background: none; border: 1px dashed var(--line); border-radius: 8px; color: var(--muted); font-size: 13px; font-weight: 600; padding: 5px 8px; text-align: center; cursor: pointer; }
+.add-toggle[hidden] { display: none !important; }
+.add-toggle:hover { color: var(--accent); border-color: var(--accent); }
+.add-parte .add-toggle { color: var(--pc); border-color: color-mix(in srgb, var(--pc) 40%, var(--line)); }
+.add-fila.plegada { margin-top: 4px; margin-bottom: 4px; }
+
+.op-uso { float: right; padding-left: 8px; line-height: 1.6; font-size: 12px; color: var(--muted); font-weight: 500; white-space: nowrap; }
+
+/* Apartados de Marcas plegables */
+.ms-tit { cursor: pointer; display: flex; align-items: center; gap: 6px; -webkit-user-select: none; user-select: none; }
+.ms-plegable:not(.plegada) .ms-tit .flecha-dia { transform: rotate(90deg); }
+.ms-plegable.plegada > :not(.ms-tit):not(.sec-cab) { display: none !important; }
+.ms-plegable.plegada > .sec-cab > :not(.ms-tit) { display: none; }
+
+/* Listas: mesociclos que agrupan semanas o bloques */
+.lista-grupo { border: 2px solid var(--accent); border-radius: 12px; margin: 8px 0; background: color-mix(in srgb, var(--accent) 5%, var(--card)); }
+.lista-gcab { display: flex; align-items: center; gap: 6px; padding: 8px 10px; }
+.lg-toggle { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; background: none; border: 0; padding: 0; text-align: left; cursor: pointer; color: inherit; }
+.lg-tit { font-family: var(--display); font-weight: 700; font-size: 16px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); }
+.lista-grupo:not(.lg-plegado) .lg-toggle .flecha-dia { transform: rotate(90deg); }
+.lg-cuerpo { padding: 0 8px 8px; display: flex; flex-direction: column; gap: 6px; }
+.lg-toggle { flex-wrap: wrap; row-gap: 0; }
+.lg-toggle .ls-n { flex-basis: 100%; padding-left: 20px; font-size: 12px; color: var(--muted); }
+@media (max-width: 760px) { .lg-cuerpo { padding: 0 4px 6px; } .lista-gcab { padding: 8px 6px; } .lista-grupo { border-width: 1.5px; } }
+.lista-grupo.lg-plegado .lg-cuerpo { display: none; }
+
+/* Con una ventana abierta (ficha, menú, IA…) el fondo no se mueve: al llegar al final de la ventana el desplazamiento
+   no pasa a la página de detrás, y la página queda quieta mientras la ventana esté abierta */
+dialog, dialog .d-cuerpo, dialog .tabla-scroll, dialog .breg-ciclos, dialog .en-cuerpo { overscroll-behavior: contain; }
+html.con-ventana, html.con-ventana body { overflow: hidden; }
+
+/* Arrastrar un ejercicio o bloque encima de la cabecera de una parte: entra en ella (como una carpeta) */
+.parte-cab { transition: transform 0.15s, box-shadow 0.15s; }
+.parte-cab.zona-destino { transform: scale(1.03); box-shadow: 0 0 0 3px var(--pc), 0 6px 18px rgba(0, 0, 0, 0.18); }
+.arrastrando.sobre-zona { opacity: 0.75; scale: 0.92; }
+.bloque-rep > .bloque-cab { transition: box-shadow 0.15s, background 0.15s; border-radius: 8px; }
+.bloque-rep > .bloque-cab.zona-destino { background: var(--accent-soft); box-shadow: 0 0 0 3px var(--accent); }
+@media (prefers-reduced-motion: reduce) { .parte-cab { transition: none; } }
+
+/* «Enviar sugerencia», «Cambiar contraseña» y «Cerrar sesión» siempre al fondo de la página, aunque haya poco contenido */
+#app:not([hidden]) { min-height: calc(100dvh - max(12px, env(safe-area-inset-top, 0px)) - max(16px, env(safe-area-inset-bottom, 0px)) - 64px); }
+#app > .pie { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--line); }
+@media (min-width: 761px) { #app:not([hidden]) { min-height: calc(100dvh / var(--zoom) - max(12px, env(safe-area-inset-top, 0px)) - 40px); } }
+
+/* Ordenador: tamaño automático según la pantalla (suave) o el elegido en Plan → Ajustes.
+   Las ventanas se dividen por el zoom para que sigan cabiendo en la pantalla */
+:root { --zoom: 1; }
+@media (min-width: 1500px) { :root { --zoom: 1.06; } }
+@media (min-width: 1800px) { :root { --zoom: 1.12; } }
+@media (min-width: 2200px) { :root { --zoom: 1.25; } }
+@media (min-width: 2700px) { :root { --zoom: 1.45; } }
+html[data-tam="90"] { --zoom: 0.9; }
+html[data-tam="100"] { --zoom: 1; }
+html[data-tam="110"] { --zoom: 1.1; }
+html[data-tam="125"] { --zoom: 1.25; }
+@media (min-width: 761px) {
+  body { zoom: var(--zoom); }
+  dialog { max-height: calc(88vh / var(--zoom)); width: min(600px, calc((100vw - 24px) / var(--zoom))); }
+  dialog.pantalla { width: calc(100vw / var(--zoom)); max-width: calc(100vw / var(--zoom)); height: calc(100dvh / var(--zoom)); max-height: calc(100dvh / var(--zoom)); }
+}
+@media (min-width: 1400px) {
+  #app { max-width: 1560px; }
+  #vistaEjercicios, #vistaListas, #vistaPlan, #vistaMarcas { max-width: 940px; }
+  .solo-dia .semana, .solo-dia .dia-nav { max-width: 860px; }
+}
+
+
+/* Semana en móvil: tarjetas apiladas y desplegables a todo el ancho. */
+@media (max-width: 760px) {
+  .sem-resumenes { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .sem-resumenes > details,
+  .sem-resumenes > details[open] { grid-column: 1; width: 100%; min-width: 0; }
+  /* Resumen y molestias funcionan como paneles informativos, distintos de las tarjetas neutras de cada día. */
+  .resumen-sem {
+    border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--line));
+    border-left: 5px solid var(--accent);
+    background: linear-gradient(110deg, var(--accent-soft), var(--card) 76%);
+  }
+  .resumen-sem[open] { box-shadow: 0 4px 14px rgba(20, 35, 27, 0.10); }
+  .resumen-sem summary { min-height: 60px; padding: 11px 12px; }
+  .resumen-sem summary::before { color: var(--accent); font-size: 16px; font-weight: 800; }
+  .resumen-sem .rs-t { color: var(--accent); }
+  .lesiones-sem {
+    border-color: color-mix(in srgb, var(--error) 30%, var(--line));
+    border-left-color: var(--error);
+    background: linear-gradient(110deg, var(--error-soft), var(--card) 76%);
+  }
+  .lesiones-sem summary::before { color: var(--error); }
+  .lesiones-sem .rs-t { color: var(--fg); }
+  .lesiones-sem .rs-l { color: var(--error); }
+  .resumen-sem summary { display: grid; grid-template-columns: 14px minmax(0, 1fr); align-items: start; gap: 3px 8px; }
+  .resumen-sem summary::before { grid-row: 1 / span 2; align-self: center; }
+  .rs-t { font-size: 14px; line-height: 1.25; }
+  .rs-l { grid-column: 2; line-height: 1.4; overflow-wrap: anywhere; }
+  .lesiones-sem summary { align-items: start; }
+}
+
+/* Ejercicios en móvil: la categoría abierta mantiene su control plegable a mano al recorrer la lista. */
+@media (max-width: 760px) {
+  #vistaEjercicios .cat-sec:not(.cerrada) > .sec-toggle {
+    position: sticky;
+    top: calc(env(safe-area-inset-top, 0px) + 52px);
+    z-index: 12;
+    margin: -8px -14px 4px;
+    padding: 8px 14px;
+    border: 1px solid var(--line);
+    border-radius: 13px 13px 10px 10px;
+    background: var(--card);
+    box-shadow: 0 4px 12px rgba(18, 28, 22, 0.14);
+  }
+}
+
+/* Acabado general: relieve suave, colores de sección y controles con respuesta clara. */
+:root {
+  --sombra-panel: 0 2px 5px rgba(22, 36, 28, 0.06), 0 12px 28px rgba(22, 36, 28, 0.055);
+  --sombra-panel-hover: 0 5px 12px rgba(22, 36, 28, 0.08), 0 16px 34px rgba(22, 36, 28, 0.09);
+  --sombra-resumen: 0 4px 10px rgba(22, 36, 28, 0.07), 0 14px 32px rgba(22, 36, 28, 0.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --sombra-panel: 0 2px 8px rgba(0, 0, 0, 0.20), 0 14px 32px rgba(0, 0, 0, 0.15);
+    --sombra-panel-hover: 0 6px 16px rgba(0, 0, 0, 0.28), 0 18px 38px rgba(0, 0, 0, 0.22);
+    --sombra-resumen: 0 5px 14px rgba(0, 0, 0, 0.25), 0 16px 36px rgba(0, 0, 0, 0.19);
+  }
+}
+body {
+  background: radial-gradient(ellipse at 50% -18%, color-mix(in srgb, var(--accent-soft) 62%, transparent), transparent 58%), var(--bg);
+}
+#app { gap: 14px; }
+.cabecera { border-radius: 16px; }
+.dia, .plan-sec, .usuario, #catalogo > .cat-sec, .sem-resumenes > .resumen-sem {
+  box-shadow: var(--sombra-panel);
+  border: 1px solid color-mix(in srgb, var(--line) 82%, var(--fg));
+  border-radius: 16px;
+}
+.dia { overflow: hidden; }
+.dia.hoy {
+  border-color: color-mix(in srgb, var(--accent) 72%, var(--line));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent), var(--sombra-panel);
+}
+.resumen-sem:not(.lesiones-sem) {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
+  border-left: 5px solid var(--accent);
+  background: linear-gradient(115deg, color-mix(in srgb, var(--accent-soft) 75%, var(--card)), var(--card) 78%);
+  box-shadow: var(--sombra-resumen);
+}
+.resumen-sem:not(.lesiones-sem) .rs-t { color: var(--accent); }
+.lesiones-sem {
+  border-color: color-mix(in srgb, var(--error) 34%, var(--line));
+  border-left: 5px solid var(--error);
+  background: linear-gradient(115deg, color-mix(in srgb, var(--error-soft) 76%, var(--card)), var(--card) 78%);
+  box-shadow: var(--sombra-resumen);
+}
+.cat-sec { border: 1px solid var(--line); transition: box-shadow 0.18s ease, border-color 0.18s ease; }
+.cat-sec.t-fuerza { border-left: 4px solid var(--fuerza); }
+.cat-sec.t-carrera { border-left: 4px solid var(--carrera); }
+.cat-sec.t-natacion { border-left: 4px solid var(--natacion); }
+.cat-sec.t-movilidad { border-left: 4px solid var(--movilidad); }
+.cat-grid .tarjeta { box-shadow: none; }
+.tabs button, .tabbar button, .nav-btn, .primario, .anadir { transition: color 0.16s ease, background-color 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease; }
+.nav-btn:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); background: var(--accent-soft); }
+.primario, .anadir { box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 20%, transparent); }
+.primario:hover:not(:disabled), .anadir:hover:not(:disabled) { box-shadow: 0 7px 18px color-mix(in srgb, var(--accent) 28%, transparent); transform: translateY(-1px); }
+input, textarea, select { transition: border-color 0.16s ease, box-shadow 0.16s ease; }
+input:focus, textarea:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); }
+.dia-abrir:hover { background: color-mix(in srgb, var(--accent-soft) 55%, transparent); }
+@media (hover: hover) and (pointer: fine) {
+  .dia, .plan-sec, .usuario, #catalogo > .cat-sec { transition: box-shadow 0.18s ease, transform 0.18s ease; }
+  .dia:hover, .plan-sec:hover, .usuario:hover, #catalogo > .cat-sec:hover { box-shadow: var(--sombra-panel-hover); transform: translateY(-1px); }
+}
+@media (max-width: 760px) {
+  #app { gap: 10px; }
+  .dia, .plan-sec, .usuario, #catalogo > .cat-sec, .sem-resumenes > .resumen-sem { border-radius: 15px; }
+  .sem-resumenes { gap: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tabs button, .tabbar button, .nav-btn, .primario, .anadir, input, textarea, select,
+  .cat-sec, .dia, .plan-sec, .usuario { transition: none !important; }
+  .primario:hover:not(:disabled), .anadir:hover:not(:disabled), .dia:hover, .plan-sec:hover, .usuario:hover, #catalogo > .cat-sec:hover { transform: none; }
+}
+@media (prefers-contrast: more) {
+  .dia, .plan-sec, .usuario, #catalogo > .cat-sec, .sem-resumenes > .resumen-sem { border-color: var(--fg); }
+  .dia, .plan-sec, .usuario, #catalogo > .cat-sec, .sem-resumenes > .resumen-sem { box-shadow: none; }
+}
+
+/* Semana: igual que en Ejercicios, la cabecera abierta queda accesible mientras se recorre su contenido. */
+@media (max-width: 760px) {
+  :root { --sticky-cabecera: calc(max(10px, env(safe-area-inset-top, 0px)) + 50px); }
+  #vistaSemana:not(.solo-dia) .dia { overflow: clip; }
+  #vistaSemana:not(.solo-dia) .dia:not(.plegado) > .dia-cab {
+    position: sticky;
+    top: var(--sticky-cabecera);
+    z-index: 11;
+    background: var(--card);
+    box-shadow: 0 5px 12px -12px rgba(12, 26, 18, 0.6);
+  }
+  #vistaSemana:not(.solo-dia) .dia.hoy:not(.plegado) > .dia-cab {
+    background: color-mix(in srgb, var(--accent-soft) 86%, var(--card));
+  }
+  #vistaEjercicios .cat-sec:not(.cerrada) > .sec-toggle { top: var(--sticky-cabecera); }
+
+  /* Selector de Entrenamientos: tres opciones en una sola banda, sin apilarse en móviles estrechos. */
+  .organizar-nav.plan-nav {
+    position: sticky;
+    top: var(--sticky-cabecera);
+    z-index: 13;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+    padding: 5px;
+    border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--line));
+    border-radius: 16px;
+    background: var(--card) !important;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: var(--sombra-panel);
+  }
+  .organizar-nav .plan-nav-btn {
+    min-width: 0;
+    min-height: 48px;
+    padding: 6px 4px;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    font-size: clamp(11px, 3.15vw, 13px);
+    line-height: 1.15;
+    text-align: center;
+    white-space: normal;
+  }
+  .organizar-nav .plan-nav-btn.activa {
+    border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+    background: linear-gradient(135deg, color-mix(in srgb, var(--accent-soft) 85%, var(--card)), var(--card));
+    color: var(--accent);
+    box-shadow: inset 0 -3px 0 var(--accent), 0 3px 8px color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+}
+
+/* Marcas: el resumen descargable queda recogido para que los resultados destaquen al entrar. */
+.informe-sec { gap: 0; padding-top: 0; padding-bottom: 0; }
+.informe-toggle {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 4px 9px;
+  min-height: 58px;
+  cursor: pointer;
+  list-style: none;
+}
+.informe-toggle::-webkit-details-marker { display: none; }
+.informe-toggle::before { content: "▸"; grid-row: 1 / span 2; color: var(--accent); font-size: 16px; font-weight: 800; transition: transform 0.16s ease; }
+.informe-sec[open] .informe-toggle::before { transform: rotate(90deg); }
+.informe-tit { font-family: var(--display); font-size: 15px; font-weight: 750; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+.informe-sub { grid-column: 2; color: var(--muted); font-size: 12px; line-height: 1.35; }
+.informe-cuerpo { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding: 12px 0 4px; }
+@media (min-width: 761px) {
+  .informe-toggle { grid-template-columns: 16px minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) { .informe-toggle::before { transition: none; } }
+
+/* Navegación del día en móvil: nombre completo arriba y controles en una fila ordenada. */
+.dia-nav[hidden] { display: none !important; }
+@media (max-width: 760px) {
+  .dia-nav {
+    display: grid;
+    grid-template-columns: minmax(84px, 1fr) 44px minmax(64px, auto) 44px;
+    grid-template-areas: "titulo titulo titulo titulo" "semana anterior hoy siguiente";
+    align-items: center;
+    gap: 6px;
+    padding: 8px;
+    border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+    border-radius: 15px;
+    background: color-mix(in srgb, var(--card) 94%, var(--accent-soft));
+    box-shadow: 0 3px 10px rgba(10, 25, 18, 0.07);
+  }
+  .dia-nav-t {
+    grid-area: titulo;
+    width: 100%;
+    padding: 2px 2px 5px;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    font-size: clamp(18px, 5vw, 22px);
+    line-height: 1.15;
+    letter-spacing: 0.04em;
+  }
+  #volverSemana { grid-area: semana; width: 100%; min-width: 0; padding: 0 6px; white-space: nowrap; font-size: 14px; }
+  #diaAnt { grid-area: anterior; width: 44px; font-size: 23px; }
+  #diaHoy { grid-area: hoy; width: 100%; min-width: 64px; padding: 0 10px; }
+  #diaSig { grid-area: siguiente; width: 44px; font-size: 23px; }
+  .dia-nav > .nav-btn { min-height: 44px; }
+  #diaHoy[aria-current="date"] { box-shadow: inset 0 -3px 0 color-mix(in srgb, var(--fg) 20%, transparent); }
+}
+
+/* Molestias: una banda compacta bajo el resumen; el panel mantiene su contenido al abrirse. */
+.sem-resumenes { grid-template-columns: minmax(0, 1fr); }
+.sem-resumenes > .lesiones-sem,
+.sem-resumenes > .lesiones-sem[open] { grid-column: 1; width: 100%; }
+.lesiones-sem:not([open]) { padding-top: 0; padding-bottom: 0; }
+.lesiones-sem:not([open]) summary { min-height: 46px; padding: 7px 10px; flex-wrap: nowrap; }
+.lesiones-sem:not([open]) .rs-t { white-space: nowrap; }
+.lesiones-sem:not([open]) .rs-l { margin-left: auto; white-space: nowrap; }
+.lesiones-sem.sin-activas { border-color: color-mix(in srgb, var(--accent) 36%, var(--line)); border-left-color: var(--accent); background: linear-gradient(110deg, color-mix(in srgb, var(--accent-soft) 72%, var(--card)), var(--card) 78%); }
+.lesiones-sem.sin-activas .rs-t, .lesiones-sem.sin-activas .rs-l { color: var(--accent); }
+.rutina-parte-acordeon { list-style: none; margin: 4px 0; }
+.rutina-parte-det { border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line)); border-radius: 9px; padding: 6px 9px; background: color-mix(in srgb, var(--accent-soft) 28%, var(--card)); }
+.rutina-parte-det > summary { cursor: pointer; font-size: 12px; font-weight: 750; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); }
+.rutina-parte-det > ul { margin: 6px 0 2px; padding-left: 1.2em; }
+.rutina-parte-det > ul > li { margin: 3px 0; }
+@media (max-width: 390px) {
+  .lesiones-sem:not([open]) summary { gap: 4px; }
+  .lesiones-sem:not([open]) .rs-t { font-size: 11px; letter-spacing: 0.03em; }
+  .lesiones-sem:not([open]) .rs-l { font-size: 11px; }
+}
+
+/* Barra inferior: mismos bordes y resaltado segmentado que el selector de Entrenamientos. */
+.tabbar { gap: 4px; }
+.tabbar button { min-width: 0; border: 1px solid transparent; padding: 3px 2px; }
+@media (max-width: 760px) {
+  .tabbar { gap: 3px; padding: 4px 6px; }
+  .tabbar button { flex: 1 1 0; max-width: none; min-height: 52px; border-radius: 20px; }
+  .tabbar button span { font-size: clamp(8px, 2.7vw, 11px); line-height: 1.05; letter-spacing: 0; }
+  .tabbar svg { width: 23px; height: 23px; }
+  .tabbar button[aria-selected="true"] {
+    border-color: color-mix(in srgb, var(--verde) 35%, transparent) !important;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--verde) 25%, var(--azul)), color-mix(in srgb, var(--verde) 12%, var(--azul))) !important;
+    color: var(--verde);
+    box-shadow: inset 0 -3px 0 var(--verde), 0 3px 8px color-mix(in srgb, var(--verde) 13%, transparent);
+  }
+  .tabbar button:focus-visible { outline: 2px solid var(--verde); outline-offset: 1px; }
+}
+
+/* Tema oscuro más sereno y sin el rebote de «tirar para actualizar» en móvil. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --accent: #86ad98;
+    --accent-soft: #20312b;
+    --verde: #92b8a2;
+    --marca: #86ad98;
+    --toast-acento: #5b8b70;
+    --p1: #86ad98;
+    --natacion: #69b6b3;
+    --pulso: #75b9b2;
+  }
+  body {
+    background: radial-gradient(ellipse at 50% -18%, color-mix(in srgb, var(--accent-soft) 30%, transparent), transparent 58%), var(--bg);
+  }
+}
+@media (max-width: 760px) {
+  html, body { overscroll-behavior-y: none; }
+}
+
+/* Móvil: evitar que títulos largos y controles de añadir ensanchen la tarjeta del día. */
+@media (max-width: 760px) {
+  #vistaSemana.solo-dia .semana { grid-template-columns: minmax(0, 1fr); }
+  #vistaSemana .dia,
+  #vistaSemana .dia-cuerpo,
+  #vistaSemana .dia-cuerpo-in,
+  #vistaSemana .grupo,
+  #vistaSemana .parte-caja,
+  #vistaSemana .grupo-cab,
+  #vistaSemana .parte-cab { box-sizing: border-box; min-width: 0; max-width: 100%; }
+  #vistaSemana .grupo,
+  #vistaSemana .grupo-cab { width: 100%; }
+  #vistaSemana .grupo-cab .g-toggle {
+    flex: 1 1 0;
+    width: 0;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+  }
+  #vistaSemana .g-toggle .gn-txt {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #vistaSemana .g-toggle .g-res { flex: 1 1 auto; min-width: 0; }
+  #vistaSemana .dia-cuerpo-in > .add-fila {
+    min-width: 0;
+    width: auto;   /* v252: con sus márgenes laterales (8–10 px), «100%» la hacía más ancha que la tarjeta y cortaba la columna derecha */
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  #vistaSemana .add-fila > .add-ej { min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+  #vistaSemana .empezar { max-width: calc(100% - 16px); min-width: 0; }
+
+  /* Barra inferior. */
+  .tabbar {
+    background: color-mix(in srgb, var(--card) 97%, transparent) !important;
+    border-color: color-mix(in srgb, var(--line) 88%, transparent);
+    -webkit-backdrop-filter: blur(18px) saturate(135%);
+    backdrop-filter: blur(18px) saturate(135%);
+  }
+  body { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 104px); }
+}
+
+/* Cabeceras de acordeón: se integran en la parte superior sin formar tarjetas flotantes apiladas. */
+@media (max-width: 760px) {
+  #vistaSemana:not(.solo-dia) { --sticky-entreno: var(--sticky-cabecera); }
+  #vistaSemana.solo-dia { --sticky-entreno: calc(var(--sticky-cabecera) + 44px); }
+
+  #vistaSemana .dia-nav:not([hidden]) {
+    grid-template-columns: max-content minmax(0, 1fr) 36px auto 36px;
+    grid-template-areas: "semana titulo anterior hoy siguiente";
+    gap: 3px;
+    padding: 3px 2px;
+    border-radius: 0;
+    background: var(--card);
+    box-shadow: inset 0 -1px var(--line);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  #vistaSemana .dia-nav-t {
+    padding: 0 2px;
+    font-size: clamp(14px, 3.9vw, 17px);
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+  #vistaSemana #volverSemana { height: 36px; min-height: 36px; padding: 0 3px; font-size: 12px; }
+  #vistaSemana #diaAnt, #vistaSemana #diaSig { width: 36px; height: 36px; min-height: 36px; font-size: 20px; }
+  #vistaSemana #diaHoy { height: 34px; min-height: 34px; min-width: 48px; padding: 0 9px; font-size: 13px; }
+  #vistaSemana .dia-nav:has(#diaHoy[hidden]) {
+    grid-template-columns: max-content minmax(0, 1fr) 36px 36px;
+    grid-template-areas: "semana titulo anterior siguiente";
+  }
+
+  /* En la lista semanal, el título del desplegable sustituye visualmente a las barras padre. */
+  #vistaSemana:not(.solo-dia) .dia:not(.plegado) > .dia-cab { z-index: 10; }
+  #vistaSemana .parte-caja:not(.p-plegada) > .parte-cab {
+    top: var(--sticky-entreno);
+    z-index: 14;
+    border-radius: 0;
+    box-shadow: inset 0 -1px color-mix(in srgb, var(--pc) 28%, var(--line));
+  }
+  #vistaSemana .grupo:not(.g-plegado) > .grupo-cab {
+    top: var(--sticky-entreno);
+    z-index: 15;
+    border-radius: 0;
+    box-shadow: inset 0 -1px var(--line);
+  }
+  #vistaSemana .parte-caja .grupo:not(.g-plegado) > .grupo-cab { top: var(--sticky-entreno); }
+
+  /* Las cabeceras se leen como parte de su panel, no como pastillas flotantes. */
+  #vistaEjercicios .cat-sec:not(.cerrada) > .sec-toggle,
+  #vistaMarcas .cat-sec:not(.cerrada) > .sec-toggle,
+  #vistaListas .lista-sec:not(.cerrada) > .lista-cab,
+  #vistaPlan > .plan-sec:not(.cerrada) > .sec-toggle,
+  #vistaPlan > .plan-sec:not(.cerrada) > .sec-cab:has(> .sec-toggle) {
+    box-shadow: inset 0 -1px var(--line);
+    border-radius: 0;
+  }
+}
+
+/* Móvil: el contenido abierto ocupa el borde superior; la fila vacía de marca se desplaza con la página. */
+@media (max-width: 760px) {
+  :root { --sticky-cabecera: env(safe-area-inset-top, 0px); }
+  #app > .cabecera { position: static; top: auto; }
+  #vistaSemana .dia-nav:not([hidden]) { position: static; top: auto; }
+  #vistaSemana:not(.solo-dia) { --sticky-entreno: var(--sticky-cabecera); }
+  #vistaSemana.solo-dia { --sticky-entreno: var(--sticky-cabecera); }
+
+  #vistaSemana .dia:not(.plegado) > .dia-cab,
+  #vistaSemana .parte-caja:not(.p-plegada) > .parte-cab,
+  #vistaSemana .grupo:not(.g-plegado) > .grupo-cab,
+  #vistaSemana .parte-caja .grupo:not(.g-plegado) > .grupo-cab,
+  #vistaEjercicios .cat-sec:not(.cerrada) > .sec-toggle,
+  #vistaMarcas .cat-sec:not(.cerrada) > .sec-toggle,
+  #vistaListas .lista-sec:not(.cerrada) > .lista-cab,
+  #vistaPlan > .plan-sec:not(.cerrada) > .sec-toggle,
+  #vistaPlan > .plan-sec:not(.cerrada) > .sec-cab:has(> .sec-toggle) {
+    top: var(--sticky-cabecera);
+  }
+
+  /* Conserva contraste en todos los apartados de navegación, también con fondo claro. */
+  .tabbar button:not([aria-selected="true"]) { color: var(--muted) !important; }
+  .tabbar button[aria-selected="true"] { color: var(--verde) !important; }
+}
+
+/* Barra inferior translúcida, con suficiente contraste para leer las cinco secciones. */
+@media (max-width: 760px) {
+  .tabbar {
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--card) 78%, transparent),
+      color-mix(in srgb, var(--card) 91%, transparent)
+    ) !important;
+    border-color: color-mix(in srgb, var(--line) 75%, transparent) !important;
+    box-shadow: 0 12px 32px rgba(15, 28, 38, 0.16), inset 0 1px 0 color-mix(in srgb, var(--card) 82%, transparent);
+    -webkit-backdrop-filter: blur(24px) saturate(155%);
+    backdrop-filter: blur(24px) saturate(155%);
+  }
+  .tabbar button:not([aria-selected="true"]) { color: var(--muted) !important; }
+  .tabbar button[aria-selected="true"] { color: var(--verde) !important; }
+  .tabbar button span { white-space: nowrap; font-size: clamp(8px, 2.45vw, 10px); }
+
+  /* El selector secundario de Entrenamientos acompaña el contenido y no lo tapa al desplazarse. */
+  #organizarNav.organizar-nav {
+    position: static;
+    top: auto;
+    z-index: auto;
+    margin-bottom: 4px;
+    background: color-mix(in srgb, var(--card) 92%, transparent);
+    box-shadow: 0 2px 8px rgba(15, 28, 38, 0.06);
+  }
+  #vistaListas .lista-sec:not(.cerrada) > .lista-cab { top: var(--sticky-cabecera); }
+}
+
+/* En móvil, navegación inferior sólida y pegada al borde seguro de la pantalla. */
+.ayuda-ajustes-btn {
+  width: auto;
+  height: auto;
+  min-height: 42px;
+  border-radius: 10px;
+  padding: 8px 14px;
+  font-size: 14px;
+}
+@media (max-width: 760px) {
+  /* No hay banda fija bajo la zona del sistema: el contenido comienza limpio arriba. */
+  #app > .cabecera { display: none !important; }
+  :root { --sticky-cabecera: env(safe-area-inset-top, 0px); }
+
+  .tabbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 100;
+    margin: 0;
+    padding: 5px 6px calc(5px + env(safe-area-inset-bottom, 0px));
+    border: 1px solid var(--line) !important;
+    border-bottom: 0 !important;
+    border-radius: 18px 18px 0 0;
+    background: var(--card) !important;
+    box-shadow: 0 -6px 22px rgba(15, 28, 38, 0.12);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .tabbar button { min-height: 52px; }
+}
+
+
+
+/* Cabecera superior opaca en móvil. */
+@media (max-width: 760px) {
+  #app > .cabecera {
+    background: var(--bg) !important;
+    background-image: none !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}
+
+/* Corrección de base: superficies opacas arriba y cabeceras de día uniformes. */
+@media (max-width: 760px) {
+  #navSemana,
+  #vistaSemana .dia-nav:not([hidden]),
+  #organizarNav.organizar-nav {
+    background: var(--bg) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+  #vistaSemana:not(.solo-dia) .dia:not(.plegado) > .dia-cab,
+  #vistaSemana .parte-caja:not(.p-plegada) > .parte-cab,
+  #vistaSemana .grupo:not(.g-plegado) > .grupo-cab,
+  #vistaSemana .parte-caja .grupo:not(.g-plegado) > .grupo-cab,
+  #vistaSemana .sem-resumenes > details[open] > summary,
+  #vistaEjercicios .cat-sec:not(.cerrada) > .sec-toggle,
+  #vistaMarcas .cat-sec:not(.cerrada) > .sec-toggle,
+  #vistaMarcas .informe-sec[open] > .informe-toggle,
+  #vistaListas .lista-sec:not(.cerrada) > .lista-cab,
+  #vistaPlan > .plan-sec:not(.cerrada) > .sec-toggle,
+  #vistaPlan > .plan-sec:not(.cerrada) > .sec-cab:has(> .sec-toggle) {
+    background: var(--card) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}
+#vistaSemana .semana > .dia > .dia-cab {
+  background: color-mix(in srgb, var(--bg) 54%, var(--card)) !important;
+  border-bottom-color: var(--line) !important;
+}
+#vistaSemana .semana > .dia .dia-nombre {
+  color: color-mix(in srgb, var(--fg) 78%, var(--muted)) !important;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+}
+
+/* La barra de secciones de Entrenamientos queda siempre sólida y acompaña al contenido. */
+@media (max-width: 760px) {
+  #navSemana, #vistaSemana .dia-nav, #organizarNav,
+  #organizarNav.organizar-nav.plan-nav {
+    position: static !important;
+    top: auto !important;
+    opacity: 1 !important;
+    filter: none !important;
+    background: var(--card) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}
+
+/* PWA instalada: separa la primera fila de la zona del reloj/Isla dinámica y mantiene la navegación nítida. */
+@media (max-width: 760px) and (display-mode: standalone) {
+  body { padding-top: calc(env(safe-area-inset-top, 0px) + 8px) !important; }
+  #navSemana, #vistaSemana .dia-nav, #organizarNav,
+  #organizarNav.organizar-nav.plan-nav {
+    position: static !important;
+    opacity: 1 !important;
+    filter: none !important;
+    background: var(--card) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}
+
+
+/* Móvil: ninguna cabecera o navegación superior usa transparencia ni desenfoque. */
+@media (max-width: 760px) {
+  #app > .cabecera { background: var(--bg) !important; background-image: none !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+  #navSemana, #vistaSemana .dia-nav, #organizarNav,
+  #vistaSemana .dia-cab, #vistaSemana .parte-cab, #vistaSemana .grupo-cab,
+  #vistaSemana .sem-resumenes > details > summary,
+  #vistaEjercicios .sec-toggle, #vistaMarcas .sec-toggle, #vistaMarcas .informe-toggle,
+  #vistaListas .lista-cab, #vistaPlan .sec-toggle, #vistaPlan .sec-cab {
+    -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+  }
+  #navSemana, #vistaSemana .dia-nav, #organizarNav { background: var(--bg) !important; background-image: none !important; }
+  #vistaSemana .dia-cab, #vistaSemana .parte-cab, #vistaSemana .grupo-cab,
+  #vistaSemana .sem-resumenes > details > summary, #vistaEjercicios .sec-toggle,
+  #vistaMarcas .sec-toggle, #vistaMarcas .informe-toggle, #vistaListas .lista-cab,
+  #vistaPlan .sec-toggle, #vistaPlan .sec-cab { background: var(--card) !important; background-image: none !important; }
+}
+
+
+/* Franja de cristal solo en la app instalada en iOS; los títulos quedan debajo. */
+@media (max-width: 760px) {
+  html.ios-instalada {
+    --sticky-cabecera: calc(env(safe-area-inset-top, 0px) + 46px);
+    background: var(--bg);
+  }
+  html.ios-instalada #vistaSemana:not(.solo-dia) { --sticky-entreno: var(--sticky-cabecera) !important; }
+  html.ios-instalada #vistaSemana.solo-dia { --sticky-entreno: calc(var(--sticky-cabecera) + 44px) !important; }
+  html.ios-instalada body {
+    background: var(--bg);
+    padding-top: calc(env(safe-area-inset-top, 0px) + 54px) !important;
+  }
+  html.ios-instalada body::before {
+    content: "";
+    position: fixed;
+    /* Empieza debajo del área de estado: evita superponer las dos capas. */
+    inset: calc(env(safe-area-inset-top, 0px) + 10px) 0 auto;
+    height: 36px;
+    z-index: 1000;
+    background: var(--bg);
+    pointer-events: none;
+  }
+  @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    html.ios-instalada body::before {
+      background: color-mix(in srgb, var(--bg) 28%, transparent);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+      /* Entrada y salida progresivas: sin un salto de densidad en los bordes. */
+      -webkit-mask-image: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.048) 10%, rgba(0, 0, 0, 0.173) 20%, rgba(0, 0, 0, 0.327) 30%, rgba(0, 0, 0, 0.452) 40%, rgba(0, 0, 0, 0.5) 50%, rgba(0, 0, 0, 0.452) 60%, rgba(0, 0, 0, 0.327) 70%, rgba(0, 0, 0, 0.173) 80%, rgba(0, 0, 0, 0.048) 90%, transparent 100%);
+      mask-image: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.048) 10%, rgba(0, 0, 0, 0.173) 20%, rgba(0, 0, 0, 0.327) 30%, rgba(0, 0, 0, 0.452) 40%, rgba(0, 0, 0, 0.5) 50%, rgba(0, 0, 0, 0.452) 60%, rgba(0, 0, 0, 0.327) 70%, rgba(0, 0, 0, 0.173) 80%, rgba(0, 0, 0, 0.048) 90%, transparent 100%);
+    }
+  }
+  @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+    html.ios-instalada body::before {
+      background: var(--bg);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+      -webkit-mask-image: none;
+      mask-image: none;
+    }
+  }
+}
+
+/* Semana: nombres completos y una sola cabecera fija por día abierto. */
+#vistaSemana .dia-resumen.es-titulo,
+#vistaSemana .g-toggle .gn-txt,
+#vistaSemana .p-toggle .p-nombre,
+#vistaSemana .letra-cab .l-nombres {
+  white-space: normal !important; overflow: visible !important; text-overflow: clip !important;
+  max-width: 100% !important; overflow-wrap: anywhere;
+}
+#vistaSemana .g-toggle .gn-txt { flex: 1 1 auto; }
+#vistaSemana .g-toggle .g-res { display: none; }
+.grupo-iniciar { display: block; width: 100%; border: 1px solid var(--line); background: var(--accent-soft); color: var(--accent); border-radius: 10px; min-height: 44px; margin: 8px 0 12px; padding: 10px 12px; text-align: left; white-space: normal; font: inherit; font-size: 14px; font-weight: 700; }
+@media (max-width: 760px) {
+  #vistaSemana .dia:not(.plegado) > .dia-cab,
+  #vistaSemana .grupo > .grupo-cab,
+  #vistaSemana .parte-caja > .parte-cab { position: static !important; top: auto !important; }
+  #vistaSemana .grupo:not(.g-plegado):not(:has(.parte-caja:not(.p-plegada))) > .grupo-cab,
+  #vistaSemana .parte-caja:not(.p-plegada) > .parte-cab {
+    position: sticky !important; top: var(--sticky-cabecera) !important; z-index: 12;
+    background: var(--card) !important; border-radius: 0;
+  }
+  #vistaSemana .grupo-cab { display: grid; grid-template-columns: 1fr auto auto; gap: 4px 8px; padding: 8px; align-items: center; }
+  #vistaSemana .grupo-cab .g-toggle { grid-column: 1 / -1; width: auto; overflow: visible; }
+  #vistaSemana .g-toggle .gn-txt { font-size: 16px; line-height: 1.25; }
+  #vistaSemana .grupo-cab .g-prog { justify-self: start; }
+  #vistaSemana .grupo-cab .menu-btn, #vistaSemana .grupo-cab .asa { min-width: 32px; }
+  #vistaSemana .parte-cab .p-toggle { min-width: 0; overflow: visible; }
+}
+
+
+/* Navegación del día compacta, con fecha legible y controles de menor peso visual. */
+@media (max-width: 760px) {
+  #vistaSemana .dia-nav:not([hidden]) {
+    grid-template-columns: max-content minmax(0, 1fr) 44px 52px 44px;
+    grid-template-areas: "semana titulo anterior hoy siguiente";
+    gap: 4px; padding: 2px 0; align-items: center; box-shadow: none;
+  }
+  #vistaSemana .dia-nav-t {
+    min-width: 0; padding: 0 0 0 8px; white-space: normal; overflow: visible;
+    text-overflow: clip; font-family: var(--body); font-size: 15px; font-weight: 650;
+    text-transform: none; letter-spacing: 0; line-height: 1.25; text-align: left;
+  }
+  #vistaSemana #volverSemana {
+    min-width: 0; width: auto; min-height: 44px; padding: 0; font-size: 12px; font-weight: 600;
+  }
+  #vistaSemana #diaAnt, #vistaSemana #diaSig, #vistaSemana #diaHoy {
+    box-sizing: border-box; height: 44px; min-height: 44px; margin: 0;
+    padding: 0; border-radius: 10px; transform: none; box-shadow: none !important;
+  }
+  #vistaSemana #diaAnt, #vistaSemana #diaSig {
+    width: 44px; min-width: 44px; border: 0; background: transparent; font-size: 22px;
+  }
+  #vistaSemana #diaHoy {
+    width: 52px; min-width: 52px; font-size: 13px; font-weight: 650;
+    background: var(--accent-soft) !important; color: var(--accent) !important;
+    border: 1px solid var(--line) !important;
+  }
+  #vistaSemana .dia-nav:has(#diaHoy[hidden]) {
+    grid-template-columns: max-content minmax(0, 1fr) 44px 44px;
+    grid-template-areas: "semana titulo anterior siguiente";
+  }
+}
+@media (max-width: 360px) {
+  #vistaSemana .dia-nav:not([hidden]) {
+    grid-template-areas: "semana titulo titulo titulo titulo" ". . anterior hoy siguiente";
+  }
+  #vistaSemana .dia-nav:has(#diaHoy[hidden]) {
+    grid-template-areas: "semana titulo titulo titulo" ". . anterior siguiente";
+  }
+}
+/* Redondea el panel blanco interior sin recortar los encabezados al desplazarse. */
+#vistaSemana .sem-resumenes > details.resumen-sem > summary {
+  border-radius: 12px !important;
+}
+
+/* Consulta de PR semanales en una ventana, sin añadir otro acordeón. */
+.pr-semana-abrir { display: block; margin: 8px auto 0; min-height: 44px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--accent); font: inherit; font-size: 13px; font-weight: 650; white-space: normal; }
+.pr-semana-lista { list-style: none; margin: 0; padding: 0; }
+.pr-semana-lista li { display: grid; gap: 4px; padding: 12px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.pr-semana-lista li:last-child { border-bottom: 0; }
+.pr-semana-marca { color: var(--fg); font-weight: 600; }
+.pr-semana-fecha { color: var(--muted); font-size: 13px; }
+
+
+/* Consulta móvil: solo el día queda fijo; los demás desplegables siguen su contenido. */
+@media (max-width: 760px) {
+  #app details[open] > summary,
+  #app .cat-sec:not(.cerrada) > .sec-toggle,
+  #app .cat-sec:not(.cerrada) > .sec-cab,
+  #app .lista-sec:not(.cerrada) > .lista-cab,
+  #app .plan-sec:not(.cerrada) > .sec-toggle,
+  #app .plan-sec:not(.cerrada) > .sec-cab:has(> .sec-toggle),
+  #app .grupo > .grupo-cab,
+  #app .grupo:not(.g-plegado):not(:has(.parte-caja:not(.p-plegada))) > .grupo-cab,
+  #app .parte-caja > .parte-cab,
+  #app .parte-caja:not(.p-plegada) > .parte-cab {
+    position: static !important; top: auto !important;
+    /* Un elemento flex/grid conserva su capa aunque deje de ser sticky. */
+    z-index: auto !important; box-shadow: none;
+  }
+  #app #vistaSemana .dia { overflow: clip; }
+  /* Las capas internas del entrenamiento permanecen debajo de la fecha fija. */
+  #app #vistaSemana .dia-cuerpo { isolation: isolate; }
+  #app #vistaSemana .dia:not(.plegado) > .dia-cab {
+    position: sticky !important; top: var(--sticky-cabecera) !important; z-index: 15;
+    background: var(--card) !important; background-image: none !important;
+    -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+    box-shadow: 0 1px 0 var(--line);
+  }
+  #app #vistaSemana.solo-dia .dia-abrir { visibility: visible; }
+}
+/* La cabecera ocupa el marco completo del resumen y sus datos conservan el margen interior. */
+#vistaSemana .sem-resumenes > details.resumen-sem { padding-left: 0; padding-right: 0; }
+#vistaSemana .sem-resumenes > details.resumen-sem > summary {
+  margin: 0; padding-left: 12px; padding-right: 12px; border-radius: inherit !important;
+}
+#vistaSemana .sem-resumenes > details.resumen-sem[open] > summary {
+  border-bottom-left-radius: 0 !important; border-bottom-right-radius: 0 !important;
+  border-bottom: 1px solid var(--line);
+}
+#vistaSemana .sem-resumenes > details.resumen-sem > .records { padding-left: 12px; padding-right: 12px; }
+#vistaSemana .sem-resumenes > details.resumen-sem > .molestias-semana { padding-left: 12px; padding-right: 12px; }
+
+/* El resumen de una letra solo hace falta mientras sus ejercicios están plegados. */
+#vistaSemana .letra-caja:not(.l-plegada) > .letra-cab .l-nombres { display: none !important; }
+#vistaSemana .letra-cab .g-prog { margin-left: auto; }
+/* Esta cubierta aparece únicamente cuando un día queda fijado al desplazarse. */
+#cubiertaDia { position: fixed; inset: 0 0 auto; width: 100%; background: var(--bg); z-index: 999; pointer-events: none; }
+
+/* Los paneles informativos recortan su fondo interior al marco redondeado.
+   Sus cabeceras móviles ya no son fijas; la cabecera del día queda intacta. */
+#vistaSemana .sem-resumenes > details.resumen-sem { overflow: clip; }
+
+/* Compartir con amigos: vista previa de lo que se envía, caducidad y resolución de ejercicios (H1/H3/H4) */
+.comp-previa { display: flex; flex-direction: column; gap: 10px; }
+.comp-campo { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.comp-campo input, .comp-campo select, .comp-fila select { font: inherit; font-size: 15px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--fg); max-width: 100%; }
+.comp-check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.35; }
+.comp-check input { margin-top: 3px; flex: none; width: 18px; height: 18px; }
+.comp-check-t { display: flex; flex-direction: column; gap: 2px; }
+.comp-check-t small { color: var(--muted); font-size: 12.5px; }
+.comp-fila { display: flex; flex-direction: column; gap: 4px; margin: 0 0 10px; }
+.comp-fila .comp-et { margin: 0; font-size: 14px; font-weight: 600; }
+.comp-resumen { margin-bottom: 8px; }
+.comp-aviso { margin: 6px 0; padding: 8px 10px; border-left: 4px solid var(--accent, #d97706); background: var(--accent-soft); border-radius: 6px; font-size: 14px; line-height: 1.4; }
+
+/* INC-UI-007 (v245): con zoom de pellizco la barra inferior se ancla a la zona realmente visible (variables --vv-* que pone app.js solo
+   mientras html.ampliado). Solo en el diseño móvil, donde la barra es fixed; en escritorio (sticky) y a escala 1 no hay efecto. */
+@media (max-width: 760px) {
+  /* v246: capa de composición propia desde el principio, para no crearla a mitad del gesto de pellizco */
+  .tabbar { will-change: transform; }
+  html.ampliado .tabbar {
+    transform-origin: left bottom;
+    transform: translate(var(--vv-tx, 0px), var(--vv-ty, 0px)) scale(var(--vv-s, 1));
+  }
+}
+
+/* INC-UI-006 (v247): aviso importante modal y centrado, con un solo botón «Aceptar» (reutiliza el estilo de la confirmación) */
+dialog#dlgAviso { margin: auto; }
+.conf-botones.conf-uno { grid-template-columns: 1fr; }
+.conf-ok { border: 0; background: var(--accent); color: #fff; }
+@media (prefers-color-scheme: dark) { .conf-ok { color: #08121b; } }
+.conf-ok:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+
+/* FASE_03 (v249): asa para arrastrar partes enteras, en la cabecera de la parte */
+.parte-cab .asa { flex: none; opacity: 1; }
+@media (max-width: 760px) { .parte-cab .asa { width: 36px; height: 40px; } }
+
+/* INC-SEM-003 (v250): destino para soltar al final del entreno, después de su última parte. Ocupa siempre la misma altura
+   (no desplaza nada al empezar un arrastre); solo se ve resaltado mientras se arrastra un ejercicio o bloque */
+.fin-grupo { flex: none; box-sizing: border-box; height: 30px; margin: 2px 0; border: 2px dashed transparent; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center; font-size: 12px; color: transparent; user-select: none; pointer-events: none; }
+.arrastre-ej .fin-grupo { border-color: var(--accent); color: var(--muted, inherit); background: var(--accent-soft); }
+
+/* v252: el nombre del entrenamiento destaca algo más que partes (15 px) y ejercicios (15 px); mismo color, tipo y mayúsculas */
+#vistaSemana .grupo-cab .g-toggle .gn-txt { font-size: 19px; line-height: 1.2; letter-spacing: 0.05em; }
+@media (max-width: 760px) { #vistaSemana .grupo-cab .g-toggle .gn-txt { font-size: 18px; line-height: 1.2; } }
+
+/* v254 (sustituye el bloque v253): el entrenamiento es una jerarquía distinta de sus partes. Las partes usan azul, verde, ámbar,
+   violeta y cian (--p0…--p4) y el acento es verde; el entreno usa un azul noche/grafito (--entreno) que no está en esa paleta,
+   sobre fondo neutro muy suave, con un acento fino a la izquierda. Encabezado compacto: nombre a la izquierda (puede ocupar dos
+   líneas en el móvil) y progreso, ⋯ y ≡ en la misma fila, a la derecha, sin banda alta. «Ejercicios sueltos»: tono neutro. */
+:root { --entreno: #26394d; }
+@media (prefers-color-scheme: dark) { :root { --entreno: #c3cfdc; } }
+#vistaSemana .dia .grupo > .grupo-cab {   /* .dia: misma especificidad que «.grupo:not(.g-plegado) > .grupo-cab» del móvil, y va después */
+  background: color-mix(in srgb, var(--entreno) 6%, var(--card)) !important;
+  border-left: 3px solid color-mix(in srgb, var(--entreno) 75%, var(--card));
+  border-radius: 8px !important;
+  padding: 4px 6px 4px 6px;
+  box-sizing: border-box;
+}
+#vistaSemana .dia .grupo > .grupo-cab .g-nombre { color: var(--entreno); }
+#vistaSemana .dia .grupo > .grupo-cab .g-prog { color: var(--fg); opacity: 0.75; font-weight: 600; }
+#vistaSemana .dia .grupo.grupo-sueltos > .grupo-cab { background: var(--card) !important; border-left-color: var(--line); }
+#vistaSemana .dia .grupo.grupo-sueltos > .grupo-cab .g-nombre { color: var(--muted); }
+@media (max-width: 760px) {
+  #vistaSemana .grupo:not(.g-plegado):not(:has(.parte-caja:not(.p-plegada))) > .grupo-cab {
+    background: color-mix(in srgb, var(--entreno) 6%, var(--card)) !important; border-radius: 8px !important;
+  }
+  #vistaSemana .grupo.grupo-sueltos:not(.g-plegado):not(:has(.parte-caja:not(.p-plegada))) > .grupo-cab { background: var(--card) !important; }
+  /* Una sola fila: nombre (1fr, hasta dos o tres líneas) · progreso · ⋯ · ≡ (si lo hay) */
+  #vistaSemana .dia .grupo > .grupo-cab {
+    grid-template-columns: minmax(0, 1fr); grid-auto-flow: column; grid-auto-columns: auto;
+    gap: 2px 4px; padding: 2px 4px 2px 6px; align-items: center;
+  }
+  #vistaSemana .dia .grupo-cab .g-toggle { grid-column: 1; width: auto; min-height: 40px; padding-top: 4px; padding-bottom: 4px; }
+  #vistaSemana .dia .grupo-cab .g-toggle .gn-txt {   /* hasta dos líneas; si no cabe, «…» (el nombre completo sigue en title/aria y en ⋯ → Cambiar nombre) */
+    white-space: normal; text-overflow: clip; overflow-wrap: anywhere; letter-spacing: 0.03em;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+  }
+  #vistaSemana .dia .grupo-cab .g-prog { justify-self: end; }
+  #vistaSemana .dia .grupo-cab .menu-btn { min-width: 36px; height: 40px; }
+}
+
+/* v254: controles para añadir. Dentro de cada entreno, una sola acción compacta «+ Añadir» (abre un menú: ejercicio, bloque o
+   parte para ese entreno), alineada a la izquierda. En el día con entrenos, «+ Ejercicio suelto» y «+ Entreno», siempre a la vista */
+.add-fila > .add-ej[hidden] { display: none !important; }
+#vistaSemana .grupo > .add-grupo { display: flex; justify-content: flex-start; margin: 4px 0 6px; }
+#vistaSemana .grupo > .add-grupo > .add-en-grupo {
+  flex: none; width: auto; min-height: 36px; margin: 0; padding: 6px 14px; font-size: 14px; font-weight: 650;
+  color: var(--entreno); border: 1px solid color-mix(in srgb, var(--entreno) 30%, var(--line)); border-radius: 18px;
+  background: color-mix(in srgb, var(--entreno) 4%, var(--card));
+}
+#vistaSemana .dia-cuerpo-in > .add-fila.add-dia-general { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+#vistaSemana:not(.solo-dia) .dia-cuerpo-in > .add-fila.add-dia-general { flex-direction: row; }
+@media (max-width: 760px) {
+  #vistaSemana .grupo > .add-grupo > .add-en-grupo { min-height: 40px; font-size: 15px; }
+}
+
+/* v254: barra para cambiar de semana. Rango de fechas como elemento principal, entre sus flechas; «Hoy» y calendario agrupados a
+   la derecha. En el móvil todo cabe en una fila (también en 320 px y con rangos largos), con zonas táctiles de 44 px de alto */
+#navSemana .semana-info { min-width: 0; }
+#navSemana #rango { white-space: nowrap; }
+#navSemana #hoyBtn { margin-left: 4px; }
+@media (max-width: 760px) {
+  #navSemana { display: flex; justify-content: flex-start; gap: 6px; box-sizing: border-box; min-width: 0; }
+  #navSemana .nav-btn { height: 44px; }
+  #navSemana .nav-btn.flecha { width: 40px; min-width: 40px; }
+  #navSemana .semana-info { flex: 1 1 0; min-width: 0; text-align: center; }
+  #navSemana #rango { font-size: 17px; line-height: 1.2; }
+  #navSemana #relativa { font-size: 11px; letter-spacing: 0.05em; white-space: normal; line-height: 1.2; }
+  #navSemana #hoyBtn { padding: 0 12px; margin-left: 2px; }
+  #navSemana #calBtn { width: 44px; min-width: 44px; padding: 0; }
+}
+@media (max-width: 374px) {
+  #navSemana { gap: 4px; }
+  #navSemana .nav-btn.flecha { width: 36px; min-width: 36px; }
+  #navSemana #rango { font-size: 15px; }
+  #navSemana #hoyBtn { padding: 0 9px; font-size: 15px; }
+  #navSemana #calBtn { width: 40px; min-width: 40px; font-size: 17px; }
+}
+
+/* v255: en escritorio, la barra de semana se reparte en tres zonas iguales: [vacía] [‹ rango ›] [Hoy · calendario].
+   El selector ‹ rango › queda en el centro exacto; el rango tiene ancho fijo (11em, cabe «Dentro de 12 semanas»), así
+   que las flechas no se mueven al cambiar de semana ni al aparecer o desaparecer «Hoy». «Hoy» y el calendario forman un
+   grupo secundario al principio de la zona derecha (el calendario ocupa el sitio de «Hoy» cuando este está oculto).
+   No cambia qué hace cada botón ni cuándo se muestra «Hoy». La barra de progreso de debajo sigue a todo el ancho.
+   El móvil (≤ 760 px) no cambia. */
+@media (min-width: 761px) {
+  #navSemana { display: grid; grid-template-columns: minmax(0, 1fr) auto 11em auto minmax(0, 1fr); align-items: center; gap: 0 8px; }
+  #navSemana > * { grid-row: 1; }
+  #navSemana #antBtn { grid-column: 2; }
+  #navSemana .semana-info { grid-column: 3; min-width: 0; width: 11em; }
+  #navSemana #sigBtn { grid-column: 4; }
+  #navSemana #hoyBtn, #navSemana #calBtn { grid-column: 5; justify-self: start; }
+  #navSemana #hoyBtn { width: 64px; margin-left: 16px; padding: 0; }
+  #navSemana #calBtn { margin-left: 16px; }
+  #navSemana:has(> #hoyBtn:not([hidden])) #calBtn { margin-left: calc(16px + 64px + 6px); }
+}
+
+/* v257: aviso de entrenamiento sin series: nota compacta y secundaria bajo el encabezado (no es un botón; antes era el botón
+   «grupo-iniciar» desactivado, con aspecto de tarjeta verde grande). Texto atenuado con contraste suficiente en claro y oscuro */
+.grupo-aviso-vacio { margin: 4px 0 6px; padding: 2px 8px; font-size: 13px; line-height: 1.35; font-weight: 500; color: var(--muted); border-left: 2px solid var(--line); }
+
+/* v262 (sustituye los bloques v258/v259 de edición en línea): el nombre ya no se edita tocándolo; se cambia desde ⋯ → «Cambiar nombre».
+   Zonas táctiles separadas en la cabecera del entreno y de la parte: [▸ nombre] solo pliega/despliega · progreso (no interactivo,
+   hace de separación) · ⋯ menú · ≡ asa. En el móvil ⋯ y ≡ tienen 40 × 44 px y separación entre ellos para no tocar uno por otro;
+   a ≤ 374 px la separación y el nombre del entreno se ajustan un poco para que el nombre no se parta a mitad de palabra */
+#vistaSemana .grupo-cab .g-toggle .flecha-dia { flex: none; min-width: 20px; }
+@media (max-width: 760px) {
+  #vistaSemana .dia .grupo > .grupo-cab { column-gap: 6px; }
+  #vistaSemana .dia .grupo-cab .menu-btn, #vistaSemana .dia .grupo-cab .asa { width: 40px; min-width: 40px; height: 44px; }
+  #vistaSemana .parte-cab { gap: 6px; }
+  #vistaSemana .parte-cab .menu-btn, #vistaSemana .parte-cab .asa { width: 40px; min-width: 40px; height: 44px; }
+}
+@media (max-width: 374px) {
+  #vistaSemana .dia .grupo > .grupo-cab { column-gap: 4px; }
+  #vistaSemana .parte-cab { gap: 4px; }
+  #vistaSemana .dia .grupo-cab .g-toggle .gn-txt { font-size: 16px; }
+}
+
+/* v260 (MEJ-SEM-002): − y + junto al número de series (mismo patrón que los de reps y peso, más compacto) */
+.ns-fila .veces-l .paso-veces { flex: none; display: flex; align-items: stretch; }
+.ns-fila .veces-l .paso-veces .veces { width: 2.4em; border-radius: 0; }
+.ns-fila .veces-l .paso-veces button { width: 26px; font-size: 16px; }
+@media (max-width: 760px) { .ns-fila .veces-l .paso-veces button { width: 30px; } .ns-fila .veces-l .paso-veces .veces { width: 2.2em; } }
+/* v260: el −/+ del número de series se ve también en el móvil y en la semana de 7 columnas (allí reps y peso siguen sin −/+, como antes) */
+#vistaSemana .ns-principal .paso-veces button { display: block; }
+#vistaSemana .ns-principal .paso-veces .veces { border-radius: 0; }
+@media (max-width: 760px) { #vistaSemana .ns-principal .paso-veces button { height: auto; min-height: 40px; } }
+/* v260: en fuerza el número de series va en la cabecera del ejercicio (veces-cab). Allí el −/+ es compacto y, en el móvil, pasa a una
+   segunda línea bajo el nombre para no estrecharlo (solo mientras el formulario está abierto, que es cuando se ve) */
+.veces-cab .paso-veces { flex: none; display: flex; align-items: stretch; }
+.veces-cab .paso-veces .veces { width: 2.4em; border-radius: 0; }
+.veces-cab .paso-veces button { width: 28px; font-size: 16px; }
+@media (max-width: 760px) {
+  .bloque-cab:has(> .veces-cab) { flex-wrap: wrap; }
+  .bloque-cab > .veces-cab { order: 5; flex: 1 1 100%; justify-content: flex-start; margin: 4px 0 0; }
+  .veces-cab .paso-veces button { width: 34px; min-height: 40px; }
+  .veces-cab .paso-veces .veces { width: 2.4em; }
+}
+/* v260 (ajuste táctil): en el móvil cada botón −/+ del número de series tiene una zona táctil de 44 × 44 px; el símbolo sigue siendo
+   del mismo tamaño y la casilla del número se estrecha un poco para que todo quepa a 320 px */
+@media (max-width: 760px) {
+  #vistaSemana .bloque .paso-veces button, .veces-cab .paso-veces button, .ns-fila .veces-l .paso-veces button {
+    width: 44px; min-width: 44px; height: 44px; min-height: 44px; font-size: 18px; line-height: 1; padding: 0;
+  }
+  #vistaSemana .bloque .paso-veces { height: auto; }
+  #vistaSemana .bloque .paso-veces .veces { width: 2.1em; min-height: 44px; height: 44px; padding-left: 0; padding-right: 0; box-sizing: border-box; }
+}
+/* v260 (ajuste táctil): con botones de 44 px, en pantallas estrechas el número de series de carrera, natación y movilidad pasa a su
+   propia línea encima de distancia/tiempo/reps, para que esas casillas no se estrechen (en fuerza ya va en la cabecera del ejercicio) */
+@media (max-width: 400px) {
+  #vistaSemana .ns-principal:not(.fila-fuerza) { flex-wrap: wrap; row-gap: 6px; }
+  #vistaSemana .ns-principal:not(.fila-fuerza) > .veces-izq { flex: 1 1 100%; flex-direction: row; justify-content: flex-start; gap: 8px; margin-right: 0; }
+}
+
+/* v262: cabecera del día ampliado en el móvil, en dos filas equilibradas.
+   Fila 1: «‹ Semana» (regreso) y el título del día, alineados a la izquierda. Fila 2: ‹ Hoy › centrados, con zonas táctiles de 44 px.
+   La columna de «Hoy» se reserva aunque esté oculto (día de hoy), así las flechas no cambian de sitio. No cambia qué hace cada botón,
+   ni el calendario, ni el escritorio (> 760 px). Sustituye en el móvil la fila única de «Navegación del día compacta» y su variante ≤ 360 px */
+@media (max-width: 760px) {
+  #vistaSemana .dia-nav:not([hidden]),
+  #vistaSemana .dia-nav:not([hidden]):has(#diaHoy[hidden]) {
+    grid-template-columns: minmax(max-content, 1fr) 44px 72px 44px minmax(0, 1fr);
+    grid-template-areas: "semana titulo titulo titulo titulo" ". anterior hoy siguiente .";
+    column-gap: 10px; row-gap: 4px; padding: 4px 0 8px; align-items: center;
+    box-shadow: inset 0 -1px var(--line);
+  }
+  #vistaSemana #volverSemana {
+    justify-self: start; width: auto; min-width: 0; min-height: 44px; height: 44px; padding: 0 8px 0 2px;
+    font-size: 14px; font-weight: 600; white-space: nowrap; border: 0; background: transparent;
+  }
+  #vistaSemana .dia-nav-t {
+    padding: 0; font-family: var(--display); font-size: 18px; font-weight: 700; line-height: 1.2;
+    text-transform: uppercase; letter-spacing: 0.04em; text-align: left; white-space: normal; overflow-wrap: anywhere;
+  }
+  #vistaSemana #diaAnt, #vistaSemana #diaSig {
+    width: 44px; min-width: 44px; height: 44px; min-height: 44px;
+    border: 1px solid var(--line); background: var(--card); font-size: 22px;
+  }
+  #vistaSemana #diaHoy { width: 72px; min-width: 72px; height: 44px; min-height: 44px; font-size: 14px; }
+}
+
+/* v262: pie de la app en el móvil. Jerarquía: estado de sincronización (informativo, discreto) arriba; «Enviar sugerencia» como acción
+   principal del pie a todo el ancho; «Cambiar contraseña» y «Cerrar sesión» (cuenta) en dos columnas iguales. Todas las acciones con
+   zona táctil de 44 px y alineadas en la misma rejilla; margen inferior para que no quede pegado a la barra de pestañas (el cuerpo ya
+   reserva su altura). Colores con variables del tema: claro y oscuro. El escritorio no cambia */
+@media (max-width: 760px) {
+  #app > .pie {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas: "estado estado" "sug sug" "clave salir";
+    gap: 8px; align-items: stretch; margin-bottom: 12px; padding-top: 12px;
+  }
+  #app > .pie > #estado { grid-area: estado; min-height: 20px; font-size: 13px; line-height: 1.35; text-align: center; overflow-wrap: anywhere; }
+  #app > .pie > #estado:empty { display: none; }
+  #app > .pie > #sugPie { grid-area: sug; }
+  #app > .pie > #claveBtn { grid-area: clave; }
+  #app > .pie > #salirBtn { grid-area: salir; }
+  #app > .pie > .enlace {
+    box-sizing: border-box; width: 100%; min-height: 44px; margin: 0; padding: 8px 10px;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--card);
+    font-size: 15px; font-weight: 600; line-height: 1.2; text-align: center; white-space: normal;
+  }
+  #app > .pie > #claveBtn, #app > .pie > #salirBtn { color: var(--fg); font-weight: 500; }
+}
+
+/* v262: series de distancia importadas (carrera con descanso, pulso, cadencia, desnivel…) en el móvil. Antes el número, el texto, ✕ y ≡
+   iban en una fila centrada verticalmente y el texto quedaba estrecho y partido en 5-6 líneas sin saber a qué serie pertenecía.
+   Ahora cada serie es una ficha: separador entre series; número, ✕ y ≡ alineados con la primera línea; ✕ y ≡ apilados en una sola
+   columna de 44 px (el texto gana ese ancho); la línea principal (distancia · tiempo · ritmo) destaca y los detalles van debajo.
+   Solo presentación: mismos datos y mismas acciones (tocar para editar, ✕ borrar, ≡ arrastrar o flechas, deslizar, selección).
+   Las series de una línea y el escritorio no cambian */
+@media (max-width: 760px) {
+  .series li.fila-dist {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) 44px;
+    grid-template-areas: "n sv borrar" "n sv asa" "n pr .";
+    align-items: start; column-gap: 8px; row-gap: 0; padding: 8px 0; min-height: 0;
+  }
+  .series li.fila-dist + li.fila-dist { border-top: 1px solid var(--line); }
+  .series li.fila-dist > :first-child { grid-area: n; margin-top: 1px; }
+  .series li.fila-dist > .sv { grid-area: sv; row-gap: 2px; line-height: 1.3; }
+  .series li.fila-dist > .sv > .sv-p { flex-basis: 100%; font-weight: 600; }
+  .series li.fila-dist > .sv > .desc { flex-basis: 100%; }
+  .series li.fila-dist > .pr { grid-area: pr; justify-self: start; margin-top: 4px; }
+  .series li.fila-dist > .borrar { grid-area: borrar; width: 44px; height: 40px; margin: -8px 0 0; }
+  .series li.fila-dist > .asa { grid-area: asa; width: 44px; height: 40px; margin: 0; }
+  body.sel-series .series li.fila-dist[data-sid] {
+    grid-template-columns: auto auto minmax(0, 1fr) 44px;
+    grid-template-areas: "sel n sv borrar" "sel n sv asa" "sel n pr .";
+  }
+  body.sel-series .series li.fila-dist[data-sid]::before { grid-area: sel; margin-top: 1px; }
+}
+
+/* v262 (INC-SEM-004): ficha en borrador para crear un ejercicio desde el buscador */
+.ne-form { display: flex; flex-direction: column; gap: 10px; }
+.ne-form #neNombre { font-size: 17px; font-weight: 600; }
+.ne-form .tabs.seg { flex-wrap: wrap; }
+.ne-usar { display: flex; flex-direction: column; gap: 4px; }
+.ne-usar .opcion { min-height: 44px; }
+.ne-form #neNotas { resize: vertical; }
+#dlgNuevoEj .d-botones .anadir:disabled { opacity: 0.45; }
+.md-chips .chip.magnitud { min-height: 36px; }
+.chip.magnitud[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--card); }
+.chip.magnitud[aria-pressed="true"]::before { content: "✓ "; }
+.chip.magnitud:disabled { opacity: 0.7; cursor: default; }
+@media (max-width: 760px) { .md-chips .chip.magnitud { min-height: 44px; } }
+
+/* v262 (MEJ-MEDIDA-001): distancia en fuerza (pasos de granjero…): campo de metros delante de las reps/tiempo */
+.bloque.con-dist .fila-fuerza .paso:has(.in-d) { flex: 0.9 1 0; }
+.bloque.con-dist .fila-fuerza .in-d { min-width: 0; }
+/* En el móvil la distancia va en su propia línea (a todo el ancho) y debajo tiempo/reps y carga, para que nada quede estrecho */
+@media (max-width: 760px) {
+  .bloque.con-dist .fila-fuerza { flex-wrap: wrap; row-gap: 6px; }
+  .bloque.con-dist .fila-fuerza .paso:has(.in-d) { flex: 1 1 100%; }
+}
+
+/* v263 (4.ª composición): cabecera del día ampliado en el móvil. Los botones van en dos contenedores (.dia-nav-sup: «‹ Semana» + día y fecha;
+   .dia-nav-ctl: los controles). En escritorio ambos son display: contents y NADA cambia. En el móvil:
+   · Fila superior: rejilla de tres columnas 1fr · auto · 1fr. «‹ Semana» queda anclado a la esquina superior izquierda (columna 1) y el título
+     (día y fecha) ocupa la columna central: las dos columnas laterales son iguales, así que el título queda centrado respecto a TODO el ancho de la
+     tarjeta (y de la pantalla) sin que lo desplacen la posición ni la anchura de «‹ Semana».
+   · Hasta 360 px de ancho (320 px incluido) el título y «‹ Semana» no caben con seguridad en la misma línea: «‹ Semana» queda arriba a la
+     izquierda y el título pasa a una línea propia, centrado y a todo el ancho; nunca se superponen, se recortan ni se alinean junto al enlace.
+   · Fila inferior: solo ‹ Hoy ›, agrupados y centrados (orden visual recompuesto con `order`). Todos de 44 px de alto.
+   Mismos ids y funcionamiento. */
+.dia-nav-sup, .dia-nav-ctl { display: contents; }
+@media (max-width: 760px) {
+  #vistaSemana .dia-nav:not([hidden]) {
+    display: flex; flex-direction: column; align-items: stretch; gap: 0; padding: 2px 0 8px;
+    grid-template-columns: none; grid-template-areas: none; box-shadow: inset 0 -1px var(--line);
+  }
+  #vistaSemana .dia-nav-sup { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; column-gap: 4px; min-width: 0; }
+  #vistaSemana .dia-nav-ctl { display: flex; align-items: center; justify-content: center; gap: 6px; }
+  #vistaSemana #volverSemana { grid-column: 1; grid-row: 1; justify-self: start; width: auto; min-width: 0; height: 44px; min-height: 44px; padding: 0 6px 0 0; font-size: 14px; white-space: nowrap; }
+  #vistaSemana .dia-nav-t { grid-column: 2; grid-row: 1; padding: 0; font-size: 18px; line-height: 1.15; text-align: center; white-space: nowrap; }
+  #vistaSemana #diaAnt, #vistaSemana #diaSig { flex: none; width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
+  #vistaSemana #diaHoy { flex: none; width: 64px; min-width: 64px; height: 44px; min-height: 44px; }
+  #vistaSemana #diaAnt { order: 1; } #vistaSemana #diaHoy { order: 2; } #vistaSemana #diaSig { order: 3; }
+}
+@media (max-width: 360px) {
+  #vistaSemana .dia-nav-sup { grid-template-columns: minmax(0, 1fr); row-gap: 0; }
+  #vistaSemana #volverSemana { grid-column: 1; grid-row: 1; height: 40px; min-height: 40px; }
+  #vistaSemana .dia-nav-t { grid-column: 1; grid-row: 2; justify-self: stretch; white-space: normal; overflow-wrap: anywhere; padding: 0 2px 4px; }
+}
+
+/* v263: pie de la app en el móvil, más discreto (sustituye los botones con borde de v262). Estado de sincronización arriba, pequeño y
+   atenuado; debajo las tres acciones como enlaces de texto centrados, sin borde ni fondo, con zona táctil de 44 px de alto y separación
+   suficiente; se reparten en una o dos líneas según el ancho. «Enviar sugerencia» con el color de acento; las de cuenta, atenuadas.
+   El escritorio no cambia */
+@media (max-width: 760px) {
+  #app > .pie {
+    display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 0 4px;
+    margin-bottom: 8px; padding-top: 6px;
+  }
+  #app > .pie > #estado { flex: 1 1 100%; min-height: 0; margin: 0 0 2px; font-size: 12px; line-height: 1.3; text-align: center; opacity: 0.85; }
+  #app > .pie > .enlace {
+    flex: 0 1 auto; width: auto; min-height: 44px; margin: 0; padding: 0 10px;
+    border: 0; border-radius: 8px; background: none;
+    font-size: 14px; font-weight: 500; line-height: 1.2; text-align: center; white-space: nowrap; color: var(--muted);
+  }
+  #app > .pie > #sugPie { color: var(--accent); font-weight: 600; }
+  #app > .pie > #claveBtn, #app > .pie > #salirBtn { color: var(--muted); font-weight: 500; }
+}
+
+/* v263: «Seleccionar» junto a «+ Nuevo» en Mesociclos, y barra de acciones de la selección de mesociclos (mismo aspecto que la de plantillas) */
+.sec-cab .sec-botones { display: inline-flex; align-items: center; gap: 8px; }
+.sec-cab .sec-botones .nav-btn[hidden] { display: none; }
+#selMesoAcciones .sel-n { padding: 0 8px; }
+
+/* v263: clasificación de ejercicios (Región y Técnica): filtros en Ejercicios y en el buscador, y etiquetas */
+.filtro-clasif { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.filtro-clasif[hidden] { display: none; }
+.chip.clasif { min-height: 36px; font-size: 13px; }
+@media (max-width: 760px) { .chip.clasif { min-height: 40px; padding: 6px 12px; } }
+.chip.clasif[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--card); }
+.chip.clasif[aria-pressed="true"]::before { content: "✓ "; }
+.chip.clasif:disabled { opacity: 0.7; cursor: default; }
+.clasif-tag { display: inline-block; margin-left: 6px; padding: 0 6px; border: 1px solid var(--line); border-radius: 5px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); vertical-align: 2px; white-space: nowrap; }
+.clasif-tag.clasif-tecnica { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
+
+/* v264: botones «Seleccionar» y «+ Nuevo» de Mesociclos más compactos y proporcionados al título de la sección (antes 44 px de alto y 16 px de
+   texto, más grandes que el propio título). Aspecto: 34 px de alto, 13,5 px de texto en seminegrita, sin ocupar más ancho del necesario.
+   Zona táctil: se mantiene en 44 px de alto en el móvil con un área invisible que rebasa el botón (::after, 5 px arriba y abajo), sin tocar
+   la separación entre ambos botones (8 px): las áreas no se solapan. Mismos textos, posición lógica y comportamiento. Solo estos dos botones. */
+.sec-cab .sec-botones .nav-btn {
+  position: relative; height: 34px; min-height: 34px; min-width: 0; padding: 0 13px;
+  font-size: 13.5px; font-weight: 600; line-height: 1; border-radius: 9px; white-space: nowrap;
+}
+.sec-cab .sec-botones .nav-btn::after { content: ""; position: absolute; inset: -5px -1px; }
+.sec-cab .sec-botones { gap: 6px; flex: none; margin-left: auto; }
+.sec-cab .sec-botones .nav-btn { padding: 0 10px; font-size: 13px; }
+/* Cabecera de Mesociclos: el título («Mesociclos · 3») conserva su anchura natural (antes el contador quedaba recortado) y, si los dos
+   botones no caben a su lado (anchos estrechos), pasan a una segunda línea alineados a la derecha, en vez de recortar nada */
+.plan-sec[data-sec="mesociclos"] .sec-cab { flex-wrap: wrap; column-gap: 4px; row-gap: 2px; }
+.plan-sec[data-sec="mesociclos"] .sec-cab > .sec-toggle { flex: 0 0 auto; gap: 6px; }
+
+/* v270 (MEJ-BLQ-001): panel «Editar bloque» (rondas, ejercicios y descansos en un solo sitio); solo colores y tamaños ya usados en la app */
+#dlgEditBloque .d-cuerpo { gap: 16px; }
+.eb-sec { display: flex; flex-direction: column; gap: 8px; }
+.eb-h { margin: 0; font-family: var(--display); font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.eb-rondas { display: flex; align-items: center; gap: 12px; }
+.eb-paso { font-size: 22px; line-height: 1; min-width: 44px; height: 44px; }
+.eb-n { min-width: 56px; text-align: center; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.eb-nota { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.4; }
+.eb-aviso { padding: 10px 12px; border-radius: 10px; display: flex; flex-direction: column; gap: 8px; }
+.eb-peligro { background: var(--error-soft); border: 1px solid var(--error); }
+.eb-t { margin: 0; font-weight: 700; font-size: 14px; }
+.eb-lista { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+.eb-conf { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; font-weight: 600; min-height: 44px; }
+.eb-conf input { flex: none; width: 22px; height: 22px; margin-top: 1px; }
+.eb-ejs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.eb-ej { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; }
+.eb-ej-t { display: flex; flex-direction: column; flex: 1 1 150px; min-width: 0; gap: 2px; }
+.eb-ej-n { font-weight: 700; overflow-wrap: break-word; }
+.eb-ej-d { font-size: 13px; color: var(--muted); }
+.eb-quitado { background: var(--accent-soft); }
+.eb-nuevo { border-style: dashed; border-color: var(--accent); }
+.eb-bt { flex: none; padding: 0 12px; }
+.eb-sec .add-ej { min-height: 44px; margin: 0; }
+#ebCuerpo > .d-botones { position: sticky; bottom: 0; z-index: 1; margin: 0 -16px -18px; padding: 10px 16px; background: var(--card); border-top: 1px solid var(--line); }
+
+/* v271: «Ver ficha» en el modo entreno (discreto, separado del título y del vídeo) y ficha en modo consulta; aviso de «por lado» en la ficha */
+.en-ficha { align-self: flex-start; flex-shrink: 0; min-height: 44px; height: auto; padding: 8px 12px; border-radius: 10px; font-size: 14px; font-weight: 600; color: var(--muted); white-space: normal; text-align: left; }
+.ficha-lectura input:disabled, .ficha-lectura textarea:disabled, .ficha-lectura select:disabled { opacity: 1; -webkit-text-fill-color: currentColor; }
+.lado-aplicar { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-top: 8px; padding: 10px 12px; border-radius: 10px; background: var(--gold-soft); }
+.lado-aplicar .menu-det { margin: 0; color: var(--fg); }
+.en-accesos { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; }
+/* v271: en el modo entreno los dos cuadros (p. ej. repeticiones y tiempo) tienen siempre el mismo tamaño aunque una etiqueta ocupe más líneas: el cuadro no se
+   estira y los dos quedan alineados por abajo */
+.en-campo { justify-content: flex-end; }
+.en-campo .paso { flex: none; }
+
+/* v272: repeticiones de cada ejercicio en el editor de bloque (solo series pendientes) */
+.eb-reps { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 14px; font-weight: 600; color: var(--muted); }
+.eb-reps input { width: 76px; min-height: 44px; text-align: center; font-size: 18px; font-weight: 700; color: var(--fg); }
+
+/* v274: selector Ejercicios | Calentamientos y editor de calentamientos guardados */
+.ej-sel { margin: 0 0 10px; }
+.cal-acciones { display: flex; gap: 8px; flex-wrap: wrap; }
+.cal-items { display: flex; flex-direction: column; gap: 10px; }
+.cal-item { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; }
+.cal-item-cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.cal-item-n { overflow-wrap: anywhere; }
+.cal-item-bs { display: inline-flex; gap: 6px; }
+.cal-item > .add-ej { min-height: 44px; margin: 0; }
+#calCuerpo > .add-ej { min-height: 44px; margin: 0; }
+#calCuerpo > .d-botones { position: sticky; bottom: 0; z-index: 1; margin: 0 -16px -18px; padding: 10px 16px; background: var(--card); border-top: 1px solid var(--line); }
+
+/* v275: campos del editor de calentamientos con etiqueta visible y cuadrícula adaptable (2 columnas en móvil, más en pantallas anchas), siempre dentro de la tarjeta */
+.cal-item { min-width: 0; }
+.cal-fila { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding-top: 8px; border-top: 1px dashed var(--line); }
+.cal-fila-cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cal-n { font-weight: 700; font-size: 14px; color: var(--muted); }
+.cal-quitar { flex: none; min-width: 44px; min-height: 44px; }
+.cal-campos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 10px; min-width: 0; }
+.cal-campo { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: 13px; font-weight: 600; color: var(--muted); }
+.cal-et { line-height: 1.2; overflow-wrap: anywhere; }
+.cal-campo input { width: 100%; min-width: 0; box-sizing: border-box; min-height: 44px; padding: 8px; font-size: 16px; font-weight: 600; color: var(--fg); text-align: center; }
+.cal-ancho { grid-column: 1 / -1; }
+.cal-ancho input { text-align: left; }
+@media (min-width: 520px) { .cal-campos { grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); } .cal-ancho { grid-column: span 2; } }
+
+/* v277: diálogo «Añadir a una fecha» (plantillas): controles táctiles de 44 px */
+#dlgFechaPlant .d-botones button, #dlgFechaPlant input[type="date"] { min-height: 44px; }
+#dlgFechaPlant .d-botones { margin-top: 4px; }
+
+/* v280: arrastrar una parte a otro entreno: TODA la tarjeta del entreno destino se resalta (sin transformaciones ni cambios de tamaño: nada salta) y una indicación fija, sobre la barra de pestañas, dice qué va a pasar */
+.grupo.zona-destino, .grupo.zona-invalida { position: relative; outline: 3px solid var(--accent); outline-offset: -3px; }
+.grupo.zona-destino::after, .grupo.zona-invalida::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: color-mix(in srgb, var(--accent) 14%, transparent); pointer-events: none; z-index: 6; }
+.grupo.zona-invalida { outline-color: var(--error, #c0392b); }
+.grupo.zona-invalida::after { background: color-mix(in srgb, var(--error, #c0392b) 12%, transparent); }
+.banner-destino { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 78px); z-index: 31; max-width: calc(100vw - 24px); width: max-content; padding: 10px 16px; border-radius: 14px;
+  background: var(--toast-bg); color: var(--toast-fg); border: 3px solid var(--accent); font-size: 15px; font-weight: 700; line-height: 1.3; text-align: center; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28); pointer-events: none; }
+.banner-destino.invalido { border-color: var(--error, #c0392b); }
+.banner-destino[hidden] { display: none; }
+
+/* v281: marcador de inserción al arrastrar una parte a otro entreno: línea fija (no mueve la página) entre las partes del destino, antes de la primera o después de la última */
+.marca-insercion { position: fixed; height: 4px; border-radius: 3px; background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); z-index: 32; pointer-events: none; }
+.marca-insercion.invalido { background: var(--error, #c0392b); }
+.marca-insercion[hidden] { display: none; }
+
+/* v283: partes que se arrastran entre entrenos: la escala va en el transform (JS, suavizada y desde el punto agarrado), no en la propiedad scale; solo la opacidad se anima con CSS */
+.arrastrando.entre-entrenos { transition: opacity .14s ease-out !important; }
+.arrastrando.entre-entrenos.sobre-zona { scale: none; }
+
+/* Solo el buscador móvil: cabecera y filtros fuera del desplazamiento de resultados. */
+@media (max-width: 760px) {
+  #selector.selector-visible {
+    top: var(--selector-top, 0px); bottom: auto;
+    max-height: calc(var(--selector-alto, 100dvh) - max(8px, env(safe-area-inset-top, 0px)) - max(8px, env(safe-area-inset-bottom, 0px)));
+    overflow: hidden;
+  }
+  #selector.selector-visible[open] { display: flex; flex-direction: column; }
+  #selector.selector-visible > .d-cab,
+  #selector.selector-visible > .filtro-tipo,
+  #selector.selector-visible > .filtro-clasif { flex-shrink: 0; }
+  #selector.selector-visible #listaEj { min-height: 0; max-height: none; flex: 1 1 auto; overflow-y: auto; }
+}
+
+/* Reordenación local: el control pertenece a la cabecera del día o de la lista. */
+#vistaSemana .dia > .dia-cab, #vistaListas .lista-sec > .lista-cab { flex-wrap: wrap; }
+.orden-barra { flex: 1 0 100%; display: flex; align-items: center; justify-content: flex-start; gap: 8px; padding: 4px 2px; }
+#vistaSemana .dia > .dia-cab > .orden-barra { padding: 0 8px 2px; }
+.orden-barra[hidden], .orden-estado[hidden] { display: none !important; }
+/* La superficie visible es compacta; el botón conserva toda su zona táctil. */
+.modo-orden.nav-btn { position: relative; isolation: isolate; min-height: 36px; min-width: 96px; padding: 5px 10px; font-size: 12px; white-space: nowrap; background: transparent; border-color: transparent; }
+.modo-orden::before { content: ""; position: absolute; inset: 3px 2px; z-index: -1; border: 1px solid var(--line); border-radius: 6px; background: var(--card); }
+.modo-orden[aria-pressed="true"] { min-width: 64px; }
+.modo-orden.nav-btn:hover:not(:disabled) { background: transparent; border-color: transparent; }
+.modo-orden:hover::before { border-color: var(--accent); }
+.orden-estado { color: var(--accent); font-size: 12px; font-weight: 700; }
+.reordenando > .dia-cab .modo-orden, .reordenando > .lista-cab .modo-orden { color: var(--accent); }
+.reordenando > .dia-cab .modo-orden::before, .reordenando > .lista-cab .modo-orden::before { background: var(--accent-soft); border-color: var(--accent); }
+[data-zona-orden] .asa { cursor: default; touch-action: manipulation; }
+[data-zona-orden]:not(.reordenando) .asa { visibility: hidden !important; pointer-events: none; }
+[data-zona-orden].reordenando .asa { cursor: grab; touch-action: none; opacity: 1 !important; visibility: visible !important; }
+[data-zona-orden].reordenando .asa:active { cursor: grabbing; }
+@media (max-width: 760px) { .modo-orden.nav-btn { min-height: 44px; } }
+
+/* En el día ampliado de PC, mantener el control por debajo de la barra de pestañas. */
+@media (min-width: 761px) {
+  #vistaSemana.solo-dia .dia { overflow: clip; }
+  #vistaSemana.solo-dia .dia > .dia-cab { position: sticky; top: 64px; z-index: 15; background: var(--card); box-shadow: 0 1px 0 var(--line); }
+  #vistaSemana.solo-dia .dia-cuerpo { isolation: isolate; }
+  #vistaSemana.solo-dia .dia-abrir { visibility: visible; }
+}
+.orden-barra { flex-wrap: wrap; }
+
+/* Valores editables con etiquetas en el editor de superseries. */
+.eb-ej-t:has(.eb-valores) { flex-basis: 240px; }
+.eb-valores { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%; margin: 8px 0; }
+.eb-valor { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 13px; font-weight: 600; color: var(--muted); }
+.eb-valor input { width: 100%; min-width: 0; min-height: 44px; padding: 8px; font-size: 16px; color: var(--fg); }

@@ -2859,3 +2859,15 @@ dialog#dlgAviso { margin: auto; }
 .cal-ancho input { text-align: left; }
 @media (min-width: 520px) { .cal-campos { grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); } .cal-ancho { grid-column: span 2; } }
 
+
+/* INC-EDITOR-001: contexto del campo con teclado; capa sin controles ni cambios de layout. */
+.editor-serie-contexto {
+  position: fixed; z-index: 20; box-sizing: border-box; pointer-events: none;
+  padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px;
+  color: var(--fg); background: var(--card); font-size: 13px; line-height: 18px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Sin reflujo ni traslación; inert también impide foco/interacción en toda la navegación oculta. */
+#app > .tabbar.editor-teclado-oculta,
+#app > .tabbar.editor-teclado-oculta * { visibility: hidden !important; pointer-events: none !important; }

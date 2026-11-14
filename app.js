@@ -360,6 +360,10 @@ const MEDIDAS_BASE = { fuerza: ["reps", "tiempo", "carga"], movilidad: ["reps", 
 const medidasPropias = id => { const e = db.ejercicios[id], ok = MAGNITUDES_TIPO[tipoDe(id)] || []; return e && Array.isArray(e.medidas) ? ok.filter(m => e.medidas.includes(m)) : []; };
 const medidasDe = id => { const p = medidasPropias(id); return p.length ? p : (MEDIDAS_BASE[tipoDe(id)] || []).slice(); };
 const admite = (id, m) => medidasDe(id).includes(m);
+// INC-KG-001: las medidas efectivas de la ficha deciden si una serie nueva admite carga.
+// La medida de progreso no decide los campos; carga/%/ciclo guardados siguen accesibles al editar.
+const sinCarga = id => tipoDe(id) === "fuerza" && !admite(id, "carga");
+const cargaGuardada = s => !!s && (n0(s.peso) > 0 || n0(s.pct) > 0 || !!s.ciclo_id);
 // Fuerza con distancia (granjero: carga + distancia, con el tiempo opcional): el récord se compara solo con la misma carga y distancia
 const conDistFuerza = s => n0(s.distancia) > 0 && !esDistancia(tipoDe(s.ejercicio_id));
 // ---------- v263: clasificación de ejercicios (Región y Técnica) ----------
@@ -3925,7 +3929,8 @@ function pintarDiaSinAncla(dia) {
         // A otro entreno del día no se puede arrastrar (cada entreno es su caja): esto sí se queda
         !espera && otrasSesiones.length && { texto: "Mover a otro entreno del día…", accion: () => abrirMenu("¿A qué entreno?", "", otrasSesiones.map(x => ({
           texto: x || "Sin sesión", accion: () => moverASesion(seriesDeItem(dia.id, g.nombre, clave), x) }))) },
-        { texto: "Ver ficha del ejercicio", accion: () => abrirDetalle(ej) },
+        { texto: "Ver ficha del ejercicio", accion: () => abrirDetalle(ej, contextoCarga(dia.id, g.nombre, espera ? [] : seriesDeItem(dia.id, g.nombre, clave))) },
+        sinCarga(ej) && pendientesCarga(ej, contextoCarga(dia.id, g.nombre, espera ? [] : seriesDeItem(dia.id, g.nombre, clave))).length && { texto: "Quitar peso previsto en este entrenamiento y día…", accion: () => ofrecerRetiradaCarga(ej, contextoCarga(dia.id, g.nombre, seriesDeItem(dia.id, g.nombre, clave))) },
         !espera && tipoDe(ej) === "carrera" && { texto: "Marcar como carrera (competición)…", accion: () => marcarComoCarrera(dia, seriesDeItem(dia.id, g.nombre, clave), g.nombre || nombre) },
         { texto: "Eliminar ejercicio" + (espera ? "" : " y sus series"), peligro: true, confirmar: espera ? "Pulsa otra vez para quitarlo" : "Pulsa otra vez: se borran " + seriesDeItem(dia.id, g.nombre, clave).length + " series", accion: () => {
           // Quita el ejercicio de esta sesión con todas sus series (hechas incluidas); se puede deshacer
@@ -4045,7 +4050,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
   if (dolor.length) { const m = document.createElement("span"); m.className = "molestia-tag"; m.textContent = "⚠ " + dolor.map(x => x.zona).join(", "); m.title = dolor.map(x => x.zona + (x.descripcion ? ": " + x.descripcion : "")).join(" · "); nom.appendChild(m); }
   nom.setAttribute("aria-label", series.length ? "Editar " + (ej.nombre || "ejercicio") + ": valores, número de series o ejercicio" : "Ver " + (ej.nombre || "ejercicio") + ": vídeo, récords e historial");
   // Con series: tocar el nombre abre (o cierra sin guardar) la edición del ejercicio; sin series, su ficha
-  nom.addEventListener("click", () => !series.length ? abrirDetalle(id) : formEl.hidden ? abrirGrupo() : (delete borradores[dia.id + "|" + (grupo || "") + "|" + idK + "|" + (parte || "")], pintarBloques(true)));
+  nom.addEventListener("click", () => !series.length ? abrirDetalle(id, contextoCarga(dia.id, grupo, series)) : formEl.hidden ? abrirGrupo() : (delete borradores[dia.id + "|" + (grupo || "") + "|" + idK + "|" + (parte || "")], pintarBloques(true)));
   const notaB = notaDe(series) || (!series.length ? esperaNota[dia.id + "|" + idK] || "" : "");
   const pedirNotaB = () => editarNota(dia, series, "Descripción de " + (ej.nombre || "el ejercicio"), id);
   if (notaB) b.querySelector(".bloque-cab").after(lineaNota(notaB, pedirNotaB));
@@ -4082,10 +4087,12 @@ function bloque(dia, id, series, grupo, parte, copia) {
   }
   // El formulario tiene tres usos: «grupo» (×N series iguales y OK, también para editarlas todas), «una» (+ Serie suelta) y «editar» (una serie)
   let modoForm = "grupo";
+  const cargaVisible = () => !sinCarga(id) || cargaGuardada(modoForm === "editar" ? editando : modoForm === "grupo" ? series.filter(x => !x.calentamiento)[0] : null);
   const vecesEl = b.querySelector(".veces"), cambiarEl = b.querySelector(".cambiar-ej"), otroEj = b.querySelector(".otro-ej");
   b.querySelector(".cambiar-ej-btn").addEventListener("click", ev => { ev.currentTarget.hidden = true; cambiarEl.hidden = false; otroEj.focus(); });
   const ponerModoForm = m => {
     modoForm = m;
+    if (tipo === "fuerza") b.classList.toggle("sin-peso", !cargaVisible());
     b.querySelector(".veces-izq").hidden = m !== "grupo";
     if (m !== "grupo" && extrasEl) extrasEl.textContent = "";
     cambiarEl.hidden = true;
@@ -4129,6 +4136,8 @@ function bloque(dia, id, series, grupo, parte, copia) {
       ir.inputMode = "decimal";
       ir.placeholder = enMax() ? "máx" : enTiempo() ? "seg" : "reps"; ir.disabled = enMax();
       ik.placeholder = enPct ? "%" : "kg";
+      const kgVisible = !sinCarga(id) || modoForm === "grupo" && cargaGuardada(series.filter(x => !x.calentamiento)[k]);
+      ik.hidden = !kgVisible; row.querySelector(".fx-kg").hidden = !kgVisible;
       row.querySelector(".fx-u").textContent = enTiempo() ? "s" : "reps";
       row.querySelector(".fx-kg").textContent = enPct ? "%" : "kg";
       if (val.auto) row.setAttribute("data-auto", "");
@@ -4143,7 +4152,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
     const row = extrasEl.children[k - 1];
     if (!row) return v;
     const out = { ...v }, r = row.querySelector(".r-reps").value.trim(), kg = row.querySelector(".r-kg").value.trim();
-    if (kg !== "") { const x = parseFloat(kg.replace(",", ".")); if (x >= 0) { out.pct = enPct ? x : 0; out.peso = enPct ? kgDePct(id, x) : x; } }
+    if (kg !== "" && !row.querySelector(".r-kg").hidden) { const x = parseFloat(kg.replace(",", ".")); if (x >= 0) { out.pct = enPct ? x : 0; out.peso = enPct ? kgDePct(id, x) : x; } }
     if (!enMax() && r !== "") {
       if (enTiempo()) { const t = leerSegs(r); if (t > 0) out.tiempo = t; }
       else if (leerRango(r)) { const g = leerRango(r); out.reps = g.min; out.rango_min = g.min; out.rango_max = g.max; }
@@ -4224,8 +4233,8 @@ function bloque(dia, id, series, grupo, parte, copia) {
   const opsF = b.querySelector(".ops-fuerza"), filaDesc = b.querySelector(".ns-desc");
   // Fuerza: series junto al nombre; fila «[reps] Reps ▾   [peso] kg»; abajo «Por lado · ⏱ descanso · OK»
   { const cl = b.querySelector(".por-lado"); if (cl) { if (ladoDe(id) && !series.length) cl.checked = true; cl.closest("label").hidden = true; } }
-  if (opsF && tipo === "fuerza" && medidaDe(id) !== "peso") {
-    b.classList.add("sin-peso");   // dominadas, fondos, plancha…: sin casilla de kg (para el lastre, el ejercicio «lastrado»)
+  if (opsF && tipo === "fuerza" && sinCarga(id) && !series.some(cargaGuardada)) {
+    b.classList.add("sin-peso");   // Medidas de la ficha; no se infiere carga por el nombre.
     if (medidaDe(id) === "tiempo" && !series.length) ponerPorT(true);
   }
   if (opsF && medidaBtn) {
@@ -4258,7 +4267,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
     b.classList.add("con-dist");
   }
   if (opsF && propiasF.length) {
-    if (!propiasF.includes("carga")) b.classList.add("sin-peso"); else b.classList.remove("sin-peso");   // la ficha manda sobre la medida de progreso
+    if (!propiasF.includes("carga") && !series.some(cargaGuardada)) b.classList.add("sin-peso"); else b.classList.remove("sin-peso");   // la ficha manda sobre la medida de progreso
     if (!propiasF.includes("reps") && propiasF.includes("tiempo") && !series.length) ponerPorT(true);
     if (!propiasF.includes("reps") && !propiasF.includes("tiempo") && !series.some(x => n0(x.reps) > 0 || n0(x.tiempo) > 0)) { b.classList.add("solo-dist"); fb.closest(".paso").hidden = true; if (medidaBtn) medidaBtn.hidden = true; }
   }
@@ -4356,6 +4365,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
   };
   // La recuperación solo se copia de una serie de este mismo día: cada entrenamiento la ajusta
   const rellenarCon = (s, conRec) => {
+    if (tipo === "fuerza") b.classList.toggle("sin-peso", !cargaVisible());
     if (dist) {
       const t = !(n0(s.distancia) > 0) && n0(s.tiempo) > 0, m = distCampo(s.distancia), ti = n0(s.tiempo) > 0 ? fmtTiempo(s.tiempo) : "";
       ponerPorTiempo(t);
@@ -4547,6 +4557,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
       const x = parseFloat((fa.value.trim() || "0").replace(",", "."));
       v.pct = enPct ? x : 0;
       v.peso = enPct ? kgDePct(id, x) : x;
+      if (!cargaVisible()) { const e0 = modoForm === "editar" && editando ? editando : null; v.peso = e0 ? n0(e0.peso) : 0; v.pct = e0 ? n0(e0.pct) : 0; }   // v271: el kg oculto no se guarda
       v.ciclo_id = chkBilbo && chkBilbo.checked && ciclo ? ciclo.id : "";
       v.por_lado = !!(b.querySelector(".por-lado") || {}).checked || ladoDe(id);
       v.rango_min = 0; v.rango_max = 0;
@@ -4600,7 +4611,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
     const letraNueva = series.length ? series.some(x => x.letra_nueva) : !!esperaLetra[dia.id + "|" + idK];
     if (esperaLetra[dia.id + "|" + idK]) { delete esperaLetra[dia.id + "|" + idK]; escribir("espera-letra-v1", esperaLetra); }
     if (esperaNota[dia.id + "|" + idK]) { delete esperaNota[dia.id + "|" + idK]; escribir("espera-nota-v1", esperaNota); }
-    const nueva = (k, vk) => ({ id: nuevoId(), fecha: dia.id, ejercicio_id: id, orden: (!series.length && esperaOrden[dia.id + "|" + idK] || Date.now()) + k, grupo, seccion: parte || "", meso_id: "", bloque_id: "", ronda: 0, copia: copia > 1 ? copia : 0, borrado: false, calentamiento: false, nota: notaNueva, letra_nueva: letraNueva, ...(vk || v), hecha: nuevaHecha });
+    const nueva = (k, vk) => ({ id: nuevoId(), fecha: dia.id, ejercicio_id: id, orden: (!series.length && esperaOrden[dia.id + "|" + idK] || Date.now()) + k, grupo, seccion: parte || "", meso_id: "", bloque_id: "", ronda: 0, copia: copia > 1 ? copia : 0, borrado: false, calentamiento: false, nota: notaNueva, letra_nueva: letraNueva, ...(vk || v), ...(sinCarga(id) ? { peso: 0, pct: 0 } : {}), hecha: nuevaHecha });
     if (modoForm === "una" || !series.length) {
       const n = modoForm === "una" ? 1 : Math.min(50, Math.max(1, parseInt(vecesEl.value, 10) || 1));
       if (!series.length) {
@@ -4622,7 +4633,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
     const aplicar = borrarHechas => {
       const deshacer = series.map(x => ["series", { ...x }]);
       const nuevas = [];
-      pend.forEach(x => cambiar("series", { ...x, ...valoresFila(efect.indexOf(x), v), hecha: false }, true));
+      pend.forEach(x => cambiar("series", { ...x, ...valoresFila(efect.indexOf(x), v), ...(sinCarga(id) && !cargaGuardada(x) ? { peso: x.peso, pct: x.pct } : {}), hecha: false }, true));   // v271: sin carga, cada pendiente conserva su peso
       if (objetivo > efect.length) {
         const ultimo = Math.max(...series.map(x => n0(x.orden)));
         for (let k = 0; k < objetivo - efect.length; k++) { const f = { ...nueva(k, valoresFila(efect.length + k, v)), orden: ultimo + (k + 1) / 100, hecha: false }; nuevas.push(f); cambiar("series", f, true); }
@@ -4741,7 +4752,7 @@ function meterEnBloque(dia, seriesBloque, ejercicioId, sueltas) {
       return;
     }
     const v = venidas.length ? venidas[venidas.length - 1] : base;   // faltan series para esta ronda: planificada, con los valores de la última
-    const fila = { id: nuevoId(), fecha: dia.id, ejercicio_id: ejercicioId, meso_id: b0.meso_id || "", peso: n0(v.peso), reps: n0(v.reps), distancia: n0(v.distancia), tiempo: n0(v.tiempo), pct: n0(v.pct), por_lado: !!v.por_lado,
+    const fila = { id: nuevoId(), fecha: dia.id, ejercicio_id: ejercicioId, meso_id: b0.meso_id || "", peso: sinCarga(ejercicioId) ? 0 : n0(v.peso), reps: n0(v.reps), distancia: n0(v.distancia), tiempo: n0(v.tiempo), pct: sinCarga(ejercicioId) ? 0 : n0(v.pct), por_lado: !!v.por_lado,
       descanso: n0(v.descanso), rec_dist: n0(v.rec_dist), max_reps: !!v.max_reps, max_tiempo: !!v.max_tiempo, rango_min: n0(v.rango_min), rango_max: n0(v.rango_max),
       ciclo_id: "", calentamiento: false, nota: v.nota || "", hecha: false, borrado: false, ...comun };
     nuevas.push(fila);
@@ -4844,7 +4855,7 @@ const ebValoresCambiados = () => ebE.ejs.filter(id => !ebE.quitar.has(id)).map(i
 function ebNuevoEjercicio(id) {
   const hist = seriesDe(id), ult = hist[hist.length - 1];
   const v = ult ? valores(ult) : { reps: admite(id, "reps") ? 10 : 0 };
-  const base = { ...v, peso: n0(v.peso), pct: n0(v.pct) };
+  const base = { ...v, peso: sinCarga(id) ? 0 : n0(v.peso), pct: sinCarga(id) ? 0 : n0(v.pct) };
   const edicion = ebBorradorValores(id, [base]); edicion.base = base;
   return { id, edicion };
 }
@@ -5281,7 +5292,8 @@ function tarjetaBloque(dia, bloqueId, series) {
           ev.stopPropagation();
           const delEj = series.filter(x => x.ejercicio_id === s.ejercicio_id);
           abrirMenu(ejV.nombre || "Ejercicio", "En esta superserie · " + delEj.length + (delEj.length === 1 ? " serie" : " series"), [
-            { texto: "Ver ficha del ejercicio", accion: () => abrirDetalle(s.ejercicio_id) },
+            { texto: "Ver ficha del ejercicio", accion: () => abrirDetalle(s.ejercicio_id, contextoCarga(dia.id, s.grupo, delEj)) },
+            sinCarga(s.ejercicio_id) && pendientesCarga(s.ejercicio_id, contextoCarga(dia.id, s.grupo, delEj)).length && { texto: "Quitar peso previsto en este entrenamiento y día…", accion: () => ofrecerRetiradaCarga(s.ejercicio_id, contextoCarga(dia.id, s.grupo, delEj)) },
             { texto: notaDe(delEj) ? "Editar la descripción…" : "+ Descripción (tempo, banda, EEP…)", accion: () => editarNota(dia, delEj, "Descripción de " + (ejV.nombre || "el ejercicio")) },
             variosTramos && { texto: "Quitar de la superserie", peligro: true, confirmar: "Pulsa otra vez: se borran sus " + delEj.length + " series de todas las rondas", accion: () => {
               const antes = delEj.map(x => ["series", { ...x }]);
@@ -6359,6 +6371,7 @@ function grafica(puntos, etiqueta) {
 function refrescarDetalle() {
   const e = ejercicioVivo(detalleId);
   if (!e) { if ($("detalle").open) $("detalle").close(); return; }
+  pintarAvisoCargaContextual();
   const st = estadisticas(e.id), tipo = st.tipo;
   $("detTipo").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.tipo === tipo)));
   const medida = tipo === "fuerza" ? medidaDe(e.id) : "";
@@ -6638,10 +6651,59 @@ $("detRm").addEventListener("change", () => {
   refrescarDetalle();
 });
 
-function abrirDetalle(id) {
+// INC-KG-001: contexto explícito de una ocurrencia; nunca se toma de la semana visitada.
+const contextoCarga = (fecha, grupo, filas) => ({ fecha, grupo: grupo || "", ids: filas.map(s => s.id) });
+let detalleContextoCarga = null;
+function pendientesCarga(id, contexto) {
+  if (!contexto || !fechaSerieValida(contexto.fecha) || !Array.isArray(contexto.ids)) return [];
+  return [...new Set(contexto.ids)].map(k => db.series[k]).filter(s => s && !s.borrado && !hecha(s) && s.ejercicio_id === id && s.fecha === contexto.fecha && (s.grupo || "") === contexto.grupo && cargaGuardada(s));
+}
+// Acceso persistente mientras esta ocurrencia conserva carga prevista sin admitir Carga.
+function pintarAvisoCargaContextual() {
+  let aviso = $("detAvisoCargaContextual");
+  if (!aviso) {
+    aviso = document.createElement("div"); aviso.id = "detAvisoCargaContextual";
+    const texto = document.createElement("p"); texto.id = "detContextoCargaTexto";
+    const revisar = document.createElement("button"); revisar.type = "button"; revisar.id = "detRevisarCarga";
+    revisar.className = "nav-btn"; revisar.style.minHeight = "44px"; revisar.style.whiteSpace = "normal";
+    revisar.textContent = "Revisar pesos previstos…";
+    revisar.addEventListener("click", () => ofrecerRetiradaCarga(detalleId, detalleContextoCarga));
+    aviso.append(texto, revisar); $("detMagNota").after(aviso);
+  }
+  const contexto = detalleContextoCarga;
+  const filas = contexto && !admite(detalleId, "carga") ? pendientesCarga(detalleId, contexto) : [];
+  aviso.hidden = !filas.length;
+  const texto = filas.length ? "La ficha no admite Carga, pero esta ocurrencia conserva peso previsto. Entrenamiento: «" + (contexto.grupo || "Ejercicios sueltos") + "». Fecha: " + fechaLargaPlant(contexto.fecha) + ". " + filas.length + (filas.length === 1 ? " serie pendiente con carga." : " series pendientes con carga.") + " No se retira nada automáticamente." : "";
+  if ($("detContextoCargaTexto").textContent !== texto) $("detContextoCargaTexto").textContent = texto;
+}
+
+function ofrecerRetiradaCarga(id, contexto) {
+  if (admite(id, "carga")) return;
+  const filas = pendientesCarga(id, contexto);
+  if (!filas.length) return;
+  const antes = filas.map(s => ({ ...s }));
+  const sello = s => JSON.stringify([s.id, s.fecha, s.grupo || "", s.ejercicio_id, !!s.borrado, hecha(s), s.peso || 0, s.pct || 0, s.ciclo_id || "", s.seccion || "", s.bloque_id || "", s.copia || 0]);
+  abrirMenu("Peso previsto de este entrenamiento", "La ficha ya no incluye Carga. Cambiarla no elimina valores guardados. Entrenamiento: «" + (contexto.grupo || "Ejercicios sueltos") + "». Fecha: " + fechaLargaPlant(contexto.fecha) + ". " + filas.length + (filas.length === 1 ? " serie pendiente afectada." : " series pendientes afectadas.") + " Se quitarán kg, % y la referencia al ciclo solo de estas pendientes; el historial de ciclos, las completadas y otras copias/días se conservan. Al confirmar volverás al entrenamiento y podrás Deshacer.", [
+    { texto: "Quitar el peso previsto solo en este entrenamiento y día", accion: () => {
+      const actuales = pendientesCarga(id, contexto);
+      if (admite(id, "carga") || actuales.length !== antes.length || actuales.some((s, i) => sello(s) !== sello(antes[i]))) { setEstado("Las series cambiaron. Reabre la acción para revisar el contexto y el recuento."); return; }
+      const deshacer = actuales.map(s => ["series", { ...s }]);
+      actuales.forEach(s => cambiar("series", { ...s, peso: 0, pct: 0, ciclo_id: "" }, true));
+      persistir();
+      if ($("detalle").open) $("detalle").close();
+      pintarTodo();
+      avisoDeshacer("Peso previsto retirado de " + actuales.length + (actuales.length === 1 ? " serie" : " series"), deshacer);
+    } },
+    { texto: "Conservar los pesos previstos", accion: () => {} },
+    { texto: "Cancelar", accion: () => {} }
+  ]);
+}
+
+function abrirDetalle(id, contexto = null) {
   const e = ejercicioVivo(id);
   if (!e) return;
   detalleId = id;
+  detalleContextoCarga = contexto ? { fecha: contexto.fecha, grupo: contexto.grupo || "", ids: [...contexto.ids] } : null;
   bilboReset = false;
   $("detNombre").value = e.nombre;
   $("detVideo").value = e.video_url;
@@ -6715,6 +6777,7 @@ $("detTecnica").addEventListener("click", () => {
 // la ficha (dueño de un personal o quien edita el catálogo común) las cambia; el servidor lo impone con las mismas políticas de la ficha.
 // Cambiarlas no toca ninguna serie guardada: los datos que ya tengan se siguen mostrando aunque la ficha deje de ofrecer ese campo.
 function pintarMagnitudesDetalle(e) {
+  pintarAvisoCargaContextual();
   const tipo = tipoDe(e.id), posibles = MAGNITUDES_TIPO[tipo];
   $("detMagSec").hidden = !posibles;
   const cont = $("detMag");
@@ -6737,13 +6800,14 @@ function pintarMagnitudesDetalle(e) {
       editarEjercicio({ medidas: nuevas.length === base.length && base.every(x => nuevas.includes(x)) ? [] : nuevas });
       pintarMagnitudesDetalle(db.ejercicios[e.id]);
       pintarBloques(true);
+      if (m === "carga" && quitar) ofrecerRetiradaCarga(e.id, detalleContextoCarga);
     });
     cont.appendChild(b);
   });
   $("detMagNota").textContent = (propias ? "Elegidas para esta ficha. " : "Las de siempre para " + TIPOS[tipo].nombre.toLowerCase() + ". ") +
     (!columnaMedidas ? "Para cambiarlas hace falta actualizar el servidor (migración P6); de momento se usan las de siempre." :
      !editable(e) ? "Las ajusta quien edita el catálogo común." :
-     "Al programar y registrar solo se piden estos campos (p. ej. pasos de granjero: carga, distancia y tiempo). Las series ya guardadas no cambian.");
+     "Al programar y registrar solo se piden estos campos. Cambiar la ficha no elimina valores guardados. Para quitar peso previsto de una ocurrencia concreta, usa su menú en el entrenamiento y día; desde el catálogo no se deduce un destino.");
 }
 $("detNombre").addEventListener("change", () => {
   const n = $("detNombre").value.trim();
@@ -6779,6 +6843,7 @@ function abrirFichaSoloLectura(id) {
   $("detAvisoLectura").hidden = false;
 }
 $("detalle").addEventListener("close", () => {
+  detalleContextoCarga = null;
   $("detEmbed").textContent = "";   // para que el vídeo deje de sonar
   if (fichaLectura) {
     fichaLectura.forEach(x => { x.disabled = false; });
@@ -10613,13 +10678,14 @@ function pintarEntreno() {
   if (ent.calent) $("enCalentT").textContent = "¿Calentamiento? " + ent.calent.map(p => (p.barra ? "barra" : num(p.peso) + " kg") + " × " + p.reps).join(" · ");
   // Campos para apuntar lo que de verdad se hizo
   const mov = tipo === "movilidad";
-  ent.campos = dist ? (n0(s.distancia) > 0 ? ["m", "t"] : ["t", "m"]) : !mov && ((n0(s.tiempo) > 0 || s.max_tiempo) && !(n0(s.reps) > 0) || conDistFuerza(s) && !(n0(s.reps) > 0)) ? ["kg", "s"] : mov ? (n0(s.reps) > 0 || !(n0(s.tiempo) > 0) ? ["reps", "s"] : ["s", "reps"]) : ["kg", "reps"];
+  const sc = !dist && !mov && sinCarga(s.ejercicio_id) && !cargaGuardada(s);
+  ent.campos = sc ? (!(n0(s.reps) > 0) && (n0(s.tiempo) > 0 || s.max_tiempo) ? ["s", "reps"] : ["reps", "s"]) : dist ? (n0(s.distancia) > 0 ? ["m", "t"] : ["t", "m"]) : !mov && ((n0(s.tiempo) > 0 || s.max_tiempo) && !(n0(s.reps) > 0) || conDistFuerza(s) && !(n0(s.reps) > 0)) ? ["kg", "s"] : mov ? (n0(s.reps) > 0 || !(n0(s.tiempo) > 0) ? ["reps", "s"] : ["s", "reps"]) : ["kg", "reps"];
   const etiqueta = { kg: "Peso (kg)", reps: "Repeticiones" + (s.por_lado ? " por lado" : ""), m: enKm() ? "Kilómetros" : "Metros", t: "Tiempo", s: "Tiempo" + (s.por_lado ? " por lado" : "") + " (45 = segundos)" };
   const valor = c => c === "kg" ? (kg ? num(kg) : "") : c === "reps" ? ((s.ciclo_id === "auto" || esRango(s)) && !hecha(s) ? "" : n0(s.reps) || "")
     : c === "m" ? distCampo(s.distancia) : c === "s" ? (n0(s.tiempo) > 0 ? (n0(s.tiempo) < 60 ? String(n0(s.tiempo)) : fmtTiempo(s.tiempo)) : "") : n0(s.tiempo) ? fmtTiempo(s.tiempo) : "";
   [["enA", "enEtA"], ["enB", "enEtB"]].forEach(([inp, et], k) => {
     const c = ent.campos[k];
-    $(et).textContent = etiqueta[c] + ((dist || mov || conDistFuerza(s)) && k === 1 ? " (opcional)" : "");
+    $(et).textContent = etiqueta[c] + ((dist || mov || sc || conDistFuerza(s)) && k === 1 ? " (opcional)" : "");
     $(inp).value = valor(c);
     $(inp).inputMode = c === "reps" ? "numeric" : "decimal";
     // En carrera, el ejemplo del tiempo es el objetivo de la serie (si lo hay), no un número cualquiera
@@ -10763,7 +10829,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v287" + (BETA ? " beta" : "");
+const VERSION_APP = "v288" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

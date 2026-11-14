@@ -9783,10 +9783,16 @@ function claveCalent(fecha, id, series) {
   const s = series.find(s => !s.calentamiento) || series[0];
   return s ? fecha + "|" + JSON.stringify([id, s.grupo || "", s.seccion || "", s.bloque_id || "", n0(s.copia)]) : null;
 }
+// La aceptación se vincula a IDs de origen, aunque el calentamiento esté en otra parte.
+const PARTE_CALENT_BILBO = "Calentamiento específico para Bilbo";
+function calentAceptado(fecha, series) {
+  const ids = new Set(series.filter(s => !s.calentamiento).map(s => s.id));
+  return Object.values((db.entrenos[fecha] || {}).extra?.cb || {}).some(r => Array.isArray(r.o) && r.o.some(id => ids.has(id)));
+}
 function sugerenciaCalent(fecha, id, series) {
   if (tipoDe(id) !== "fuerza" || fecha !== iso(new Date())) return null;
   const efectivas = series.filter(s => !s.calentamiento).sort((a, b) => a.orden - b.orden);
-  if (!efectivas.length || series.some(s => s.calentamiento) || efectivas.some(hecha)) return null;
+  if (!efectivas.length || series.some(s => s.calentamiento) || efectivas.some(hecha) || calentAceptado(fecha, efectivas)) return null;
   if ((leer("calent-respuesta-v2") || {})[claveCalent(fecha, id, series)]) return null;
   const kg = pesoMostrado(efectivas[0]), barra = usaBarra(id) ? ajustes().barra : 0;
   if (!(kg >= 40)) return null;
@@ -9801,16 +9807,67 @@ function aceptarCalent(fecha, id, grupo, series, pasos) {
   const clave = claveCalent(fecha, id, series);
   const actuales = seriesDelDia(fecha).filter(s => s.ejercicio_id === id && claveCalent(fecha, id, [s]) === clave);
   if (!clave || !actuales.some(s => !s.calentamiento) || actuales.some(hecha)) { setEstado("El contexto cambió; no se añadió calentamiento."); return []; }
-  if (actuales.some(s => s.calentamiento)) { pintarBloques(true); return []; }
-  const base = actuales.find(s => !s.calentamiento);
-  const primera = Math.min.apply(null, actuales.map(s => n0(s.orden)));
-  const nuevas = pasos.map((p, k) => ({ id: nuevoId(), fecha, ejercicio_id: id, orden: primera - pasos.length + k, peso: p.peso, reps: p.reps, distancia: 0, tiempo: 0,
-    descanso: 60, rec_dist: 0, pct: 0, ciclo_id: "", calentamiento: true, hecha: false, grupo: grupo || "", seccion: base.seccion || "", copia: n0(base.copia), meso_id: "", bloque_id: "", ronda: 0, borrado: false }));
+  if (actuales.some(s => s.calentamiento) || calentAceptado(fecha, actuales)) { pintarBloques(true); return []; }
+  const base = actuales.find(s => !s.calentamiento), g = base.grupo || "", parte = PARTE_CALENT_BILBO;
+  const dia = dias.find(d => d.id === fecha), caja = dia && [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].find(el => el.dataset.grupo === g);
+  if (!caja || !Array.isArray(pasos) || !pasos.length) { setEstado("No se pudo comprobar el destino del calentamiento.", true); return []; }
+  const secuencia = [...caja.children].filter(el => el.matches(".parte-caja, .bloque[data-clave]")).map(el => elementoMixtoParte(el, dia, g));
+  const destino = secuencia.find(p => p.nombre === parte) || { nombre: parte, items: [] };
+  const kp = fecha + "|" + g, ordenAntes = estadoOrden("p|" + kp), gruposAntes = ordenGrupos[fecha]?.slice() || null;
+  const gruposDespues = [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].map(el => el.dataset.grupo || "");
+  const delGrupo = seriesDelDia(fecha).filter(s => (s.grupo || "") === g), ordenSeriesAntes = new Map(delGrupo.map(s => [s.id, s.orden]));
+  const usadas = delGrupo.filter(s => s.ejercicio_id === id && !s.bloque_id && (s.seccion || "") === parte).map(s => n0(s.copia) > 1 ? n0(s.copia) : 1)
+    .concat((enEspera[fecha] || []).filter(k => ejDeClave(k) === id && (esperaGrupo[fecha + "|" + k] || "") === g && (esperaParte[fecha + "|" + k] || "") === parte).map(k => copiaDeClave(k) || 1));
+  const copia = usadas.length ? Math.max(...usadas) + 1 : 0;
+  const primera = Math.min(...delGrupo.map(s => n0(s.orden))) - pasos.length;
+  const nuevas = pasos.map((p, k) => ({ id: nuevoId(), fecha, ejercicio_id: id, orden: primera + k, peso: p.peso, reps: p.reps, distancia: 0, tiempo: 0,
+    descanso: 60, rec_dist: 0, pct: 0, ciclo_id: "", calentamiento: true, hecha: false, grupo: g, seccion: parte, copia, meso_id: "", bloque_id: "", ronda: 0, borrado: false }));
+  const token = nuevas[0].id;
+  registrarAntes("@orden", "p|" + kp, ordenAntes);
+  registrarAntes("@orden", "g|" + fecha, estadoOrden("g|" + fecha));
   nuevas.forEach(f => cambiar("series", f, true));
+  // Reutiliza el contenido anterior de la parte y añade otra tarjeta, sin mezclar ocurrencias.
+  destino.items.push({ clave: claveSerie(nuevas[0]), ids: nuevas.map(s => s.id) });
+  const datos = datosMixtosParte([destino, ...secuencia.filter(p => p.nombre !== parte)]);
+  ordenPartes[kp] = datos.nombres;
+  ponerPosPartes(kp, datos.pos);
+  if (gruposDespues.length > 1) ordenGrupos[fecha] = gruposDespues;
+  let orden = primera;
+  datos.series.forEach(filas => filas.slice().sort((a, b) => n0(a.orden) - n0(b.orden)).forEach(s => {
+    if (s.orden !== orden) cambiar("series", { ...s, orden }, true);
+    orden++;
+  }));
+  const ordenSeriesDespues = new Map(delGrupo.map(s => [s.id, db.series[s.id].orden])), ordenDespues = estadoOrden("p|" + kp);
+  const gruposGuardados = ordenGrupos[fecha]?.slice() || null;
+  guardarSesiones();
+  const guardarRelacion = quitar => {
+    const previo = db.entrenos[fecha] || { fecha, html: "", texto: "", rpe: 0, sensacion: "" }, extra = extraDe(fecha), cb = { ...(extra.cb || {}) };
+    if (quitar) delete cb[token]; else cb[token] = { o: actuales.filter(s => !s.calentamiento).map(s => s.id), c: nuevas.map(s => s.id) };
+    if (Object.keys(cb).length) extra.cb = cb; else delete extra.cb;
+    cambiar("entrenos", { ...previo, extra }, true);
+  };
+  guardarRelacion(false); // Marca el día pendiente inmediatamente, antes de cualquier respuesta antigua.
   persistir();
   pintarBloques(true);
-  avisoDeshacer("Calentamiento añadido localmente · " + nombreEj(id), nuevas.map(f => ["series", { ...f, borrado: true }]));
-  return nuevas;
+  const deshacer = nuevas.map(f => ["series", { ...db.series[f.id], borrado: true }]);
+  deshacer.push(["fn", () => {
+    // Solo el orden que cambió esta acción; conserva los valores y las modificaciones posteriores.
+    ordenSeriesAntes.forEach((antes, sid) => { const s = db.series[sid]; if (s && s.orden === ordenSeriesDespues.get(sid) && s.orden !== antes) cambiar("series", { ...s, orden: antes }, true); });
+    const igual = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+    if (igual(ordenPartes[kp], ordenDespues.lista)) {
+      if (ordenAntes.lista) ordenPartes[kp] = ordenAntes.lista.slice(); else delete ordenPartes[kp];
+    }
+    const pos = { ...(posPartes[kp] || {}) };
+    new Set([...Object.keys(ordenAntes.pos || {}), ...Object.keys(ordenDespues.pos || {})]).forEach(n => {
+      if (!igual(pos[n], ordenDespues.pos?.[n])) return;
+      if (Object.hasOwn(ordenAntes.pos || {}, n)) pos[n] = ordenAntes.pos[n]; else delete pos[n];
+    });
+    ponerPosPartes(kp, pos);
+    if (igual(ordenGrupos[fecha], gruposGuardados)) { if (gruposAntes) ordenGrupos[fecha] = gruposAntes.slice(); else delete ordenGrupos[fecha]; }
+    guardarSesiones(); guardarRelacion(true); volcarExtra();
+  }]);
+  avisoDeshacer("Calentamiento añadido localmente · " + nombreEj(id), deshacer);
+  return nuevas.map(s => db.series[s.id]);
 }
 function rechazarCalent(fecha, id, series) {
   const clave = claveCalent(fecha, id, series); if (!clave) return;
@@ -10894,7 +10951,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v303" + (BETA ? " beta" : "");
+const VERSION_APP = "v304" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

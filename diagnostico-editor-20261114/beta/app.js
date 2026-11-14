@@ -41,7 +41,7 @@ const $ = id => document.getElementById(id);
 // ---------- Almacenamiento local (funciona sin conexión) ----------
 // La beta (carpeta /beta/ en la misma web) comparte el navegador con la principal: guarda todo con su propio prefijo.
 // «beta2:» sustituye a «beta:» (que apuntaba a producción): las sesiones, cambios pendientes y datos antiguos de «beta:» NO se leen ni se borran.
-const BETA = location.pathname.includes("/beta/"), PREFIJO = "fyr-diagnostico-editor-306:";
+const BETA = location.pathname.includes("/beta/"), PREFIJO = "fyr-diagnostico-editor-307:";
 const VERSION_VISIBLE = "26";   // la versión que se ve en la app (fija); la interna es VERSION_APP
 // La sesión es común a las pestañas de esta versión; los datos locales pertenecen
 // a una cuenta concreta durante toda la vida de la página. Cambiar de cuenta recarga.
@@ -11013,7 +11013,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v306" + (BETA ? " beta" : "");
+const VERSION_APP = "v307" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";
@@ -11905,6 +11905,110 @@ $("buscarPlantilla").addEventListener("input", () => {
   if (sec.classList.contains("cerrada")) { seccionesPlan.plantillas = true; escribir("plan-abiertas-v1", seccionesPlan); ponerSeccion(sec, true); }
   pintarPlan();
 });
+
+// INC-EDITOR-001: una comprobación al estabilizar teclado/foco, solo en el editor embebido.
+// No se restaura un scroll antiguo ni se persigue el campo mientras el usuario desplaza la página.
+(() => {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  let campo = null, timer = 0, frame = 0, turno = 0, manual = false, ajustado = false, abierto = false, apoyo = null, contexto = null;
+  const esCampo = el => el && el.matches("#vistaSemana .bloques .bloque form.nueva-serie input:not([type=checkbox]):not([type=radio])");
+  const valido = () => campo && campo.isConnected && !campo.closest("[hidden], [inert], .plegado, .g-plegado, .p-plegada") && campo.getClientRects().length && document.activeElement === campo && !document.querySelector("dialog[open]");
+  // Mismo margen de teclado ya empleado por la barra: no confundir las barras de Safari con el teclado.
+  const teclado = () => matchMedia("(max-width: 760px)").matches && vv.scale <= 1.02 && innerHeight - vv.height > 150;
+  const cancelar = () => { clearTimeout(timer); cancelAnimationFrame(frame); timer = frame = 0; turno++; };
+  const quitarContexto = () => { contexto?.remove(); contexto = null; };
+  const terminar = () => { cancelar(); quitarContexto(); campo = null; apoyo = null; manual = ajustado = abierto = false; };
+  function limites() {
+    let arriba = vv.offsetTop, abajo = arriba + vv.height;
+    const dia = campo.closest(".dia"), cab = dia?.querySelector(":scope > .dia-cab");
+    for (const el of [document.querySelector("#app > .cabecera"), document.querySelector("#diaNav"), cab, document.querySelector("#cubiertaDia")]) {
+      if (!el) continue;
+      const css = getComputedStyle(el), r = el.getBoundingClientRect();
+      if (["fixed", "sticky"].includes(css.position) && r.height && css.visibility !== "hidden" && r.top <= arriba + 1 && r.bottom > arriba && r.bottom < abajo - 60) arriba = r.bottom;
+    }
+    const barra = document.querySelector("#app > .tabbar"), r = barra?.getBoundingClientRect();
+    if (r?.height && r.top > arriba && r.top < abajo && r.bottom >= abajo - 1) abajo = r.top;
+    return { arriba, abajo };
+  }
+  function mostrarContexto(l) {
+    if (!contexto) {
+      contexto = document.createElement("div"); contexto.className = "editor-serie-contexto";
+      const nombre = campo.closest(".bloque").querySelector(".ej-nombre");
+      contexto.textContent = "Editando: " + ([...nombre?.childNodes || []].find(n => n.nodeType === Node.TEXT_NODE)?.textContent.trim() || "ejercicio");
+      document.body.appendChild(contexto);
+    }
+    const r = campo.closest("form").getBoundingClientRect();
+    contexto.style.top = (l.arriba + 6) + "px";
+    contexto.style.left = Math.max(vv.offsetLeft + 8, r.left) + "px";
+    contexto.style.width = Math.max(0, Math.min(r.width, vv.width - 16)) + "px";
+    contexto.hidden = l.abajo - l.arriba < campo.getBoundingClientRect().height + 60;
+    if (!contexto.hidden && ajustado) {
+      // Un repintado de notas puede mover el formulario sin cambiar foco. Mover solo el rótulo;
+      // nunca tapar un control ni volver a desplazar la página mientras se escribe.
+      const alto = contexto.getBoundingClientRect().height;
+      const libre = top => [campo, ...campo.closest("form").querySelectorAll(".anadir,.cancelar-form")].every(el => {
+        const r = el.getBoundingClientRect(); return !r.height || r.bottom <= top - 4 || r.top >= top + alto + 4;
+      });
+      if (!libre(l.arriba + 6)) {
+        const top = l.abajo - alto - 6;
+        if (libre(top)) contexto.style.top = top + "px";
+        else contexto.hidden = true;   // el campo y Guardar/Cancelar tienen prioridad si no cabe
+      }
+    }
+    return contexto.hidden ? 0 : contexto.getBoundingClientRect().height + 12;
+  }
+  function comprobar() {
+    if (!valido()) { terminar(); return; }
+    if (!teclado()) { quitarContexto(); return; }
+    const l = limites(), margen = mostrarContexto(l), r = campo.getBoundingClientRect();
+    const arriba = l.arriba + margen + 6, abajo = l.abajo - 8;
+    // Priorizar el campo, no el centro de una tarjeta o formulario que puede contener50series.
+    let dy = 0;
+    if (r.bottom > abajo) dy = r.bottom - abajo;
+    if (r.top - dy < arriba) dy = r.top - arriba;
+    ajustado = true;   // antes del scroll: sus propios eventos no pueden generar otro ajuste
+    if (Math.abs(dy) > 2) window.scrollBy({ top: dy, left: 0, behavior: "instant" });
+  }
+  function preparar() {
+    cancelar();
+    if (!campo || manual || ajustado) return;
+    const actual = turno;
+    // Coalescer la transición medida (resize + retorno39msdespués) y leer geometría ya asentada.
+    timer = setTimeout(() => { frame = requestAnimationFrame(() => { frame = requestAnimationFrame(() => { if (actual === turno && !manual) comprobar(); }); }); }, 120);
+  }
+  function viewport() {
+    if (!campo) return;
+    if (!valido() || vv.scale > 1.02) { terminar(); return; }
+    const ahora = teclado();
+    if (!ahora) { cancelar(); quitarContexto(); abierto = ajustado = manual = false; return; }
+    if (!abierto) { abierto = true; ajustado = false; }
+    if (!manual && !ajustado) preparar();
+    else if (contexto) mostrarContexto(limites());
+  }
+  document.addEventListener("focusin", ev => {
+    terminar();
+    if (!esCampo(ev.target) || !matchMedia("(max-width: 760px)").matches) return;
+    campo = ev.target; abierto = teclado(); preparar();
+  });
+  document.addEventListener("focusout", ev => { if (ev.target === campo) terminar(); });
+  const ceder = () => { if (campo) { manual = true; cancelar(); } };
+  document.addEventListener("pointerdown", ev => {
+    if (!campo) return;
+    if (ev.target !== campo) { terminar(); return; }
+    apoyo = { x: ev.clientX, y: ev.clientY };
+  }, { capture: true, passive: true });
+  document.addEventListener("pointermove", ev => { if (apoyo && Math.hypot(ev.clientX - apoyo.x, ev.clientY - apoyo.y) > 8) ceder(); }, { capture: true, passive: true });
+  document.addEventListener("pointerup", () => { apoyo = null; }, { passive: true });
+  document.addEventListener("pointercancel", () => { apoyo = null; ceder(); }, { passive: true });
+  document.addEventListener("touchmove", ceder, { capture: true, passive: true });
+  document.addEventListener("wheel", ceder, { capture: true, passive: true });
+  document.addEventListener("keydown", ev => { if (["PageUp", "PageDown", "Home", "End", "ArrowUp", "ArrowDown"].includes(ev.key)) ceder(); });
+  vv.addEventListener("resize", viewport); vv.addEventListener("scroll", viewport);
+  window.addEventListener("scroll", () => { if (!campo) return; if (!manual && !ajustado && abierto) preparar(); else if (contexto && valido()) mostrarContexto(limites()); }, { passive: true });
+  new MutationObserver(() => { if (campo && !valido()) terminar(); else if (campo && contexto) mostrarContexto(limites()); }).observe($("vistaSemana"), { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden", "inert", "class"] });
+  document.addEventListener("visibilitychange", () => { if (document.hidden) terminar(); });
+})();
 
 // ---------- Zoom: sin doble toque a tamaño normal; si se amplía con los dedos, el doble toque nativo de iOS vuelve atrás ----------
 // (con zoom se quita «touch-action: manipulation», así el doble toque reduce el zoom en vez de pulsar lo de debajo)

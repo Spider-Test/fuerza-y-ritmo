@@ -2861,3 +2861,11 @@ dialog#dlgAviso { margin: auto; }
 .eb-valores { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%; margin: 8px 0; }
 .eb-valor { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 13px; font-weight: 600; color: var(--muted); }
 .eb-valor input { width: 100%; min-width: 0; min-height: 44px; padding: 8px; font-size: 16px; color: var(--fg); }
+
+/* INC-EDITOR-001: contexto del campo con teclado; capa sin controles ni cambios de layout. */
+.editor-serie-contexto {
+  position: fixed; z-index: 20; box-sizing: border-box; pointer-events: none;
+  padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px;
+  color: var(--fg); background: var(--card); font-size: 13px; line-height: 18px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}

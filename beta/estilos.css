@@ -2888,3 +2888,8 @@ dialog#dlgAviso { margin: auto; }
   .series li:is(.fila-dist, .fila-dist-bloque) > .br-menu { grid-area: borrar; width: 44px; height: 40px; margin: 0; }
   .series li:is(.fila-dist, .fila-dist-bloque) > .br-video { grid-area: asa; width: 44px; height: 40px; margin: 0; }
 }
+
+/* OBS-2026-11-11-01: compensar el padding de la parte también en la cabecera móvil. */
+@media (max-width: 760px) {
+  #vistaSemana .parte-caja > .parte-cab { max-width: none; }
+}

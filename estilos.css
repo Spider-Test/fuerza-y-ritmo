@@ -2871,3 +2871,18 @@ dialog#dlgAviso { margin: auto; }
 /* Sin reflujo ni traslación; inert también impide foco/interacción en toda la navegación oculta. */
 #app > .tabbar.editor-teclado-oculta,
 #app > .tabbar.editor-teclado-oculta * { visibility: hidden !important; pointer-events: none !important; }
+
+/* MEJ-UI-015: a 400 px o menos el detalle usa todo el ancho; controles completos en la fila superior. */
+@media (max-width: 400px) {
+  body:not(.sel-series) .series li:is(.fila-dist, .fila-dist-bloque) {
+    display: grid; align-items: start; column-gap: 8px;
+    grid-template-columns: auto minmax(0, 1fr) 44px 44px;
+    grid-template-areas: "n . asa borrar" "sv sv sv sv" "pr pr pr pr";
+  }
+  .series li.fila-dist-bloque > :first-child { grid-area: n; }
+  .series li.fila-dist-bloque > .sv { grid-area: sv; }
+  .series li.fila-dist-bloque > .pr { grid-area: pr; }
+  body:not(.sel-series) .series li:is(.fila-dist, .fila-dist-bloque) > .borrar { margin: 0; }
+  .series li:is(.fila-dist, .fila-dist-bloque) > .br-menu { grid-area: borrar; width: 44px; height: 40px; margin: 0; }
+  .series li:is(.fila-dist, .fila-dist-bloque) > .br-video { grid-area: asa; width: 44px; height: 40px; margin: 0; }
+}

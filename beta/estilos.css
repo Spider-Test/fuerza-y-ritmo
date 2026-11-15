@@ -2893,3 +2893,9 @@ dialog#dlgAviso { margin: auto; }
 @media (max-width: 760px) {
   #vistaSemana .parte-caja > .parte-cab { max-width: none; }
 }
+
+/* MEJ-FICHA-001: el nombre bloqueado se presenta como título, sin alterar otros controles. */
+#detalle #detNombre:disabled {
+  opacity: 1; color: var(--fg); -webkit-text-fill-color: var(--fg);
+  background: transparent; border-color: transparent; box-shadow: none; cursor: default;
+}

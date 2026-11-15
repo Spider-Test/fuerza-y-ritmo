@@ -3293,7 +3293,7 @@ function compartir(nombre, items, crudo) {
 }
 // H1 · Consultar y revocar los enlaces propios (sin sección nueva: se abre desde Entrenos → Crear o importar → Añadir algo compartido)
 const etiquetaEnlace = f => (f.nombre || "Sin nombre") + " · " + (f.estado === "revocado" ? "revocado" : f.estado === "caducado" ? "caducado" : f.caduca ? "activo hasta " + fechaLarga(f.caduca) : "activo, sin caducidad (anterior)");
-async function abrirMisCompartidos() {
+async function abrirMisCompartidos(verRevocados = false) {
   let filas;
   try {
     const r = await api("/rest/v1/rpc/mis_compartidos", { method: "POST", body: "{}" });
@@ -3304,15 +3304,26 @@ async function abrirMisCompartidos() {
   const orden = { activo: 0, caducado: 1, revocado: 2 };
   filas.sort((a, b) => (orden[a.estado] - orden[b.estado]) || (new Date(b.creado) - new Date(a.creado)));
   // v263: «Quitar de la lista» solo se ofrece si el servidor lo admite (migración P7: mis_compartidos devuelve la columna «retirable»)
-  const revocados = filas.filter(f => f.estado === "revocado" && f.retirable === true);
-  abrirMenu("Mis enlaces compartidos", filas.length ? "Toca uno para copiar su código o revocarlo. Revocar impide que se abra de nuevo; lo que alguien ya haya guardado en su cuenta no se borra." : "Todavía no has compartido nada.",
-    (filas.length ? filas.map(f => ({ texto: etiquetaEnlace(f), accion: () => detalleEnlace(f) })) : [{ texto: "Cerrar", accion: () => {} }])
-      .concat(revocados.length ? [{ texto: "Quitar de la lista los enlaces revocados (" + revocados.length + ")…", accion: () => retirarEnlacesRevocados(null, revocados.length) }] : []));
+  const revocados = filas.filter(f => f.estado === "revocado");
+  const retirables = revocados.filter(f => f.retirable === true);
+  const visibles = verRevocados ? revocados : filas.filter(f => f.estado !== "revocado");
+  const volver = () => abrirMisCompartidos(verRevocados);
+  const opciones = visibles.map(f => ({ texto: etiquetaEnlace(f), accion: () => detalleEnlace(f, volver) }));
+  if (verRevocados) {
+    if (retirables.length) opciones.push({ texto: "Quitar de la lista los enlaces revocados (" + retirables.length + ")…", accion: () => retirarEnlacesRevocados(null, retirables.length, volver) });
+    opciones.push({ texto: "Volver a la lista principal", accion: () => abrirMisCompartidos() });
+  } else {
+    if (revocados.length) opciones.push({ texto: "Ver revocados (" + revocados.length + ")", accion: () => abrirMisCompartidos(true) });
+    if (!opciones.length) opciones.push({ texto: "Cerrar", accion: () => {} });
+  }
+  abrirMenu(verRevocados ? "Enlaces revocados" : "Mis enlaces compartidos",
+    verRevocados ? (revocados.length ? "Estos enlaces siguen revocados. Quitarlos de la lista no afecta a los entrenamientos ni a las copias guardadas." : "No hay enlaces revocados en la lista.")
+      : filas.length ? "Toca un enlace activo o caducado para ver sus detalles. Los revocados están agrupados aparte." : "Todavía no has compartido nada.", opciones);
 }
 // v263: quita de «Mis enlaces compartidos» enlaces YA revocados (uno, si se da el código; o todos). El servidor solo marca el registro como
 // retirado (no borra filas): el enlace sigue revocado y su código no se puede reutilizar; el entrenamiento original y lo que otros ya
 // importaron no se tocan. Solo actúa sobre enlaces revocados y propios (lo impone la función del servidor, no este cliente).
-async function retirarEnlacesRevocados(codigo, cuantos) {
+async function retirarEnlacesRevocados(codigo, cuantos, volver = () => abrirMisCompartidos()) {
   const uno = codigo !== null;
   if (!await confirmar(uno ? "¿Quitar este enlace de la lista?" : "¿Quitar de la lista " + cuantos + (cuantos === 1 ? " enlace revocado?" : " enlaces revocados?"),
       "Solo desaparece de esta lista. El enlace seguirá revocado (nadie podrá abrirlo), y no se borra ningún entrenamiento ni lo que otras personas ya hayan guardado en su cuenta. Los enlaces activos y caducados no se tocan.", "Quitar de la lista")) return;
@@ -3322,9 +3333,9 @@ async function retirarEnlacesRevocados(codigo, cuantos) {
     if (r.ok) { const v = await r.json(); n = Number.isInteger(v) ? v : -1; }
   } catch { setEstado("Necesitas conexión para quitar enlaces de la lista.", true); return; }
   setEstado(n > 0 ? (n === 1 ? "Enlace quitado de la lista" : n + " enlaces quitados de la lista") : n === 0 ? "No había nada que quitar (ya estaba fuera de la lista o no es revocado)." : "No se ha podido quitar de la lista. Inténtalo de nuevo.", n < 0);
-  abrirMisCompartidos();
+  volver();
 }
-function detalleEnlace(f) {
+function detalleEnlace(f, volver = () => abrirMisCompartidos()) {
   const enlace = URL_APP + "#c=" + f.codigo, activo = f.estado === "activo";
   abrirMenu("«" + (f.nombre || "Sin nombre") + "»", "Código " + f.codigo + " · " + (f.tipo === "mesociclo" ? "mesociclo" : f.tipo === "paquete" ? "varias plantillas" : "entrenamiento") + " · creado el " + fechaLarga(f.creado) + " · " +
     (f.estado === "revocado" ? "revocado el " + fechaLarga(f.revocado) : f.estado === "caducado" ? "caducó el " + fechaLarga(f.caduca) : f.caduca ? "caduca el " + fechaLarga(f.caduca) : "sin caducidad (creado antes de que existiera la caducidad)"), [
@@ -3337,8 +3348,8 @@ function detalleEnlace(f) {
       setEstado(ok ? "Enlace revocado" : "No se ha podido revocar (ya estaba revocado o no es tuyo).", !ok);
       abrirMisCompartidos();
     } },
-    f.estado === "revocado" && f.retirable === true && { texto: "Quitar de la lista…", accion: () => retirarEnlacesRevocados(f.codigo, 1) },
-    { texto: "Volver a la lista", accion: () => abrirMisCompartidos() }
+    f.estado === "revocado" && f.retirable === true && { texto: "Quitar de la lista…", accion: () => retirarEnlacesRevocados(f.codigo, 1, volver) },
+    { texto: "Volver a la lista", accion: volver }
   ]);
 }
 function compartidoValido(c) {
@@ -11013,7 +11024,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v298" + (BETA ? " beta" : "");
+const VERSION_APP = "v299" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

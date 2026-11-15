@@ -2899,3 +2899,6 @@ dialog#dlgAviso { margin: auto; }
   opacity: 1; color: var(--fg); -webkit-text-fill-color: var(--fg);
   background: transparent; border-color: transparent; box-shadow: none; cursor: default;
 }
+
+/* Ficha general desde el entreno: sin borrado ni aplicación masiva a series. */
+#detalle.ficha-entreno #detBorrar, #detalle.ficha-entreno #detLadoAplicar { display: none !important; }

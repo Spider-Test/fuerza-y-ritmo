@@ -6615,6 +6615,7 @@ function pintarBilbo(e) {
     f.querySelector(".b-cancelar").addEventListener("click", () => { bilboReset = false; pintarBilbo(e); });
     f.querySelector(".b-ok").textContent = c ? "Resetear y empezar el ciclo " + (n0(c.numero) + 1) : "Empezar Bilbo";
     f.querySelector(".b-ok").addEventListener("click", () => {
+      if (fichaEntreno && c) return;
       const v = parseFloat(irm.value.replace(",", ".")), inc = parseFloat(iinc.value.replace(",", ".")), lim = parseInt(ires.value, 10);
       if (!(v > 0)) { irm.focus(); return; }
       if (!(inc > 0)) { iinc.focus(); return; }
@@ -6646,7 +6647,8 @@ function pintarBilbo(e) {
     b.type = "button";
     b.className = "nav-btn";
     b.textContent = "Resetear Bilbo (nuevo ciclo)";
-    b.addEventListener("click", () => { bilboReset = true; pintarBilbo(e); });
+    b.hidden = !!fichaEntreno;
+    b.addEventListener("click", () => { if (fichaEntreno) return; bilboReset = true; pintarBilbo(e); });
     cont.appendChild(b);
   }
   anteriores.forEach(x => {
@@ -6705,6 +6707,7 @@ function pintarLadoAplicar(id) {
   $("detLadoAplicar").textContent = v ? "Marcar «por lado» en esas series" : "Quitar «por lado» de esas series";
 }
 async function aplicarLadoFicha(id) {
+  if (fichaEntreno) return;
   let dif = seriesLadoDistinto(id);
   if (!dif.length) return;
   const v = ladoDe(id), hechas = dif.filter(hecha);
@@ -6724,6 +6727,7 @@ $("detLado").addEventListener("change", async () => {
   const id = detalleId, nuevo = $("detLado").checked;
   const p = db.personales[id] || { ejercicio_id: id, rm: 0 };
   cambiar("personales", { ...p, ejercicio_id: id, rm: n0(p.rm), lado: nuevo });
+  if (fichaEntreno) { pintarLadoAplicar(id); return; }   // Guardar preferencia, nunca propagar a series desde esta ruta.
   // Las series pendientes pasan a «por lado» (o dejan de serlo) sin preguntar, como siempre; las hechas, solo si se confirma
   Object.values(db.series).filter(x => x.ejercicio_id === id && !x.borrado && !hecha(x) && !!x.por_lado !== nuevo).forEach(x => cambiar("series", { ...x, por_lado: nuevo }, true));
   persistir(); pintarBloques(true);
@@ -6732,6 +6736,7 @@ $("detLado").addEventListener("change", async () => {
   if (detalleId === id) pintarLadoAplicar(id);
 });
 $("detLadoAplicar").addEventListener("click", async () => {
+  if (fichaEntreno) return;
   if (!detalleId) return;
   const id = detalleId;
   await aplicarLadoFicha(id);
@@ -6925,6 +6930,7 @@ $("detVideo").addEventListener("change", () => {
 });
 $("detNotas").addEventListener("change", () => editarEjercicio({ notas: $("detNotas").value }));
 $("detBorrar").addEventListener("click", () => {
+  if (fichaEntreno) return;
   if (!puedeQuitarDelCatalogo(ejercicioVivo(detalleId))) return;
   confirmar("¿Eliminar este ejercicio?", "Se borra con todas sus series.").then(ok => { if (!ok) return;
     editarEjercicio({ borrado: true });
@@ -6934,6 +6940,15 @@ $("detBorrar").addEventListener("click", () => {
 // v271: «Ver ficha» desde el modo entreno: la misma ficha, solo para consultar (todo desactivado) y sin repintar el entreno al cerrarla,
 // para que sigan la serie, lo escrito en los campos y el progreso tal como estaban.
 let fichaLectura = null;
+let fichaEntreno = null;
+function abrirFichaEntreno(id) {
+  if (!ent || !ejercicioVivo(id)) return;
+  const e = ejercicioVivo(id);
+  fichaEntreno = { entrenamiento: ent, serie: serieEnt().id, medidas: JSON.stringify([e.tipo, e.medidas, ladoDe(id)]) };
+  abrirDetalle(id);
+  $("detalle").classList.add("ficha-entreno");
+}
+
 function abrirFichaSoloLectura(id) {
   if (!ejercicioVivo(id)) return;
   abrirDetalle(id);
@@ -6945,7 +6960,22 @@ function abrirFichaSoloLectura(id) {
 }
 $("detalle").addEventListener("close", () => {
   detalleContextoCarga = null;
-  $("detEmbed").textContent = "";   // para que el vídeo deje de sonar
+  $("detEmbed").textContent = "";
+  if (fichaEntreno) {
+    const anterior = fichaEntreno; fichaEntreno = null;
+    $("detalle").classList.remove("ficha-entreno");
+    if (ent === anterior.entrenamiento && serieEnt()?.id === anterior.serie) {
+      const s = serieEnt(), e = ejercicioVivo(s.ejercicio_id);
+      if (e) {
+        $("enEj").textContent = nombreEj(e.id); $("enEj").appendChild(etiquetaTipo(tipoDe(e.id)));
+        $("enVideo").hidden = !idYoutube(e.video_url);
+        $("enVideo").setAttribute("aria-label", "Ver el vídeo de " + nombreEj(e.id));
+        if (anterior.medidas !== JSON.stringify([e.tipo, e.medidas, ladoDe(e.id)])) $("enAviso").textContent = "Se conservan tus valores en curso y sus medidas. La nueva configuración se aplicará al cambiar de serie.";
+      }
+    }
+    return;   // No repintar la serie ni sustituir sus valores sin confirmar.
+  }
+   // para que el vídeo deje de sonar
   if (fichaLectura) {
     fichaLectura.forEach(x => { x.disabled = false; });
     fichaLectura = null;
@@ -11045,7 +11075,7 @@ $("enSaltarD").addEventListener("click", () => { clearInterval(ent.timer); ent.t
 // Abre el mismo visor de la ficha sin cerrar ni repintar el entrenamiento.
 $("enFicha").addEventListener("click", () => {   // v271
   const s = serieEnt();
-  if (s) abrirFichaSoloLectura(s.ejercicio_id);
+  if (s) abrirFichaEntreno(s.ejercicio_id);
 });
 $("enVideo").addEventListener("click", () => {
   const s = serieEnt(), e = s && ejercicioVivo(s.ejercicio_id);
@@ -11080,7 +11110,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v318" + (BETA ? " beta" : "");
+const VERSION_APP = "v319" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

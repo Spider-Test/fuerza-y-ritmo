@@ -7586,19 +7586,6 @@ function abrirRegistroBilbo(id) {
   if (ult) setTimeout(() => { fila.scrollLeft = fila.scrollWidth; }, 0);   // el ciclo más reciente a la vista
 }
 // MEJ-RIT-002: calculadora efímera, sin acceso de escritura al modelo ni preferencias.
-function leerDuracionCalculadora(texto) {
-  const t = texto.trim();
-  let segundos;
-  if (/^\d+(?:[.,]\d+)?$/.test(t)) segundos = Number(t.replace(",", ".")) * 60;
-  else {
-    const m = t.match(/^(\d+):([0-5]\d)(?::([0-5]\d))?(?:[.,](\d+))?$/);
-    if (!m) return NaN;
-    segundos = m[3] === undefined ? Number(m[1]) * 60 + Number(m[2]) : Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
-    if (m[3] !== undefined && Number(m[2]) > 59) return NaN;
-    if (m[4]) segundos += Number("0." + m[4]);
-  }
-  return segundos > 0 && segundos <= Number.MAX_SAFE_INTEGER && Number.isFinite(segundos) ? segundos : NaN;
-}
 function limpiarResultadoRitmos() {
   $("crResultado").textContent = "—"; $("crAviso").textContent = "Introduce los dos valores y pulsa Calcular.";
 }
@@ -7608,26 +7595,84 @@ function configurarCalculadoraRitmos() {
   $("crTiempoCampo").hidden = op === "tiempo";
   $("crRitmoCampo").hidden = op === "ritmo";
   $("crResultadoEtiqueta").textContent = op === "ritmo" ? "Ritmo calculado (min/km)" : op === "tiempo" ? "Tiempo total calculado" : "Distancia calculada";
-  ["crDistancia", "crTiempo", "crRitmo"].forEach(id => { $(id).value = ""; });
+  ["crDistancia", "crTiempoH", "crTiempoMin", "crTiempoSeg", "crRitmoMin", "crRitmoSeg"].forEach(id => { $(id).value = ""; });
   limpiarResultadoRitmos();
 }
 function abrirCalculadoraRitmos() {
   $("crFormulario").reset(); configurarCalculadoraRitmos(); $("dlgRitmos").showModal(); $("crOperacion").focus();
 }
 $("crOperacion").addEventListener("change", configurarCalculadoraRitmos);
-["crDistancia", "crTiempo", "crRitmo"].forEach(id => $(id).addEventListener("input", limpiarResultadoRitmos));
+["crDistancia", "crTiempoH", "crTiempoMin", "crTiempoSeg", "crRitmoMin", "crRitmoSeg"].forEach(id => $(id).addEventListener("input", limpiarResultadoRitmos));
+// Ritmo: dos casillas numéricas (min y seg); solo dígitos, segundos nunca > 59, sin horas ni decimales
+function normalizarRitmoSeg(txt) {
+  let d = txt.replace(/\D/g, "");
+  if (d && d[0] > "5") d = "0" + d[0];
+  return d.slice(0, 2);
+}
+$("crRitmoMin").addEventListener("input", () => {
+  const m = $("crRitmoMin");
+  m.value = m.value.replace(/\D/g, "").slice(0, 2);
+  if (m.value.length === 2) $("crRitmoSeg").focus();
+});
+$("crRitmoSeg").addEventListener("input", () => { const s = $("crRitmoSeg"); s.value = normalizarRitmoSeg(s.value); });
+$("crRitmoSeg").addEventListener("blur", () => { const s = $("crRitmoSeg"); if (s.value.length === 1) s.value = "0" + s.value; });
+$("crRitmoMin").addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); $("crRitmoSeg").focus(); } });
+$("crRitmoSeg").addEventListener("keydown", e => {
+  if (e.key === "Backspace" && !e.isComposing && $("crRitmoSeg").value === "") { e.preventDefault(); const m = $("crRitmoMin"); m.focus(); m.setSelectionRange(m.value.length, m.value.length); }
+});
+["crRitmoMin", "crRitmoSeg"].forEach(id => $(id).addEventListener("paste", e => {
+  e.preventDefault();
+  const t = ((e.clipboardData && e.clipboardData.getData("text")) || "").trim(), m = $("crRitmoMin"), s = $("crRitmoSeg");
+  let x;
+  if ((x = t.match(/^(\d{1,2}):([0-5]\d)$/))) { m.value = x[1]; s.value = x[2]; }
+  else if (/^\d{3,4}$/.test(t) && Number(t.slice(-2)) <= 59) { m.value = t.slice(0, -2); s.value = t.slice(-2); }
+  else if (/^\d{1,2}$/.test(t)) {
+    if (id === "crRitmoMin") m.value = t;
+    else if (t.length === 2 && Number(t) > 59) { limpiarResultadoRitmos(); $("crAviso").textContent = "Segundos de 00 a 59."; return; }
+    else s.value = normalizarRitmoSeg(t);
+  }
+  else { limpiarResultadoRitmos(); $("crAviso").textContent = "No se pudo pegar ese ritmo. Pega minutos y segundos como 4:30 o 430, con segundos de 00 a 59."; return; }
+  limpiarResultadoRitmos();
+}));
+// Tiempo total: tres casillas numéricas (h, min y seg); min y seg de 00 a 59, sin decimales
+const cajasTiempo = ["crTiempoH", "crTiempoMin", "crTiempoSeg"];
+cajasTiempo.forEach((id, i) => {
+  const el = $(id), ant = cajasTiempo[i - 1], sig = cajasTiempo[i + 1];
+  el.addEventListener("input", () => {
+    el.value = i === 0 ? el.value.replace(/\D/g, "").slice(0, 2) : normalizarRitmoSeg(el.value);
+    if (sig && el.value.length === 2) $(sig).focus();
+  });
+  if (i > 0) el.addEventListener("blur", () => { if (el.value.length === 1) el.value = "0" + el.value; });
+  el.addEventListener("keydown", e => {
+    if (e.isComposing) return;
+    if (e.key === "Enter" && sig) { e.preventDefault(); $(sig).focus(); }
+    else if (e.key === "Backspace" && ant && el.value === "") { e.preventDefault(); const p = $(ant); p.focus(); p.setSelectionRange(p.value.length, p.value.length); }
+  });
+  el.addEventListener("paste", e => {
+    e.preventDefault();
+    const t = ((e.clipboardData && e.clipboardData.getData("text")) || "").trim(), c = cajasTiempo.map(k => $(k));
+    let x, v;
+    if ((x = t.match(/^(\d{1,2}):([0-5]\d):([0-5]\d)$/))) v = [x[1], x[2], x[3]];
+    else if ((x = t.match(/^([0-5]?\d):([0-5]\d)$/))) v = ["", x[1], x[2]];
+    else if (/^\d{3,6}$/.test(t) && Number(t.slice(-2)) <= 59 && (t.length < 4 || Number(t.slice(-4, -2)) <= 59)) v = [t.slice(0, -4), t.length > 2 ? t.slice(-4, -2) : "", t.slice(-2)];
+    else if (/^\d{1,2}$/.test(t) && (i === 0 || t.length === 1 || Number(t) <= 59)) { v = c.map(k => k.value); v[i] = i === 0 ? t : normalizarRitmoSeg(t); }
+    else { limpiarResultadoRitmos(); $("crAviso").textContent = "No se pudo pegar ese tiempo. Usa horas, minutos y segundos como 1:02:30, con minutos y segundos de 00 a 59."; return; }
+    c.forEach((k, j) => { k.value = v[j]; });
+    limpiarResultadoRitmos();
+  });
+});
 $("crUnidad").addEventListener("change", limpiarResultadoRitmos);
 $("dlgRitmos").addEventListener("close", () => { $("crFormulario").reset(); configurarCalculadoraRitmos(); });
 $("crFormulario").addEventListener("submit", ev => {
   ev.preventDefault(); limpiarResultadoRitmos();
   const op = $("crOperacion").value, n = $("crDistancia").value.trim();
   const d = /^(?:\d+(?:[.,]\d+)?|[.,]\d+)$/.test(n) ? Number(n.replace(",", ".")) * ($("crUnidad").value === "km" ? 1000 : 1) : NaN;
-  const t = leerDuracionCalculadora($("crTiempo").value), p = leerDuracionCalculadora($("crRitmo").value);
+  const t = Number($("crTiempoH").value || 0) * 3600 + Number($("crTiempoMin").value || 0) * 60 + Number($("crTiempoSeg").value || 0), p = Number($("crRitmoMin").value || 0) * 60 + Number($("crRitmoSeg").value || 0);
   const valido = v => Number.isFinite(v) && v > 0 && v <= Number.MAX_SAFE_INTEGER;
   const error = (texto, id) => { $("crAviso").textContent = texto; $(id).focus(); };
   if (op !== "distancia" && !valido(d)) { error("Distancia: introduce un número positivo, sin escribir la unidad; elígela en m o km.", "crDistancia"); return; }
-  if (op !== "tiempo" && !valido(t)) { error("Tiempo total no válido. Usa minutos o m:ss / h:mm:ss; minutos y segundos internos van de 00 a 59.", "crTiempo"); return; }
-  if (op !== "ritmo" && !valido(p)) { error("Ritmo no válido. Usa minutos por km o m:ss / h:mm:ss, con segundos de 00 a 59.", "crRitmo"); return; }
+  if (op !== "tiempo" && !valido(t)) { error("Tiempo total no válido. Escribe horas, minutos y segundos, con minutos y segundos de 00 a 59; 0:00:00 no vale.", "crTiempoH"); return; }
+  if (op !== "ritmo" && !valido(p)) { error("Ritmo no válido. Escribe solo minutos y segundos por km, con segundos de 00 a 59; 0:00 no vale.", "crRitmoMin"); return; }
   const valor = op === "ritmo" ? 1000 * t / d : op === "tiempo" ? p * d / 1000 : 1000 * t / p;
   if (!valido(valor)) { $("crAviso").textContent = "Los valores están fuera del rango calculable. Revisa las entradas."; return; }
   const nf = (v, digitos) => v.toLocaleString("es-ES", { maximumFractionDigits: digitos });
@@ -11161,7 +11206,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v305" + (BETA ? " beta" : "");
+const VERSION_APP = "v306" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

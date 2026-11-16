@@ -2909,3 +2909,8 @@ button.en-nota { border: 0; text-align: left; font-family: inherit; cursor: poin
 #dlgRitmos .cr-distancia > label { flex: 1; min-width: 0; }
 #dlgRitmos .cr-salida { padding: 12px; border-radius: 10px; background: var(--accent-soft); border: 1px solid var(--line); }
 #crResultado { display: block; font-size: 22px; font-weight: 700; overflow-wrap: anywhere; margin-top: 6px; }
+
+/* MEJ-RIT-002: ritmo en dos casillas min : seg. */
+#dlgRitmos .cr-ritmo { display: flex; align-items: center; gap: 8px; }
+#dlgRitmos .cr-ritmo > input { flex: none; width: 72px; min-width: 0; text-align: center; }
+#dlgRitmos .cr-dospuntos { font-size: 20px; font-weight: 700; color: var(--fg); }

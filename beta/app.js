@@ -10904,6 +10904,40 @@ function colaEntreno(fecha, grupo = null) {
 }
 function sOrden(a, b) { return a.bloque_id ? n0(a.ronda) - n0(b.ronda) || n0(a.orden) - n0(b.orden) : n0(a.orden) - n0(b.orden); }
 const serieEnt = () => ent && db.series[ent.cola[ent.i]];
+// Misma ocurrencia que Semana; en superserie, solo el ejercicio activo de ese bloque.
+function ocurrenciaNotaEntreno(s) {
+  const lista = seriesDeItem(s.fecha, s.grupo || "", claveSerie(s));
+  return s.bloque_id ? lista.filter(x => x.ejercicio_id === s.ejercicio_id) : lista;
+}
+function pintarNotaEntreno() {
+  const s = serieEnt();
+  $("enNota").textContent = s?.nota || "+ Añadir instrucciones";
+  $("enNota").hidden = !s;
+  $("enNota").setAttribute("aria-label", (s?.nota ? "Editar" : "Añadir") + " instrucciones de este ejercicio en este entrenamiento y día");
+}
+async function editarNotaEntreno() {
+  const contexto = ent, s = serieEnt();
+  if (!s || !$("dlgEntreno").open) return;
+  const alcance = ocurrenciaNotaEntreno(s);
+  const distintas = new Set(alcance.map(x => x.nota || "")).size > 1;
+  const ids = (distintas ? [s] : alcance).map(x => x.id);
+  const foto = lista => JSON.stringify(lista.map(x => [x.id, x.nota || ""]).sort((a, b) => a[0].localeCompare(b[0])));
+  const antes = foto(alcance), quitar = $("dlgTexto").querySelector('[data-cerrar="quitar"]');
+  const oculto = quitar.hidden, aria = $("txtInput").getAttribute("aria-label");
+  quitar.hidden = true; $("txtInput").setAttribute("aria-label", "Instrucciones de este entrenamiento y día");
+  let texto;
+  try {
+    texto = await pedirTexto((distintas ? "Instrucciones de esta serie" : "Instrucciones comunes") + " · " + nombreEj(s.ejercicio_id), s.nota || "",
+      (distintas ? "Hay instrucciones distintas: solo se editará la serie activa. " : "Se aplicará a las " + ids.length + " series de esta ocurrencia. ") + "Ejercicio «" + nombreEj(s.ejercicio_id) + "», entrenamiento «" + (s.grupo || "Sin nombre") + "», día " + s.fecha + (s.seccion ? ", parte «" + s.seccion + "»" : "") + ". No cambia otros ejercicios, otras apariciones ni la ficha general. Para quitar el texto, bórralo y pulsa Guardar.");
+  } finally { quitar.hidden = oculto; if (aria === null) $("txtInput").removeAttribute("aria-label"); else $("txtInput").setAttribute("aria-label", aria); }
+  if (texto === null || texto === (s.nota || "")) return;
+  if (ent !== contexto || serieEnt()?.id !== s.id || !$("dlgEntreno").open || foto(ocurrenciaNotaEntreno(s)) !== antes) {
+    setEstado("La serie o sus instrucciones han cambiado. Abre de nuevo el editor; no se ha guardado el texto."); return;
+  }
+  ids.forEach(id => cambiar("series", { ...db.series[id], nota: texto }, true));
+  persistir(); pintarNotaEntreno(); // No repintar magnitudes, progreso ni descanso.
+}
+$("enNota").addEventListener("click", editarNotaEntreno);
 function empezarEntreno(dia, grupo) {
   if (grupo === undefined) {
     const grupos = [...new Set(seriesDelDia(dia.id).map(s => s.grupo || ""))];
@@ -10944,8 +10978,7 @@ function pintarEntreno() {
   const videoEj = ejercicioVivo(s.ejercicio_id);
   $("enVideo").hidden = !idYoutube(videoEj?.video_url);
   $("enVideo").setAttribute("aria-label", "Ver el vídeo de " + nombreEj(s.ejercicio_id));
-  $("enNota").textContent = s.nota || "";
-  $("enNota").hidden = !s.nota;
+  pintarNotaEntreno();
   if (s.bloque_id) {
     const rondas = Math.max.apply(null, lista.filter(x => x.bloque_id === s.bloque_id).map(x => n0(x.ronda)));
     $("enSerie").textContent = "Superserie · ronda " + n0(s.ronda) + " de " + rondas;
@@ -11125,7 +11158,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v321" + (BETA ? " beta" : "");
+const VERSION_APP = "v322" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

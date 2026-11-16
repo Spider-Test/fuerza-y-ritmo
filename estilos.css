@@ -2898,3 +2898,6 @@ dialog#dlgAviso { margin: auto; }
 
 /* Ficha general desde el entreno: sin borrado ni aplicación masiva a series. */
 #detalle.ficha-entreno #detBorrar, #detalle.ficha-entreno #detLadoAplicar { display: none !important; }
+
+/* MEJ-ENT-014: acceso a instrucciones diarias, sin alterar otros campos. */
+button.en-nota { border: 0; text-align: left; font-family: inherit; cursor: pointer; width: 100%; }

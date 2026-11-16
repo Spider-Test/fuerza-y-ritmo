@@ -7656,26 +7656,53 @@ function configurarCalculadoraRitmos() {
   $("crTiempoCampo").hidden = op === "tiempo";
   $("crRitmoCampo").hidden = op === "ritmo";
   $("crResultadoEtiqueta").textContent = op === "ritmo" ? "Ritmo calculado (min/km)" : op === "tiempo" ? "Tiempo total calculado" : "Distancia calculada";
-  ["crDistancia", "crTiempo", "crRitmo"].forEach(id => { $(id).value = ""; });
+  ["crDistancia", "crTiempo", "crRitmoMin", "crRitmoSeg"].forEach(id => { $(id).value = ""; });
   limpiarResultadoRitmos();
 }
 function abrirCalculadoraRitmos() {
   $("crFormulario").reset(); configurarCalculadoraRitmos(); $("dlgRitmos").showModal(); $("crOperacion").focus();
 }
 $("crOperacion").addEventListener("change", configurarCalculadoraRitmos);
-["crDistancia", "crTiempo", "crRitmo"].forEach(id => $(id).addEventListener("input", limpiarResultadoRitmos));
+["crDistancia", "crTiempo", "crRitmoMin", "crRitmoSeg"].forEach(id => $(id).addEventListener("input", limpiarResultadoRitmos));
+// Ritmo: dos casillas numéricas (min y seg); solo dígitos, segundos nunca > 59, sin horas ni decimales
+function normalizarRitmoSeg(txt) {
+  let d = txt.replace(/\D/g, "");
+  if (d && d[0] > "5") d = "0" + d[0];
+  return d.slice(0, 2);
+}
+$("crRitmoMin").addEventListener("input", () => {
+  const m = $("crRitmoMin");
+  m.value = m.value.replace(/\D/g, "").slice(0, 2);
+  if (m.value.length === 2) $("crRitmoSeg").focus();
+});
+$("crRitmoSeg").addEventListener("input", () => { const s = $("crRitmoSeg"); s.value = normalizarRitmoSeg(s.value); });
+$("crRitmoSeg").addEventListener("blur", () => { const s = $("crRitmoSeg"); if (s.value.length === 1) s.value = "0" + s.value; });
+$("crRitmoMin").addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); $("crRitmoSeg").focus(); } });
+$("crRitmoSeg").addEventListener("keydown", e => {
+  if (e.key === "Backspace" && !e.isComposing && $("crRitmoSeg").value === "") { e.preventDefault(); const m = $("crRitmoMin"); m.focus(); m.setSelectionRange(m.value.length, m.value.length); }
+});
+["crRitmoMin", "crRitmoSeg"].forEach(id => $(id).addEventListener("paste", e => {
+  e.preventDefault();
+  const t = ((e.clipboardData && e.clipboardData.getData("text")) || "").trim(), m = $("crRitmoMin"), s = $("crRitmoSeg");
+  let x;
+  if ((x = t.match(/^(\d{1,2}):([0-5]\d)$/))) { m.value = x[1]; s.value = x[2]; }
+  else if (/^\d{3,4}$/.test(t) && Number(t.slice(-2)) <= 59) { m.value = t.slice(0, -2); s.value = t.slice(-2); }
+  else if (/^\d{1,2}$/.test(t)) { if (id === "crRitmoMin") m.value = t; else s.value = normalizarRitmoSeg(t); }
+  else { limpiarResultadoRitmos(); $("crAviso").textContent = "No se pudo pegar ese ritmo. Pega minutos y segundos como 4:30 o 430, con segundos de 00 a 59."; return; }
+  limpiarResultadoRitmos();
+}));
 $("crUnidad").addEventListener("change", limpiarResultadoRitmos);
 $("dlgRitmos").addEventListener("close", () => { $("crFormulario").reset(); configurarCalculadoraRitmos(); });
 $("crFormulario").addEventListener("submit", ev => {
   ev.preventDefault(); limpiarResultadoRitmos();
   const op = $("crOperacion").value, n = $("crDistancia").value.trim();
   const d = /^(?:\d+(?:[.,]\d+)?|[.,]\d+)$/.test(n) ? Number(n.replace(",", ".")) * ($("crUnidad").value === "km" ? 1000 : 1) : NaN;
-  const t = leerDuracionCalculadora($("crTiempo").value), p = leerDuracionCalculadora($("crRitmo").value);
+  const t = leerDuracionCalculadora($("crTiempo").value), p = Number($("crRitmoMin").value || 0) * 60 + Number($("crRitmoSeg").value || 0);
   const valido = v => Number.isFinite(v) && v > 0 && v <= Number.MAX_SAFE_INTEGER;
   const error = (texto, id) => { $("crAviso").textContent = texto; $(id).focus(); };
   if (op !== "distancia" && !valido(d)) { error("Distancia: introduce un número positivo, sin escribir la unidad; elígela en m o km.", "crDistancia"); return; }
   if (op !== "tiempo" && !valido(t)) { error("Tiempo total no válido. Usa minutos o m:ss / h:mm:ss; minutos y segundos internos van de 00 a 59.", "crTiempo"); return; }
-  if (op !== "ritmo" && !valido(p)) { error("Ritmo no válido. Usa minutos por km o m:ss / h:mm:ss, con segundos de 00 a 59.", "crRitmo"); return; }
+  if (op !== "ritmo" && !valido(p)) { error("Ritmo no válido. Escribe solo minutos y segundos por km, con segundos de 00 a 59; 0:00 no vale.", "crRitmoMin"); return; }
   const valor = op === "ritmo" ? 1000 * t / d : op === "tiempo" ? p * d / 1000 : 1000 * t / p;
   if (!valido(valor)) { $("crAviso").textContent = "Los valores están fuera del rango calculable. Revisa las entradas."; return; }
   const nf = (v, digitos) => v.toLocaleString("es-ES", { maximumFractionDigits: digitos });
@@ -11214,7 +11241,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v323" + (BETA ? " beta" : "");
+const VERSION_APP = "v324" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

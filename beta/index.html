@@ -27,7 +27,7 @@
   window.addEventListener("pageshow", actualizar);
 })();
 </script>
-<link rel="stylesheet" href="estilos.css?v=v323">
+<link rel="stylesheet" href="estilos.css?v=v324">
 </head>
 <body>
 
@@ -425,10 +425,11 @@
       <input id="crTiempo" inputmode="text" autocomplete="off" placeholder="Ej.: 2:00 o 1:02:30" aria-describedby="crTiempoAyuda">
       <span id="crTiempoAyuda" class="menu-det">Minutos (30 o 1,5), m:ss (2:00) o h:mm:ss (1:02:30). Segundos decimales: 2:00,5. Un número solo son minutos.</span>
     </label>
-    <label id="crRitmoCampo" class="campo">Ritmo (min/km)
-      <input id="crRitmo" inputmode="text" autocomplete="off" placeholder="Ej.: 4:30" aria-describedby="crRitmoAyuda">
-      <span id="crRitmoAyuda" class="menu-det">Minutos por km (4,5), m:ss (4:30) o h:mm:ss. Segundos decimales: 4:30,5. No es el tiempo total.</span>
-    </label>
+    <div id="crRitmoCampo" class="campo" role="group" aria-labelledby="crRitmoEtiqueta" aria-describedby="crRitmoAyuda">
+      <span id="crRitmoEtiqueta">Ritmo (min/km)</span>
+      <div class="cr-ritmo"><input id="crRitmoMin" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="2" enterkeyhint="next" placeholder="0" aria-label="Minutos"><span class="cr-dospuntos" aria-hidden="true">:</span><input id="crRitmoSeg" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="2" enterkeyhint="done" placeholder="00" aria-label="Segundos"></div>
+      <span id="crRitmoAyuda" class="menu-det">Solo minutos y segundos por km; segundos de 00 a 59. Ej.: 4 y 30 = 4:30. No es el tiempo total.</span>
+    </div>
     <div class="cr-salida"><strong id="crResultadoEtiqueta"></strong><output id="crResultado" aria-live="polite">—</output></div>
     <p id="crAviso" role="status" class="menu-det"></p>
     <div class="d-botones"><button type="button" class="nav-btn" data-cerrar="">Cerrar</button><button type="submit" class="anadir" data-enter>Calcular</button></div>
@@ -1075,6 +1076,6 @@
 <div class="toast" id="toast" role="status" hidden><span id="toastTxt"></span><button type="button" id="toastBtn">Deshacer</button></div>
 <div class="fiesta" id="fiesta" aria-hidden="true"></div>
 
-<script src="app.js?v=v323"></script>
+<script src="app.js?v=v324"></script>
 </body>
 </html>

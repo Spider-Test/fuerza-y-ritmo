@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="connect-src 'self' https://qqyedigitphvitejquxo.supabase.co blob: data:">
+<meta http-equiv="Content-Security-Policy" content="connect-src 'self' https://qtdvehlewuuljolistlw.supabase.co blob: data:">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Fuerza y Ritmo</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -27,7 +27,7 @@
   window.addEventListener("pageshow", actualizar);
 })();
 </script>
-<link rel="stylesheet" href="estilos.css?v=v325">
+<link rel="stylesheet" href="estilos.css?v=v305">
 </head>
 <body>
 
@@ -311,8 +311,8 @@
     <button class="cerrar" aria-label="Cerrar" autofocus>✕</button>
   </form>
   <div class="d-cuerpo">
-    <p id="detAvisoLectura" class="aviso-estim" hidden>Ficha en modo consulta: se abre desde el entrenamiento y aquí no se edita. Al cerrarla vuelves a la misma serie.</p>
     <p id="detAvisoComun" class="aviso-estim" hidden>Ejercicio del catálogo común: solo lo editan el administrador y quien él autorice. Tus series y tu 1RM son solo tuyos.</p>
+    <p id="detAvisoLectura" class="aviso-estim" hidden>Ficha en modo consulta: se abre desde el entrenamiento y aquí no se edita. Al cerrarla vuelves a la misma serie.</p>
     <label id="detCompSec" class="permiso" hidden><input type="checkbox" id="detComp"> En el catálogo común (lo ven todos los usuarios aprobados)</label>
     <section>
       <h3>Tipo</h3>
@@ -410,6 +410,23 @@
     </div>
   </form>
 </dialog>
+<dialog id="dlgFechaPlant" aria-label="Elegir fecha">
+  <form method="dialog" class="d-cab">
+    <h3 class="d-tit">Añadir a una fecha</h3>
+    <button class="cerrar" aria-label="Cerrar">✕</button>
+  </form>
+  <div class="d-cuerpo">
+    <p class="menu-det" id="fpResumen" style="padding:0"></p>
+    <label class="campo">Fecha <input id="fpFecha" type="date" min="1000-01-01" max="9999-12-31" aria-describedby="fpElegida"></label>
+    <p class="eb-nota" id="fpElegida" role="status"></p>
+    <p class="aviso" id="fpAviso" role="status"></p>
+    <div class="d-botones">
+      <button type="button" class="nav-btn" id="fpCancelar">Cancelar</button>
+      <button type="button" class="anadir" id="fpAnadir" disabled>Añadir</button>
+    </div>
+  </div>
+</dialog>
+
 <dialog id="dlgRitmos" aria-labelledby="crTitulo">
   <form id="crFormulario" class="d-form" novalidate>
     <h3 id="crTitulo">Calculadora de ritmos</h3>
@@ -421,16 +438,14 @@
       <div class="cr-distancia"><input id="crDistancia" inputmode="decimal" autocomplete="off" placeholder="Ej.: 400 o 0,4" aria-describedby="crDistanciaAyuda"><label class="campo">Unidad <select id="crUnidad"><option value="m">metros (m)</option><option value="km">kilómetros (km)</option></select></label></div>
       <p id="crDistanciaAyuda" class="menu-det">Solo el número, con coma o punto decimal. Ej.: 400 m o 0,4 km con su unidad seleccionada.</p>
     </div>
-    <div id="crTiempoCampo" class="campo" role="group" aria-labelledby="crTiempoEtiqueta" aria-describedby="crTiempoAyuda">
-      <span id="crTiempoEtiqueta">Tiempo total</span>
-      <div class="cr-ritmo"><input id="crTiempoH" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="2" enterkeyhint="next" placeholder="0" aria-label="Horas"><span class="cr-dospuntos" aria-hidden="true">:</span><input id="crTiempoMin" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="2" enterkeyhint="next" placeholder="00" aria-label="Minutos"><span class="cr-dospuntos" aria-hidden="true">:</span><input id="crTiempoSeg" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="2" enterkeyhint="done" placeholder="00" aria-label="Segundos"></div>
-      <span id="crTiempoAyuda" class="menu-det">Horas, minutos y segundos; minutos y segundos de 00 a 59. Ej.: 0 : 30 : 00 = 30 minutos.</span>
-    </div>
-    <div id="crRitmoCampo" class="campo" role="group" aria-labelledby="crRitmoEtiqueta" aria-describedby="crRitmoAyuda">
-      <span id="crRitmoEtiqueta">Ritmo (min/km)</span>
-      <div class="cr-ritmo"><input id="crRitmoMin" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="2" enterkeyhint="next" placeholder="0" aria-label="Minutos"><span class="cr-dospuntos" aria-hidden="true">:</span><input id="crRitmoSeg" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="2" enterkeyhint="done" placeholder="00" aria-label="Segundos"></div>
-      <span id="crRitmoAyuda" class="menu-det">Solo minutos y segundos por km; segundos de 00 a 59. Ej.: 4 y 30 = 4:30. No es el tiempo total.</span>
-    </div>
+    <label id="crTiempoCampo" class="campo">Tiempo total
+      <input id="crTiempo" inputmode="text" autocomplete="off" placeholder="Ej.: 2:00 o 1:02:30" aria-describedby="crTiempoAyuda">
+      <span id="crTiempoAyuda" class="menu-det">Minutos (30 o 1,5), m:ss (2:00) o h:mm:ss (1:02:30). Segundos decimales: 2:00,5. Un número solo son minutos.</span>
+    </label>
+    <label id="crRitmoCampo" class="campo">Ritmo (min/km)
+      <input id="crRitmo" inputmode="text" autocomplete="off" placeholder="Ej.: 4:30" aria-describedby="crRitmoAyuda">
+      <span id="crRitmoAyuda" class="menu-det">Minutos por km (4,5), m:ss (4:30) o h:mm:ss. Segundos decimales: 4:30,5. No es el tiempo total.</span>
+    </label>
     <div class="cr-salida"><strong id="crResultadoEtiqueta"></strong><output id="crResultado" aria-live="polite">—</output></div>
     <p id="crAviso" role="status" class="menu-det"></p>
     <div class="d-botones"><button type="button" class="nav-btn" data-cerrar="">Cerrar</button><button type="submit" class="anadir" data-enter>Calcular</button></div>
@@ -449,6 +464,14 @@
   </form>
 </dialog>
 
+<dialog id="dlgCalent" aria-label="Calentamiento guardado">
+  <form method="dialog" class="d-cab">
+    <h3 class="d-tit" id="calTit">Calentamiento</h3>
+    <button class="cerrar" aria-label="Cerrar">✕</button>
+  </form>
+  <div class="d-cuerpo" id="calCuerpo"></div>
+</dialog>
+
 <dialog id="dlgBloque" aria-label="Nueva superserie">
   <form method="dialog" class="d-cab">
     <h3 class="d-tit">Nueva superserie</h3>
@@ -463,31 +486,6 @@
     <div class="d-botones">
       <button type="button" class="nav-btn" id="blqVacio" title="Una superserie sin ejercicios: luego arrastras ejercicios del entreno dentro con ≡">Crear vacío</button>
       <button type="button" class="anadir" id="blqCrear">Crear superserie</button>
-    </div>
-  </div>
-</dialog>
-
-<dialog id="dlgCalent" aria-label="Calentamiento guardado">
-  <form method="dialog" class="d-cab">
-    <h3 class="d-tit" id="calTit">Calentamiento</h3>
-    <button class="cerrar" aria-label="Cerrar">✕</button>
-  </form>
-  <div class="d-cuerpo" id="calCuerpo"></div>
-</dialog>
-
-<dialog id="dlgFechaPlant" aria-label="Elegir fecha">
-  <form method="dialog" class="d-cab">
-    <h3 class="d-tit">Añadir a una fecha</h3>
-    <button class="cerrar" aria-label="Cerrar">✕</button>
-  </form>
-  <div class="d-cuerpo">
-    <p class="menu-det" id="fpResumen" style="padding:0"></p>
-    <label class="campo">Fecha <input id="fpFecha" type="date" min="1000-01-01" max="9999-12-31" aria-describedby="fpElegida"></label>
-    <p class="eb-nota" id="fpElegida" role="status"></p>
-    <p class="aviso" id="fpAviso" role="status"></p>
-    <div class="d-botones">
-      <button type="button" class="nav-btn" id="fpCancelar">Cancelar</button>
-      <button type="button" class="anadir" id="fpAnadir" disabled>Añadir</button>
     </div>
   </div>
 </dialog>
@@ -1077,6 +1075,6 @@
 <div class="toast" id="toast" role="status" hidden><span id="toastTxt"></span><button type="button" id="toastBtn">Deshacer</button></div>
 <div class="fiesta" id="fiesta" aria-hidden="true"></div>
 
-<script src="app.js?v=v325"></script>
+<script src="app.js?v=v305"></script>
 </body>
 </html>

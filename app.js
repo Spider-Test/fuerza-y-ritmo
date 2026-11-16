@@ -5959,16 +5959,16 @@ function elegirDeLista(l, alElegir) {
     texto: (x.k === sig ? "▶ " : "") + (x.sep ? x.sep.titulo + " · " : "") + x.p.nombre + " · " + resumenItems(x.p.items || []), accion: () => alElegir(x.p, x.k) })));
 }
 // Inserta en la lista (al final o detrás de una posición de items)
-// v285: añadir una plantilla a una lista. La misma plantilla otra vez es la misma entrada repetida (como «Repetir debajo»). Una plantilla DISTINTA cuyo nombre ya existe en la lista
-// entra como copia independiente con el siguiente sufijo libre; la plantilla de origen, su nombre y las demás listas no cambian
+// MEJ-LISTAS-004: los homónimos conservan el nombre; una plantilla distinta se añade como copia independiente.
+// Repetir la misma referencia mantiene el flujo existente; Cambiar nombre aísla únicamente la entrada elegida.
 function anadirPlantillaALista(l, p, tras) {
   const rec = recorrerLista(db.listas[l.id]);
   if (rec.some(x => x.p.id === p.id) || !rec.some(x => norm(x.p.nombre) === norm(p.nombre))) { insertarEnLista(l, p.id, tras); return; }
-  const nombre = nombreLibreEn(p.nombre, rec.map(x => x.p.nombre).concat(vivos("plantillas").map(x => x.nombre)));
+  const nombre = p.nombre;
   const id = nuevoId();
   cambiar("plantillas", { ...p, id, nombre, items: copiaJson(p.items || []), borrado: false });
   insertarEnLista(l, id, tras);
-  avisoDeshacer("«" + p.nombre + "» ya estaba en «" + l.nombre + "»: se ha añadido como «" + nombre + "» (copia independiente)", null);
+  avisoDeshacer("«" + nombre + "» añadido a «" + l.nombre + "» como copia independiente", null);
 }
 function insertarEnLista(l, valor, tras) {
   const fresca = db.listas[l.id], items = (fresca.items || []).slice();
@@ -5977,19 +5977,36 @@ function insertarEnLista(l, valor, tras) {
 }
 async function guardarEnLista(nombreSugerido, series) {
   elegirLista("¿En qué lista lo guardo?", async l => {
-    const nombre = await pedirNombre("Nombre del entrenamiento", nombreSugerido, "Se guarda también en tus plantillas. Si ya hay una plantilla o una entrada con este nombre, se guarda como copia nueva con sufijo («Nombre (1)»); no se reemplaza nada.");
+    const nombre = await pedirNombre("Nombre del entrenamiento", nombreSugerido, "Se guarda como una copia nueva e independiente, también en tus plantillas. Puede tener el mismo nombre que otras entradas; no se reemplaza nada.");
     if (!nombre) return;
+    const fresca = db.listas[l.id];
+    if (!fresca || fresca.borrado) { setEstado("La lista ya no está disponible. No se ha guardado el entrenamiento."); return; }
     const items = itemsDe(series).map(it => it.bloque ? { bloque: true, seccion: it.seccion || "", tramos: it.tramos } : { ejercicio_id: it.ejercicio_id, seccion: it.seccion || "", series: it.series });
-    // v286: guardar en una lista SIEMPRE crea una plantilla nueva e independiente y enlaza solo esta entrada. Si el nombre ya existe en cualquier plantilla (puede estar en otras listas) o
-    // en esta lista, se usa el siguiente sufijo libre («Nombre (1)»…). Nunca se reemplaza ni se modifica una plantilla existente (eso queda para su acción explícita de edición). Repetir la
-    // acción crea otra entrada independiente (v284 y anteriores reutilizaban la plantilla del mismo nombre; v285 solo lo evitaba si el nombre estaba en esta lista)
-    const usados = recorrerLista(db.listas[l.id]).map(x => x.p.nombre).concat(vivos("plantillas").map(p => p.nombre));
-    const final = nombreLibreEn(nombre, usados);
-    const id = nuevoId();
-    cambiar("plantillas", { id, nombre: final, items, borrado: false });
-    insertarEnLista(l, id);
-    avisoDeshacer("«" + nombre + "» guardado en la lista «" + l.nombre + "»" + (final !== nombre ? " como «" + final + "» porque ya existía una plantilla o entrada con ese nombre" : ""), null);
+    const antes = [["listas", { ...fresca, items: copiaJson(fresca.items || []) }]], id = nuevoId();
+    cambiar("plantillas", { id, nombre, items, borrado: false });
+    antes.push(["plantillas", { ...db.plantillas[id], borrado: true }]);
+    insertarEnLista(fresca, id);
+    avisoDeshacer("«" + nombre + "» guardado en la lista «" + fresca.nombre + "» como copia independiente", antes);
   });
+}
+// Renombrar una posición no modifica la plantilla original ni las demás referencias a su ID.
+async function renombrarEntradaLista(listaId, i, plantillaId) {
+  const inicial = db.listas[listaId], p = db.plantillas[plantillaId];
+  if (!inicial || inicial.borrado || (inicial.items || [])[i] !== plantillaId || !p || p.borrado) return;
+  const estructura = JSON.stringify(inicial.items || []);
+  const nombre = await pedirNombre("Nombre del entrenamiento en esta lista", p.nombre, "Se crea una copia independiente solo para esta entrada. La plantilla original y las demás entradas y listas conservan su nombre y contenido.");
+  if (!nombre) return;
+  const fresca = db.listas[listaId], actual = db.plantillas[plantillaId];
+  if (!fresca || fresca.borrado || JSON.stringify(fresca.items || []) !== estructura || !actual || actual.borrado) {
+    setEstado("La entrada ha cambiado mientras escribías. Abre de nuevo su menú; no se ha renombrado nada."); return;
+  }
+  if (nombre === actual.nombre) return;
+  const antes = [["listas", { ...fresca, items: copiaJson(fresca.items || []) }]], id = nuevoId();
+  cambiar("plantillas", { ...actual, id, nombre, items: copiaJson(actual.items || []), borrado: false });
+  antes.push(["plantillas", { ...db.plantillas[id], borrado: true }]);
+  const items = (fresca.items || []).slice(); items[i] = id;
+  guardarLista(fresca, { items });
+  avisoDeshacer("Entrada renombrada como «" + nombre + "»", antes);
 }
 // Pone el entrenamiento k de la lista en un día; el siguiente pasa a ser el de después
 function ponerEnDia(l, p, k, f) {
@@ -6241,11 +6258,12 @@ function pintarListas() {
       m.addEventListener("click", () => abrirMenu(p.nombre, resumenItems(p.items || []), [
         { texto: "Poner en un día…", accion: () => ponerEntrenoDeLista(l, p, kk) },
         kk !== sig && { texto: "Marcar como el siguiente", accion: () => guardarLista(db.listas[l.id], { siguiente: kk }) },
+        { texto: "Cambiar nombre…", accion: () => renombrarEntradaLista(l.id, i, p.id) },
         { texto: "Repetir debajo", accion: () => insertarEnLista(l, p.id, i) },
-        // v285: corrección explícita (nunca automática) de listas antiguas con la misma plantilla repetida: esta entrada pasa a ser una copia independiente con nombre libre
+        // Corrección explícita de referencias repetidas antiguas: copia independiente que conserva el nombre.
         rec.filter(x => x.p.id === p.id).length > 1 && { texto: "Hacer esta entrada independiente", accion: () => {
           const fresca = db.listas[l.id], antes = [["listas", { ...fresca }]];
-          const nombre = nombreLibreEn(p.nombre, recorrerLista(fresca).map(x => x.p.nombre).concat(vivos("plantillas").map(x => x.nombre)));
+          const nombre = p.nombre;
           const id = nuevoId();
           cambiar("plantillas", { ...p, id, nombre, items: copiaJson(p.items || []), borrado: false });
           antes.push(["plantillas", { ...db.plantillas[id], borrado: true }]);
@@ -11054,7 +11072,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v302" + (BETA ? " beta" : "");
+const VERSION_APP = "v303" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

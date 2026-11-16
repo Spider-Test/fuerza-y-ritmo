@@ -2914,3 +2914,7 @@ button.en-nota { border: 0; text-align: left; font-family: inherit; cursor: poin
 #dlgRitmos .cr-ritmo { display: flex; align-items: center; gap: 8px; }
 #dlgRitmos .cr-ritmo > input { flex: none; width: 72px; min-width: 0; text-align: center; }
 #dlgRitmos .cr-dospuntos { font-size: 20px; font-weight: 700; color: var(--fg); }
+
+/* MEJ-BLQ-001 (2.17): asa para reordenar los ejercicios dentro de «Editar superserie» */
+#dlgEditBloque .eb-ej > .asa { opacity: 1; visibility: visible; cursor: grab; touch-action: none; }
+#dlgEditBloque .eb-ej > .asa:active { cursor: grabbing; }

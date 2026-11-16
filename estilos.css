@@ -2901,3 +2901,11 @@ dialog#dlgAviso { margin: auto; }
 
 /* MEJ-ENT-014: acceso a instrucciones diarias, sin alterar otros campos. */
 button.en-nota { border: 0; text-align: left; font-family: inherit; cursor: pointer; width: 100%; }
+
+/* MEJ-RIT-002: solo la calculadora independiente. */
+#dlgRitmos { width: min(520px, calc(100vw - 24px)); }
+#dlgRitmos .cr-distancia { display: flex; align-items: end; gap: 8px; }
+#dlgRitmos .cr-distancia > input { min-width: 0; flex: 1; width: 100%; }
+#dlgRitmos .cr-distancia > label { flex: 1; min-width: 0; }
+#dlgRitmos .cr-salida { padding: 12px; border-radius: 10px; background: var(--accent-soft); border: 1px solid var(--line); }
+#crResultado { display: block; font-size: 22px; font-weight: 700; overflow-wrap: anywhere; margin-top: 6px; }

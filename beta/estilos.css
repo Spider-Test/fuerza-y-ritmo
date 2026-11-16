@@ -2390,8 +2390,8 @@ dialog#dlgAviso { margin: auto; }
 .arrastre-ej .fin-grupo { border-color: var(--accent); color: var(--muted, inherit); background: var(--accent-soft); }
 
 /* v252: el nombre del entrenamiento destaca algo más que partes (15 px) y ejercicios (15 px); mismo color, tipo y mayúsculas */
-#vistaSemana .grupo-cab .g-toggle .gn-txt { font-size: 19px; line-height: 1.2; letter-spacing: 0.05em; }
-@media (max-width: 760px) { #vistaSemana .grupo-cab .g-toggle .gn-txt { font-size: 18px; line-height: 1.2; } }
+#vistaSemana .grupo-cab .g-toggle .gn-txt { font-size: 17px; line-height: 1.2; letter-spacing: 0.05em; }   /* v327 (MEJ-UI-019): 19 → 17 px, entre el día y las partes (15 px) */
+@media (max-width: 760px) { #vistaSemana .grupo-cab .g-toggle .gn-txt { font-size: 16px; line-height: 1.2; } }
 
 /* v254 (sustituye el bloque v253): el entrenamiento es una jerarquía distinta de sus partes. Las partes usan azul, verde, ámbar,
    violeta y cian (--p0…--p4) y el acento es verde; el entreno usa un azul noche/grafito (--entreno) que no está en esa paleta,
@@ -2920,3 +2920,17 @@ button.en-nota { border: 0; text-align: left; font-family: inherit; cursor: poin
 /* MEJ-BLQ-001 (2.17): asa para reordenar los ejercicios dentro de «Editar superserie» */
 #dlgEditBloque .eb-ej > .asa { opacity: 1; visibility: visible; cursor: grab; touch-action: none; }
 #dlgEditBloque .eb-ej > .asa:active { cursor: grabbing; }
+
+/* MEJ-UI-019 (v327): el encabezado de cada entrenamiento se integra en el día; sin caja ni banda con acento (sustituye el aspecto de v254).
+   Misma superficie opaca que el día (necesaria porque el encabezado es sticky), sin borde, fondo propio, radio ni sombra. Cada entreno,
+   salvo el primero, lleva un divisor fino encima. El contenedor .grupo conserva tamaño y relleno: sigue siendo el destino amplio de las partes. */
+#vistaSemana .dia .grupo > .grupo-cab,
+#vistaSemana .dia .grupo.grupo-sueltos > .grupo-cab {
+  background: var(--card) !important; border: 0; border-radius: 0 !important; box-shadow: none;
+}
+@media (max-width: 760px) {
+  #vistaSemana .grupo:not(.g-plegado):not(:has(.parte-caja:not(.p-plegada))) > .grupo-cab,
+  #vistaSemana .grupo.grupo-sueltos:not(.g-plegado):not(:has(.parte-caja:not(.p-plegada))) > .grupo-cab { background: var(--card) !important; border-radius: 0 !important; }
+}
+.dia.varios-entrenos .grupo { border: 0; border-radius: 0; background: none; }
+.dia.varios-entrenos .grupo + .grupo { border-top: 1px solid var(--line); }

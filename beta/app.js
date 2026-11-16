@@ -1845,7 +1845,9 @@ function pedirNombre(titulo, valor, ayuda) {
 // Modo efímero de reordenación: un solo día o una sola lista, sin guardarlo ni sincronizarlo.
 let zonaReordenar = null, arrastreOrden = null, actualizandoOrden = false;
 const raizOrden = el => el?.closest?.("[data-zona-orden]") || null;
-const puedeReordenar = el => !!zonaReordenar && raizOrden(el)?.dataset.zonaOrden === zonaReordenar;
+// MEJ-BLQ-001 (2.17): una ventana marcada con data-orden-libre (la de «Editar superserie») reordena siempre, sin el modo «Reordenar» del día, y es ella la que se desplaza
+const libreOrden = el => el?.closest?.("[data-orden-libre]") || null;
+const puedeReordenar = el => !!libreOrden(el) || (!!zonaReordenar && raizOrden(el)?.dataset.zonaOrden === zonaReordenar);
 const zonaOrdenPlegada = zona => zona.classList.contains(zona.classList.contains("dia") ? "plegado" : "cerrada");
 function terminarModoOrden() {
   zonaReordenar = null;
@@ -4968,6 +4970,12 @@ function ebCamposDibujo(cont, id, d, nuevo) {
 }
 const ebValoresCambiados = () => ebE.ejs.filter(id => !ebE.quitar.has(id)).map(id => ({ id, ...ebParcheValores(id, ebE.edicion[id], false) })).filter(p => p.error || Object.keys(p.valores).length);
 
+// MEJ-BLQ-001 (2.17): orden de los ejercicios (los existentes por id, los añadidos por su objeto); los nuevos entran al final
+const ebNombreItem = it => nombreEj(typeof it === "string" ? it : it.id);
+const ebOrdenActual = () => ebE.orden.filter(it => typeof it !== "string" || !ebE.quitar.has(it));
+const ebOrdenInicial = () => [...ebE.ejs.filter(id => !ebE.quitar.has(id)), ...ebE.nuevos];
+const ebOrdenCambiado = () => { const x = ebOrdenActual(), y = ebOrdenInicial(); return x.length === y.length && x.some((it, i) => it !== y[i]); };
+function ebAnadirNuevo(id) { const n = ebNuevoEjercicio(id); ebE.nuevos.push(n); ebE.orden.push(n); return n; }
 function ebNuevoEjercicio(id) {
   const hist = seriesDe(id), ult = hist[hist.length - 1];
   const v = ult ? valores(ult) : { reps: admite(id, "reps") ? 10 : 0 };
@@ -4988,7 +4996,7 @@ function abrirEditorBloque(dia, bloqueId) {
   };
   const actual = l => { const t = l.map(recTexto); return t.length && t.every(x => x === t[0]) ? t[0] : ""; };
   const g0 = grupos(base), mixto = l => new Set(l.map(recTexto)).size > 1;
-  ebE = { dia, bloqueId, base, rondas, ejs, n: rondas.length, quitar: new Set(), nuevos: [], conf: false, grupos, actual, mixto: { ej: mixto(g0.ej), ron: mixto(g0.ron), fin: mixto(g0.fin) },
+  ebE = { dia, bloqueId, base, rondas, ejs, orden: ejs.slice(), n: rondas.length, quitar: new Set(), nuevos: [], conf: false, grupos, actual, mixto: { ej: mixto(g0.ej), ron: mixto(g0.ron), fin: mixto(g0.fin) },
     ini: { ej: actual(g0.ej), ron: actual(g0.ron), fin: actual(g0.fin) }, desc: { ej: actual(g0.ej), ron: actual(g0.ron), fin: actual(g0.fin) } };
   ebE.edicion = {};
   ejs.forEach(id => {
@@ -5009,7 +5017,7 @@ function ebDescanso(txt) {   // → {descanso, rec_dist} | null si no se entiend
   return leerRecuperacion(t);
 }
 function pintarEditorBloque() {
-  const e = ebE, cuerpo = $("ebCuerpo");
+  const e = ebE, cuerpo = $("ebCuerpo"), desp = $("dlgEditBloque").scrollTop;
   const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt !== undefined) x.textContent = txt; return x; };
   const boton = (txt, cls, fn, aria) => { const b = el("button", cls, txt); b.type = "button"; if (aria) b.setAttribute("aria-label", aria); b.addEventListener("click", fn); return b; };
   cuerpo.textContent = "";
@@ -5047,8 +5055,8 @@ function pintarEditorBloque() {
   const se = el("section", "eb-sec");
   se.appendChild(el("h4", "eb-h", "Ejercicios"));
   const quedan = e.ejs.filter(x => !e.quitar.has(x)).length + e.nuevos.length;
-  const ul = el("ul", "eb-ejs");
-  e.ejs.forEach(id => {
+  const ul = el("ul", "eb-ejs"), itemDe = new Map();
+  const filaExistente = id => {
     const li = el("li", "eb-ej"), fuera = e.quitar.has(id), n = e.base.filter(x => x.ejercicio_id === id).length;
     const t = el("div", "eb-ej-t");
     t.appendChild(el("span", "eb-ej-n", nombreEj(id)));
@@ -5062,21 +5070,36 @@ function pintarEditorBloque() {
     if (!fuera && quedan <= 1) { b.disabled = true; b.title = "Una superserie necesita al menos un ejercicio: usa «Desagrupar» en el menú de la superserie"; }
     li.appendChild(b);
     if (fuera) li.classList.add("eb-quitado");
-    ul.appendChild(li);
-  });
-  e.nuevos.forEach((nuevo, k) => {
+    return li;
+  };
+  const filaNueva = nuevo => {
     const id = nuevo.id;
     const li = el("li", "eb-ej eb-nuevo"), t = el("div", "eb-ej-t");
     t.appendChild(el("span", "eb-ej-n", nombreEj(id)));
     t.appendChild(el("span", "eb-ej-d", "Nuevo · una serie en cada una de las " + e.n + " rondas"));
     ebCamposDibujo(t, id, nuevo.edicion, true);
     li.appendChild(t);
-    li.appendChild(boton("Quitar", "nav-btn eb-bt", () => { e.nuevos.splice(k, 1); pintarEditorBloque(); }, "No añadir " + nombreEj(id)));
-    ul.appendChild(li);
+    li.appendChild(boton("Quitar", "nav-btn eb-bt", () => { e.nuevos.splice(e.nuevos.indexOf(nuevo), 1); e.orden.splice(e.orden.indexOf(nuevo), 1); pintarEditorBloque(); }, "No añadir " + nombreEj(id)));
+    return li;
+  };
+  e.orden.forEach(it => { const li = typeof it === "string" ? filaExistente(it) : filaNueva(it); itemDe.set(li, it); ul.appendChild(li); });
+  if (e.orden.length > 1) ul.querySelectorAll(":scope > li").forEach(li => {
+    const nombre = ebNombreItem(itemDe.get(li));
+    const asa = asaArrastre(li, () => [...ul.querySelectorAll(":scope > li")], (n, movido) => {
+      const it = itemDe.get(movido || (document.activeElement && document.activeElement.closest && document.activeElement.closest("#ebCuerpo .eb-ejs > li")));
+      e.orden = n.map(x => itemDe.get(x)); e.foco = it; e.conf = false; pintarEditorBloque();
+    }, nombre);
+    asa.setAttribute("aria-label", "Mover " + nombre + " (arrastra, o usa las flechas arriba y abajo)");
+    li.insertBefore(asa, li.firstChild);
   });
   se.appendChild(ul);
+  if (ebOrdenCambiado()) {
+    const ini = ebOrdenInicial(), act = ebOrdenActual(), ult = act[act.length - 1];
+    se.appendChild(el("p", "eb-nota", "Nuevo orden de los ejercicios: se aplicará a todas las rondas al guardar."));
+    if (ult !== ini[ini.length - 1]) se.appendChild(el("p", "eb-nota eb-aviso-orden", "«" + ebNombreItem(ult) + "» pasa a ser el último: su descanso pasa a ser el descanso entre rondas, y el del que era último pasa a ser descanso entre ejercicios."));
+  }
   if (e.quitar.size) se.appendChild(el("p", "eb-nota", "Un ejercicio quitado no se borra: queda suelto en el mismo entreno con todas sus series, valores y lo que ya hiciste."));
-  se.appendChild(boton("+ Añadir un ejercicio", "add-ej", () => abrirSelector(e.dia, id => { if (ebE === e) { e.nuevos.push(ebNuevoEjercicio(id)); e.conf = false; pintarEditorBloque(); } }, e.base[0].grupo || "", e.base[0].seccion || "")));
+  se.appendChild(boton("+ Añadir un ejercicio", "add-ej", () => abrirSelector(e.dia, id => { if (ebE === e) { ebAnadirNuevo(id); e.conf = false; pintarEditorBloque(); } }, e.base[0].grupo || "", e.base[0].seccion || "")));
   cuerpo.appendChild(se);
   // Descansos (se guardan en la serie de antes del descanso)
   const sd = el("section", "eb-sec");
@@ -5098,10 +5121,12 @@ function pintarEditorBloque() {
   bt.append(boton("Cancelar", "nav-btn", () => $("dlgEditBloque").close()), boton("Guardar cambios", "anadir eb-guardar", () => guardarEditorBloque()));
   cuerpo.appendChild(bt);
   ebValidar();
+  $("dlgEditBloque").scrollTop = desp;
+  if (e.foco) { const li = [...cuerpo.querySelectorAll(".eb-ejs > li")].find(x => itemDe.get(x) === e.foco); e.foco = null; if (li) li.querySelector(".asa")?.focus(); }
 }
 function ebCambios() {
   const e = ebE;
-  return { rondas: e.n !== e.rondas.length, ejs: e.quitar.size > 0 || e.nuevos.length > 0, desc: ["ej", "ron", "fin"].some(k => e.desc[k].trim() !== e.ini[k]), valores: ebValoresCambiados().length > 0 };
+  return { rondas: e.n !== e.rondas.length, orden: ebOrdenCambiado(), ejs: e.quitar.size > 0 || e.nuevos.length > 0, desc: ["ej", "ron", "fin"].some(k => e.desc[k].trim() !== e.ini[k]), valores: ebValoresCambiados().length > 0 };
 }
 function ebValidar() {
   const e = ebE, c = ebCambios(), err = document.querySelector("#ebCuerpo .eb-err"), g = document.querySelector("#ebCuerpo .eb-guardar");
@@ -5112,7 +5137,7 @@ function ebValidar() {
   e.nuevos.forEach(n => { const p = ebParcheValores(n.id, n.edicion, true); if (!msg && p.error) msg = p.error; });
   if (!msg && e.n < e.rondas.length && !e.conf) msg = "Marca la casilla para confirmar que se borran esas series.";
   err.textContent = msg;
-  g.disabled = !(c.rondas || c.ejs || c.desc || c.valores) || !!msg;
+  g.disabled = !(c.rondas || c.orden || c.ejs || c.desc || c.valores) || !!msg;
 }
 function guardarEditorBloque() {
   ebValidar(); if (document.querySelector("#ebCuerpo .eb-guardar").disabled) return;
@@ -5125,6 +5150,7 @@ function guardarEditorBloque() {
   const vivas = () => [...trab.values()].filter(x => x.bloque_id === e.bloqueId && !x.borrado);
   const rondasAct = () => [...new Set(vivas().map(x => n0(x.ronda)))].sort((a, b) => a - b);
   let orden = Date.now(), nSueltas = 0, nBorradas = 0, nNuevas = 0;
+  const rangoNuevo = new Map();   // id de serie creada → ejercicio añadido (objeto) al que pertenece, para ordenarla
   // 1) ejercicios que se quitan: pasan a sueltos en el mismo entreno y parte, con todas sus series
   e.ejs.filter(id => e.quitar.has(id)).forEach(id => {
     const usadas = seriesDelDia(dia.id).filter(x => x.ejercicio_id === id && !x.bloque_id && (x.grupo || "") === (b0.grupo || "") && (x.seccion || "") === (b0.seccion || "")).map(x => n0(x.copia) > 1 ? n0(x.copia) : 1);
@@ -5145,14 +5171,23 @@ function guardarEditorBloque() {
       const f = { id: nuevoId(), fecha: dia.id, ejercicio_id: id, meso_id: b0.meso_id || "", peso: n0(v.peso), reps: n0(v.reps), distancia: n0(v.distancia), tiempo: n0(v.tiempo), pct: n0(v.pct), por_lado: !!v.por_lado,
         descanso: n0(v.descanso), rec_dist: n0(v.rec_dist), max_reps: !!v.max_reps, max_tiempo: !!v.max_tiempo, rango_min: n0(v.rango_min), rango_max: n0(v.rango_max),
         ciclo_id: "", calentamiento: false, nota: v.nota || "", hecha: false, borrado: false, grupo: b0.grupo || "", seccion: b0.seccion || "", bloque_id: e.bloqueId, ronda: r, orden: orden++, letra_nueva: !!b0.letra_nueva, copia: 0 };
-      trab.set(f.id, f); nNuevas++;
+      trab.set(f.id, f); rangoNuevo.set(f.id, nuevo); nNuevas++;
     });
   });
   // 4) rondas que se añaden: copia de la última (con lo añadido en el paso 3), al final y sin hacer
   const act2 = rondasAct();
   if (e.n > e.rondas.length) {
     const ultima = vivas().filter(x => n0(x.ronda) === act2[act2.length - 1]).sort((a, b) => a.orden - b.orden);
-    for (let k = 1; k <= e.n - e.rondas.length; k++) ultima.forEach(x => { const f = { ...x, id: nuevoId(), orden: orden++, ronda: act2[act2.length - 1] + k, hecha: false }; delete f.sucio; const p = cambiosValores.find(p => p.id === f.ejercicio_id); if (p) Object.assign(f, p.valores); trab.set(f.id, f); nNuevas++; });
+    for (let k = 1; k <= e.n - e.rondas.length; k++) ultima.forEach(x => { const f = { ...x, id: nuevoId(), orden: orden++, ronda: act2[act2.length - 1] + k, hecha: false }; delete f.sucio; if (rangoNuevo.has(x.id)) rangoNuevo.set(f.id, rangoNuevo.get(x.id)); const p = cambiosValores.find(p => p.id === f.ejercicio_id); if (p) Object.assign(f, p.valores); trab.set(f.id, f); nNuevas++; });
+  }
+  // 4b) orden de los ejercicios (2.17): solo si ha cambiado. En cada ronda, las series (también las hechas) se recolocan en los mismos huecos de «orden»
+  // que ya ocupaban; así no cambia ningún dato de ninguna serie (id, valores, notas, hecha, descanso) y el descanso viaja con su ejercicio
+  if (ebOrdenCambiado()) {
+    const pos = x => e.orden.indexOf(rangoNuevo.has(x.id) ? rangoNuevo.get(x.id) : x.ejercicio_id);
+    rondasAct().forEach(r => {
+      const lista = vivas().filter(x => n0(x.ronda) === r).sort((p, q) => p.orden - q.orden), huecos = lista.map(x => x.orden);
+      lista.slice().sort((p, q) => pos(p) - pos(q)).forEach((x, i) => { x.orden = huecos[i]; });
+    });
   }
   // 5) descansos: solo los campos que se han tocado, sobre la estructura final
   const gf = e.grupos(vivas());
@@ -5176,6 +5211,7 @@ function guardarEditorBloque() {
   if (nBorradas) partes.push(nBorradas + (nBorradas === 1 ? " serie borrada" : " series borradas") + " (" + (e.rondas.length - e.n) + (e.rondas.length - e.n === 1 ? " ronda" : " rondas") + ")");
   if (e.quitar.size) partes.push(e.quitar.size + (e.quitar.size === 1 ? " ejercicio suelto" : " ejercicios sueltos"));
   if (e.nuevos.length) partes.push(e.nuevos.length + (e.nuevos.length === 1 ? " ejercicio añadido" : " ejercicios añadidos"));
+  if (ebOrdenCambiado()) partes.push("orden de ejercicios");
   if (ebCambios().desc) partes.push("descansos");
   if (nValores) partes.push("valores en " + nValores + (nValores === 1 ? " serie pendiente" : " series pendientes"));
   ebE = null;
@@ -10402,7 +10438,7 @@ function prepararArrastreAsa(asa, iniciar) {
     const terminar = ev => {
       if (ev.pointerId !== id) return;
       if (ev.type === "pointerup") {
-        const r = raizOrden(asa)?.getBoundingClientRect();
+        const r = (libreOrden(asa) || raizOrden(asa))?.getBoundingClientRect();
         if (!r || ev.clientX < r.left || ev.clientX > r.right || ev.clientY < r.top || ev.clientY > r.bottom) { cancelar(); return; }
       }
       limpiar();
@@ -10447,7 +10483,8 @@ function asaArrastre(el, hermanos, alSoltar, nombre, zonas) {
     let zona = null, cand = null, candDesde = 0, tZona = 0;
     try { asa.setPointerCapture(e.pointerId); } catch {}
     arrastreActivo = true;
-    const y0 = scrollY, cajas = lista.map(x => { const r = x.getBoundingClientRect(); return { top: r.top + y0, alto: r.height }; });
+    const sc = libreOrden(el);   // ventana con su propio desplazamiento (editor de superserie): la vista que se desplaza es la suya, no la de la página
+    const y0 = sc ? sc.scrollTop : scrollY, cajas = lista.map(x => { const r = x.getBoundingClientRect(); return { top: r.top + y0, alto: r.height }; });
     const hueco = idx + 1 < cajas.length ? cajas[idx + 1].top - cajas[idx].top - cajas[idx].alto : idx > 0 ? cajas[idx].top - cajas[idx - 1].top - cajas[idx - 1].alto : 0;
     const paso = cajas[idx].alto + Math.max(0, hueco);
     let inicioY = e.clientY + y0;
@@ -10465,6 +10502,15 @@ function asaArrastre(el, hermanos, alSoltar, nombre, zonas) {
     lista.forEach(x => { if (x !== el) x.classList.add("apartandose"); });
     const bordes = () => {
       let arriba = 0, abajo = innerHeight;
+      if (sc) {
+        const rs = sc.getBoundingClientRect(); arriba = rs.top; abajo = rs.bottom;
+        sc.querySelectorAll(".d-cab, .d-botones").forEach(b => {
+          if (getComputedStyle(b).position !== "sticky") return;
+          const r = b.getBoundingClientRect();
+          if (r.height && r.top < rs.top + rs.height / 2) arriba = Math.max(arriba, r.bottom); else if (r.height) abajo = Math.min(abajo, r.top);
+        });
+        return { arriba, abajo };
+      }
       document.querySelectorAll(".cabecera, .tabbar").forEach(b => {
         const pos = getComputedStyle(b).position;
         if (pos !== "sticky" && pos !== "fixed") return;
@@ -10478,8 +10524,9 @@ function asaArrastre(el, hermanos, alSoltar, nombre, zonas) {
       if (!vivo) return;
       // Desplazamiento automático cerca de la cabecera o de la barra de pestañas
       const { arriba, abajo } = bordes();
-      if (dedoY < arriba + 48) scrollBy(0, -Math.min(14, arriba + 48 - dedoY));
-      else if (dedoY > abajo - 48) scrollBy(0, Math.min(14, dedoY - (abajo - 48)));
+      const desplazar = d => { if (sc) sc.scrollTop += d; else scrollBy(0, d); };
+      if (dedoY < arriba + 48) desplazar(-Math.min(14, arriba + 48 - dedoY));
+      else if (dedoY > abajo - 48) desplazar(Math.min(14, dedoY - (abajo - 48)));
       destino = idx;
       // ¿El dedo está encima de una zona? Entonces se resalta y los demás no se apartan
       let zc = zl.find(x => { const r = x.getBoundingClientRect(); return dedoX >= r.left && dedoX <= r.right && dedoY >= r.top && dedoY <= r.bottom; }) || null;
@@ -10502,7 +10549,7 @@ function asaArrastre(el, hermanos, alSoltar, nombre, zonas) {
         }
       }
       // Cambia de sitio cuando el borde de lo arrastrado (el de abajo al bajar, el de arriba al subir) pasa la mitad del otro: igual de fácil en los dos sentidos
-      const dy = dedoY + scrollY - inicioY, arribaEl = cajas[idx].top + dy, abajoEl = arribaEl + cajas[idx].alto;
+      const dy = dedoY + (sc ? sc.scrollTop : scrollY) - inicioY, arribaEl = cajas[idx].top + dy, abajoEl = arribaEl + cajas[idx].alto;
       dyAplicado = dy;
       lista.forEach((x, k) => {
         if (k === idx) return;
@@ -11259,7 +11306,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v325" + (BETA ? " beta" : "");
+const VERSION_APP = "v326" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

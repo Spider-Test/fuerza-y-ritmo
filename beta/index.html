@@ -27,7 +27,7 @@
   window.addEventListener("pageshow", actualizar);
 })();
 </script>
-<link rel="stylesheet" href="estilos.css?v=v324">
+<link rel="stylesheet" href="estilos.css?v=v325">
 </head>
 <body>
 
@@ -421,10 +421,11 @@
       <div class="cr-distancia"><input id="crDistancia" inputmode="decimal" autocomplete="off" placeholder="Ej.: 400 o 0,4" aria-describedby="crDistanciaAyuda"><label class="campo">Unidad <select id="crUnidad"><option value="m">metros (m)</option><option value="km">kilómetros (km)</option></select></label></div>
       <p id="crDistanciaAyuda" class="menu-det">Solo el número, con coma o punto decimal. Ej.: 400 m o 0,4 km con su unidad seleccionada.</p>
     </div>
-    <label id="crTiempoCampo" class="campo">Tiempo total
-      <input id="crTiempo" inputmode="text" autocomplete="off" placeholder="Ej.: 2:00 o 1:02:30" aria-describedby="crTiempoAyuda">
-      <span id="crTiempoAyuda" class="menu-det">Minutos (30 o 1,5), m:ss (2:00) o h:mm:ss (1:02:30). Segundos decimales: 2:00,5. Un número solo son minutos.</span>
-    </label>
+    <div id="crTiempoCampo" class="campo" role="group" aria-labelledby="crTiempoEtiqueta" aria-describedby="crTiempoAyuda">
+      <span id="crTiempoEtiqueta">Tiempo total</span>
+      <div class="cr-ritmo"><input id="crTiempoH" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="2" enterkeyhint="next" placeholder="0" aria-label="Horas"><span class="cr-dospuntos" aria-hidden="true">:</span><input id="crTiempoMin" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="2" enterkeyhint="next" placeholder="00" aria-label="Minutos"><span class="cr-dospuntos" aria-hidden="true">:</span><input id="crTiempoSeg" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="2" enterkeyhint="done" placeholder="00" aria-label="Segundos"></div>
+      <span id="crTiempoAyuda" class="menu-det">Horas, minutos y segundos; minutos y segundos de 00 a 59. Ej.: 0 : 30 : 00 = 30 minutos.</span>
+    </div>
     <div id="crRitmoCampo" class="campo" role="group" aria-labelledby="crRitmoEtiqueta" aria-describedby="crRitmoAyuda">
       <span id="crRitmoEtiqueta">Ritmo (min/km)</span>
       <div class="cr-ritmo"><input id="crRitmoMin" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="2" enterkeyhint="next" placeholder="0" aria-label="Minutos"><span class="cr-dospuntos" aria-hidden="true">:</span><input id="crRitmoSeg" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="2" enterkeyhint="done" placeholder="00" aria-label="Segundos"></div>
@@ -1076,6 +1077,6 @@
 <div class="toast" id="toast" role="status" hidden><span id="toastTxt"></span><button type="button" id="toastBtn">Deshacer</button></div>
 <div class="fiesta" id="fiesta" aria-hidden="true"></div>
 
-<script src="app.js?v=v324"></script>
+<script src="app.js?v=v325"></script>
 </body>
 </html>

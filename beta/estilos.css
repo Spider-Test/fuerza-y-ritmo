@@ -668,7 +668,6 @@ dialog.pantalla[open] { display: flex; flex-direction: column; }
   #vistaSemana:not(.solo-dia) .paso button { display: none; }
   #vistaSemana:not(.solo-dia) .paso input { border-radius: 8px; }
   #vistaSemana:not(.solo-dia) .ns-fila { flex-wrap: wrap; }
-  #vistaSemana:not(.solo-dia) .bloque:not(:hover):not(:focus-within):has(.series li) .nueva-serie { display: none; }
   #vistaSemana:not(.solo-dia) .add-fila { flex-direction: column; gap: 6px; }
   #vistaSemana:not(.solo-dia) .add-ej { padding: 6px; font-size: 13px; }
   #vistaSemana:not(.solo-dia) .empezar { font-size: 14px; padding: 9px; }
@@ -1479,7 +1478,6 @@ h1 { color: var(--titulo); }
   #vistaSemana:not(.solo-dia) .fila-fuerza, #vistaSemana:not(.solo-dia) .ops-fuerza, #vistaSemana:not(.solo-dia) .ns-principal { flex-wrap: wrap; row-gap: 4px; }
   #vistaSemana:not(.solo-dia) .ns-desc.desc-en-ops { margin-left: 0; flex: 1 1 100%; justify-content: flex-start; }
   #vistaSemana:not(.solo-dia) .series li { word-break: normal; overflow-wrap: break-word; }
-  #vistaSemana:not(.solo-dia) .bloque:not(:hover):not(:focus-within):has(.series li) .veces-cab { display: none !important; }
   #vistaSemana:not(.solo-dia) .veces-cab { flex: 1 1 100%; order: 5; justify-content: flex-start; }
   #vistaSemana:not(.solo-dia) .ns-desc.desc-en-ops .in-c { width: 56px; flex-basis: 56px; }
 }

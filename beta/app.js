@@ -1769,7 +1769,16 @@ const AYUDA_NOTA = "Por ejemplo «Tempo 3-2-1-2», «Banda roja», «EEP 2 (en r
 // Pone la misma descripción a todas las series de un ejercicio (o de un tramo de un bloque) en ese día
 // Ejercicios aún sin series: su descripción espera aquí (en este dispositivo) hasta que se apunte la primera serie
 let esperaNota = leer("espera-nota-v1") || {};
-const borradores = {};   // lo escrito en un ejercicio sin pulsar OK (se conserva al repintar el día)
+const borradores = {};   // editores de Semana sin confirmar: solo memoria, nunca series ni sincronización
+// «Hecho»/Enter en un campo cierra el teclado o avanza según su handler; nunca confirma.
+// Enter/Espacio sobre el botón Guardar siguen enviando el formulario de forma accesible.
+function confirmarSemanaConBoton(form) {
+  form.addEventListener("keydown", ev => {
+    if (ev.key === "Enter" && ev.target.matches("input") && !ev.defaultPrevented) {
+      ev.preventDefault(); ev.target.blur();
+    }
+  });
+}
 let esperaLetra = leer("espera-letra-v1") || {};
 // Marca que un ejercicio o bloque empieza una letra nueva (C1…) o sigue la anterior (B3…)
 function ponerLetraNueva(dia, grupo, clave, espera, v) {
@@ -4170,8 +4179,8 @@ function bloque(dia, id, series, grupo, parte, copia) {
   const dolor = molestiasDe(id);
   if (dolor.length) { const m = document.createElement("span"); m.className = "molestia-tag"; m.textContent = "⚠ " + dolor.map(x => x.zona).join(", "); m.title = dolor.map(x => x.zona + (x.descripcion ? ": " + x.descripcion : "")).join(" · "); nom.appendChild(m); }
   nom.setAttribute("aria-label", series.length ? "Editar " + (ej.nombre || "ejercicio") + ": valores, número de series o ejercicio" : "Ver " + (ej.nombre || "ejercicio") + ": vídeo, récords e historial");
-  // Con series: tocar el nombre abre (o cierra sin guardar) la edición del ejercicio; sin series, su ficha
-  nom.addEventListener("click", () => !series.length ? abrirDetalle(id, contextoCarga(dia.id, grupo, series)) : formEl.hidden ? abrirGrupo() : (delete borradores[dia.id + "|" + (grupo || "") + "|" + idK + "|" + (parte || "")], pintarBloques(true)));
+  // Con series: abre la edición; Guardar/Cancelar la terminan. Sin series, abre su ficha.
+  nom.addEventListener("click", () => !series.length ? abrirDetalle(id, contextoCarga(dia.id, grupo, series)) : formEl.hidden ? abrirGrupo() : setEstado("Guarda o cancela la edición para terminar"));
   const notaB = notaDe(series) || (!series.length ? esperaNota[dia.id + "|" + idK] || "" : "");
   const pedirNotaB = () => editarNota(dia, series, "Descripción de " + (ej.nombre || "el ejercicio"), id);
   if (notaB) b.querySelector(".bloque-cab").after(lineaNota(notaB, pedirNotaB));
@@ -4221,10 +4230,10 @@ function bloque(dia, id, series, grupo, parte, copia) {
     if (m !== "editar") boton.textContent = m === "grupo" ? "OK" : "+ Añadir serie";
     boton.setAttribute("aria-label", m === "grupo" ? (series.length ? "OK: guardar los cambios en las series" : "OK: crear las series") : m === "una" ? "Añadir una serie suelta" : "Guardar la serie");
     if (m !== "editar") { editando = null; b.querySelector(".desmarcar").hidden = true; ol.querySelectorAll("li").forEach(x => x.classList.remove("editando")); }
-    else delete borradores[dia.id + "|" + (grupo || "") + "|" + idK + "|" + (parte || "")];   // editar una serie concreta descarta el borrador
+
   };
   const abrirForm = () => { formEl.hidden = false; const m = b.querySelector(".mas-serie"); if (m) m.hidden = true; };
-  function abrirGrupo() {
+  function abrirGrupo(enfocar = true) {
     abrirForm();
     ponerModoForm("grupo");
     const efect = series.filter(x => !x.calentamiento), ref = efect.find(x => !hecha(x)) || efect[efect.length - 1] || series[0];
@@ -4233,10 +4242,10 @@ function bloque(dia, id, series, grupo, parte, copia) {
     pintarFilas(efect.map(x => ({ r: enTiempo() ? segTxt(x.tiempo) : esRango(x) && !hecha(x) ? rangoTxt(x) : (n0(x.reps) || ""), kg: n0(x.pct) > 0 && !x.ciclo_id ? num(x.pct) : (pesoMostrado(x) > 0 ? num(pesoMostrado(x)) : ""), hecha: hecha(x) })));
     otroEj.textContent = "";
     vivos("ejercicios").filter(e => tipoDe(e.id) === tipo).sort((x, y) => x.nombre.localeCompare(y.nombre, "es")).forEach(e => otroEj.add(new Option(e.nombre, e.id, e.id === id, e.id === id)));
-    fa.focus();
-    tomarFoto();
+    if (enfocar) fa.focus();
+    tomarFoto(); guardarBor();
   }
-  b.abrirEdicion = abrirGrupo;
+  b.abrirEdicion = () => { if (formEl.hidden) abrirGrupo(); };
   // ---- Filas por serie (solo fuerza) ----
   let extrasEl = null;
   function pintarFilas(valores) {
@@ -4281,34 +4290,12 @@ function bloque(dia, id, series, grupo, parte, copia) {
     }
     return out;
   }
-  // Guardado automático: al editar series que ya existen, si sales del formulario con algo cambiado, se guarda solo (como pulsar OK)
+  // La edición solo se confirma con su botón. La foto distingue un cambio pendiente al abrir otra serie.
   let foto = null;
-  const fdEl = () => b.querySelector(".in-d");   // v262: distancia en fuerza (solo si la ficha la admite)
-  const valoresForm = () => [fa.value, fb.value, fc.value, (fdEl() || {}).value || "", vecesEl.value, otroEj.value, ...[...formEl.querySelectorAll("input[type=checkbox]")].map(x => x.checked), ...[...formEl.querySelectorAll(".filas-extra input")].map(x => x.value)].join("|");
-  const hayDatoForm = () => mov || dist ? !!(fa.value.trim() || fb.value.trim()) : !!(fb.value.trim() || ((fdEl() || {}).value || "").trim() || (b.querySelector(".es-max") || {}).checked || (b.querySelector(".es-bilbo") || {}).checked);
+  const fdEl = () => b.querySelector(".in-d");
+  const valoresForm = () => [fa.value, fb.value, fc.value, (fdEl() || {}).value || "", vecesEl.value, otroEj.value, enPct, porTiempo, ...[...formEl.querySelectorAll("input[type=checkbox]")].map(x => x.checked), ...[...formEl.querySelectorAll(".filas-extra input")].map(x => x.value)].join("|");
   function tomarFoto() { foto = valoresForm(); }
-  const dentroForm = el => !!el && (formEl.contains(el) || !!(el.closest && el.closest(".veces-cab") && b.contains(el)));
-  // Tocar un botón del formulario (kg/%, Reps ▾, −/+…) le quita el foco al campo en Safari y el móvil: no es salir
-  // del formulario. Se espera al siguiente toque fuera de él para guardar o cerrar
-  let toqueDentro = 0;
-  b.addEventListener("pointerdown", ev => { if (dentroForm(ev.target)) toqueDentro = Date.now(); }, true);
-  formEl.addEventListener("focusout", ev => {
-    const dentro = dentroForm;
-    if (dentro(ev.relatedTarget)) return;
-    setTimeout(() => {
-      if (formEl.hidden || dentro(document.activeElement) || !b.isConnected) return;
-      if (Date.now() - toqueDentro < 700) {
-        const fuera = e => { if (dentro(e.target)) return; document.removeEventListener("pointerdown", fuera, true); toqueDentro = 0; if (!formEl.hidden && b.isConnected) formEl.dispatchEvent(new FocusEvent("focusout")); };
-        document.addEventListener("pointerdown", fuera, true);
-        return;
-      }
-      // Te vas a otro sitio sin pulsar OK: si has escrito algo válido se guarda solo; si no has cambiado nada, se cierra
-      const cambiado = foto !== null && valoresForm() !== foto;
-      const hayDato = hayDatoForm();
-      if (cambiado && hayDato) { foto = null; formEl.requestSubmit(); return; }
-      if (series.length && (modoForm === "editar" || modoForm === "grupo" || modoForm === "una") && !cambiado) { delete borradores[dia.id + "|" + (grupo || "") + "|" + idK + "|" + (parte || "")]; pintarBloques(true); }
-    }, 200);
-  });
+  const otraEdicionPendiente = () => !formEl.hidden && foto !== null && valoresForm() !== foto;
 
   const fa = b.querySelector(".in-a"), fb = b.querySelector(".in-b"), fc = b.querySelector(".in-c"), boton = b.querySelector(".anadir");
   // Fuerza por tiempo (isométricos: plancha, sentadilla isométrica…): el segundo campo pasa a ser el tiempo
@@ -4366,7 +4353,6 @@ function bloque(dia, id, series, grupo, parte, copia) {
     vz.classList.add("veces-cab");
     const cab = b.querySelector(".bloque-cab"), antesDe = cab.querySelector(".ej-resumen, .g-prog, .menu-btn, .quitar");
     if (antesDe) antesDe.before(vz); else cab.appendChild(vz);
-    vz.addEventListener("focusout", ev => { if (!formEl.contains(ev.relatedTarget)) formEl.dispatchEvent(new FocusEvent("focusout", { relatedTarget: ev.relatedTarget })); });
     fila.classList.add("fila-fuerza");
     // Una fila por serie (pirámides, series distintas): la 1.ª es la de arriba; las demás la siguen hasta que las cambias
     extrasEl = document.createElement("div");
@@ -4540,6 +4526,17 @@ function bloque(dia, id, series, grupo, parte, copia) {
   const terminar = () => pintarBloques(true);
 
   const ol = b.querySelector(".series");
+  function abrirSerie(s, li, enfocar = true) {
+    abrirForm(); ponerModoForm("editar"); editando = s;
+    rellenarCon(s, true);
+    if (chkBilbo) chkBilbo.checked = !!s.ciclo_id;
+    if (s.ciclo_id === "auto") { fb.value = ""; fb.placeholder = "reps máx"; }
+    boton.textContent = "✓ Guardar " + (series.slice(0, series.indexOf(s) + 1).filter(x => !x.calentamiento).length);
+    b.querySelector(".desmarcar").hidden = !hecha(s);
+    b.querySelector(".desmarcar").onclick = () => { delete borradores[claveBor]; desmarcar(s); };
+    ol.querySelectorAll("li").forEach(x => x.classList.remove("editando")); li.classList.add("editando");
+    tomarFoto(); if (enfocar) fa.focus();
+  }
   let numero = 0;
   series.forEach(s => {
     if (!s.calentamiento) numero++;
@@ -4572,21 +4569,9 @@ function bloque(dia, id, series, grupo, parte, copia) {
     li.querySelector(".sv").setAttribute("aria-label", (planificada ? "Completar" : "Editar") + " serie " + numero + ": " + serieTexto(s));
     li.querySelector(".sv").addEventListener("click", () => {
       if (li.dataset.deslizado) return;
-      // Había algo a medias (una serie nueva o un cambio): se guarda antes, para no perderlo
-      if (!formEl.hidden && foto !== null && valoresForm() !== foto && hayDatoForm() && editando !== s) { foto = null; formEl.requestSubmit(); return; }
-      abrirForm();
-      ponerModoForm("editar");
-      editando = s;
-      rellenarCon(s, true);
-      if (chkBilbo) chkBilbo.checked = !!s.ciclo_id;
-      if (s.ciclo_id === "auto") { fb.value = ""; fb.placeholder = "reps máx"; }
-      tomarFoto();
-      boton.textContent = "✓ Guardar " + nSerie;
-      b.querySelector(".desmarcar").hidden = planificada;
-      b.querySelector(".desmarcar").onclick = () => desmarcar(s);
-      ol.querySelectorAll("li").forEach(x => x.classList.remove("editando"));
-      li.classList.add("editando");
-      fa.focus();
+      if (otraEdicionPendiente() && editando?.id !== s.id) { setEstado("Guarda o cancela la edición antes de abrir otra serie"); return; }
+      if (!formEl.hidden && editando?.id === s.id) return;
+      abrirSerie(s, li); guardarBor();
     });
     li.querySelector(".borrar").setAttribute("aria-label", "Borrar serie " + numero);
     if (prs.has(s.id)) { const p = document.createElement("span"); p.className = "pr"; p.textContent = "PR"; p.title = "Récord personal"; li.querySelector(".sv").after(p); }
@@ -4605,7 +4590,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
     mas.className = "enlace mas-serie";
     mas.textContent = "+ Serie";
     mas.setAttribute("aria-label", "Añadir otra serie de " + (ej.nombre || "este ejercicio"));
-    mas.addEventListener("click", () => { abrirForm(); ponerModoForm("una"); tomarFoto(); fa.focus(); });
+    mas.addEventListener("click", () => { if (otraEdicionPendiente()) { setEstado("Guarda o cancela la edición antes de añadir otra serie"); return; } abrirForm(); ponerModoForm("una"); tomarFoto(); guardarBor(); fa.focus(); });
     ol.after(mas);
   }
   // Calentamiento pendiente: Bilbo en cualquier fecha; resto de fuerza conserva sus condiciones.
@@ -4629,20 +4614,27 @@ function bloque(dia, id, series, grupo, parte, copia) {
   // Borrador: lo escrito sin pulsar OK no se pierde aunque el día se vuelva a pintar (al añadir o mover otro ejercicio)
   const claveBor = dia.id + "|" + (grupo || "") + "|" + idK + "|" + (parte || "");
   const guardarBor = () => {
-    if (modoForm === "editar" || formEl.hidden) { delete borradores[claveBor]; return; }
-    borradores[claveBor] = { a: fa.value, b: fb.value, c: fc.value, d: (fdEl() || {}).value || "", v: vecesEl.value, modo: modoForm, t: enTiempo(), max: enMax(), lado: !!(b.querySelector(".por-lado") || {}).checked };
+    if (formEl.hidden) return;
+    borradores[claveBor] = { a: fa.value, b: fb.value, c: fc.value, d: (fdEl() || {}).value || "", v: vecesEl.value, modo: modoForm, sid: editando?.id, foto,
+      t: enTiempo(), max: enMax(), pct: enPct, porTiempo, checks: [...formEl.querySelectorAll("input[type=checkbox]")].map(x => x.checked),
+      filas: extrasEl ? [...extrasEl.children].map(row => ({ r: row.querySelector(".r-reps").value, kg: row.querySelector(".r-kg").value, auto: row.hasAttribute("data-auto"), hecha: !!row.dataset.hecha })) : [],
+      otro: otroEj.value, cambiar: !cambiarEl.hidden };
   };
   const bor = borradores[claveBor];
-  if (bor) {
-    if (formEl.hidden) { abrirForm(); ponerModoForm(bor.modo === "una" ? "una" : "grupo"); }
-    ponerPorT(!!bor.t);
-    ponerMax(!!bor.max);
+  if (bor && (bor.modo !== "editar" || series.some(x => x.id === bor.sid))) {
+    if (bor.modo === "editar") {
+      const s = series.find(x => x.id === bor.sid); abrirSerie(s, ol.querySelector('li[data-sid="' + CSS.escape(s.id) + '"]'), false);
+    } else if (bor.modo === "grupo") abrirGrupo(false);
+    else { abrirForm(); ponerModoForm("una"); }
+    ponerPorT(!!bor.t); ponerMax(!!bor.max); ponerModo(!!bor.pct); ponerPorTiempo(!!bor.porTiempo);
     fa.value = bor.a; fb.value = bor.b; fc.value = bor.c; vecesEl.value = bor.v;
-    if (fdEl() && bor.d) fdEl().value = bor.d;
-    if (b.querySelector(".por-lado")) b.querySelector(".por-lado").checked = bor.lado;
-    b.classList.add("con-borrador");
-    foto = "";   // lo que quedó escrito se guardará al salir
-  }
+    if (fdEl()) fdEl().value = bor.d;
+    [...formEl.querySelectorAll("input[type=checkbox]")].forEach((x, k) => { x.checked = bor.checks[k]; });
+    if (bor.modo === "grupo" && extrasEl) pintarFilas([{ r: fb.value, kg: fa.value }, ...bor.filas]);
+    otroEj.value = bor.otro; cambiarEl.hidden = !bor.cambiar;
+    if (bor.cambiar) b.querySelector(".cambiar-ej-btn").hidden = true;
+    marcarMedida(); pintarCalc(); foto = bor.foto; borradores[claveBor] = bor; b.classList.add("con-borrador");
+  } else if (bor) delete borradores[claveBor]; // la serie eliminada no se recrea desde un borrador
   if (!series.length && foto === null) tomarFoto();
   // Cancelar, como en otras apps: un ejercicio recién añadido (sin series) se quita; uno que ya existía se queda
   // tal cual estaba, sin aplicar cambios, y sale del modo edición
@@ -4651,9 +4643,10 @@ function bloque(dia, id, series, grupo, parte, copia) {
     delete borradores[dia.id + "|" + (grupo || "") + "|" + idK + "|" + (parte || "")];
     if (!series.length) { quitarEspera(dia.id, idK); avisoDeshacer((ej.nombre || "Ejercicio") + " quitado", null); }
     pintarBloques(true);
-  });   // ejercicio recién añadido: al salir, si has escrito algo, se crean sus series
-  [fa, fb, fc, vecesEl, fdEl()].filter(Boolean).forEach(x => x.addEventListener("input", guardarBor));
-  formEl.addEventListener("change", guardarBor);
+  });
+  // Delegación: incluye filas extra y cambios por botones/menús, sin escribir en db.
+  ["input", "change", "click"].forEach(tipo => b.addEventListener(tipo, () => { if (b.isConnected) guardarBor(); }));
+  confirmarSemanaConBoton(formEl);
   [fa, fb, fc].forEach((inp, k, todos) => {
     inp.addEventListener("focus", () => inp.select());
     if (k < 2) inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); todos[k + 1].focus(); } });
@@ -4712,6 +4705,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
   const nuevaHecha = dia.id < iso(new Date());
   b.querySelector("form").addEventListener("submit", e => {
     e.preventDefault();
+    if (!e.submitter?.matches(".anadir")) return;
     const v = leerValores();
     if (!v) return;
     delete borradores[dia.id + "|" + (grupo || "") + "|" + idK + "|" + (parte || "")];
@@ -5219,7 +5213,7 @@ function tarjetaBloque(dia, bloqueId, series) {
       '<div class="ns-fila"><input class="in-a" autocomplete="off" enterkeyhint="next"><button type="button" class="modo br-modo" hidden aria-label="Cambiar entre kg y % del 1RM">kg</button><span class="por"></span><input class="in-b" autocomplete="off" enterkeyhint="next"><button type="button" class="medida-btn br-medida" hidden>Reps ▾</button></div>' +
       '<p class="calc br-calc" hidden></p>' +
       '<div class="ns-fila"><input class="in-c" inputmode="decimal" placeholder="⏱ descanso después: 1,30 o 300 m" aria-label="Descanso o recuperación después de esta serie (tiempo o metros)" autocomplete="off" enterkeyhint="done">' +
-      '<button class="anadir">✓ Guardar</button></div>' +
+      '<button type="button" class="cancelar-form">Cancelar</button><button class="anadir">✓ Guardar</button></div>' +
       '<label class="br-todas" hidden><input type="checkbox"> <span></span></label>' +
       '<button type="button" class="enlace desmarcar" hidden>↺ Marcar como pendiente</button></form>';
   // El título solo dice «Bloque ×N»; los ejercicios salen en cada ronda (los de nombre con distancia, como «Series 1000 m», van en el título)
@@ -5265,7 +5259,7 @@ function tarjetaBloque(dia, bloqueId, series) {
     const antesT = form.dataset.isoT === "1";
     ponerBrM(m, true);
     if (antesT !== (form.dataset.isoT === "1")) fb.value = "";
-    fb.focus();
+    fb.focus(); guardarBor();
   }));
   const pintarBrCalc = () => {
     if (!editando || !brPct) { brCalc.hidden = true; return; }
@@ -5290,7 +5284,16 @@ function tarjetaBloque(dia, bloqueId, series) {
   fa.addEventListener("input", () => { if (/%\s*$/.test(fa.value) && !brPct && !brModo.hidden) { fa.value = fa.value.replace(/\s*%\s*$/, ""); ponerBrModo(true); } pintarBrCalc(); });
   const prs = {};
   primera.forEach(s => { if (!prs[s.ejercicio_id]) prs[s.ejercicio_id] = prsEj(s.ejercicio_id); });
-  const editar = (s, li) => {
+  const claveBor = dia.id + "|ronda|" + bloqueId;
+  const valoresR = () => [fa.value, fb.value, fc.value, brPct, brTodas.querySelector("input").checked, brM].join("|");
+  let fotoR = null;
+  const guardarBor = () => {
+    if (form.hidden || !editando) return;
+    borradores[claveBor] = { sid: editando.id, a: fa.value, b: fb.value, c: fc.value, pct: brPct, m: brM, todas: brTodas.querySelector("input").checked, foto: fotoR };
+  };
+  const editar = (s, li, enfocar = true) => {
+    if (enfocar && !form.hidden && editando?.id === s.id) return;
+    if (enfocar && !form.hidden && fotoR !== null && valoresR() !== fotoR) { setEstado("Guarda o cancela la edición antes de abrir otra ronda"); return; }
     c.querySelector(".desmarcar").hidden = !hecha(s);
     c.querySelector(".desmarcar").onclick = () => desmarcar(s);
     editando = s;
@@ -5323,27 +5326,12 @@ function tarjetaBloque(dia, bloqueId, series) {
     c.querySelectorAll("li").forEach(x => x.classList.remove("editando"));
     li.classList.add("editando");
     form.hidden = false;
-    (dist && n0(s.distancia) > 0 || !dist && !mov ? fb : fa).focus();
-    fotoR = [fa.value, fb.value, fc.value, brPct, false, brM].join("|");
+    if (enfocar) (dist && n0(s.distancia) > 0 || !dist && !mov ? fb : fa).focus();
+    fotoR = valoresR(); if (enfocar) guardarBor();
   };
-  // Guardado automático al salir de la edición de una ronda, si algo ha cambiado
-  let fotoR = null;
-  let toqueDentroR = 0;
-  form.addEventListener("pointerdown", () => { toqueDentroR = Date.now(); }, true);
-  form.addEventListener("focusout", ev => {
-    if (form.contains(ev.relatedTarget)) return;
-    setTimeout(() => {
-      if (form.hidden || form.contains(document.activeElement) || !c.isConnected || fotoR === null) return;
-      if (Date.now() - toqueDentroR < 700) {
-        const fuera = e => { if (form.contains(e.target)) return; document.removeEventListener("pointerdown", fuera, true); toqueDentroR = 0; if (!form.hidden && c.isConnected) form.dispatchEvent(new FocusEvent("focusout")); };
-        document.addEventListener("pointerdown", fuera, true);
-        return;
-      }
-      if ([fa.value, fb.value, fc.value, brPct, brTodas.querySelector("input").checked, brM].join("|") === fotoR) return;
-      fotoR = null;
-      form.requestSubmit();
-    }, 200);
-  });
+  confirmarSemanaConBoton(form);
+  ["input", "change", "click"].forEach(tipo => c.addEventListener(tipo, () => { if (c.isConnected) guardarBor(); }));
+  form.querySelector(".cancelar-form").addEventListener("click", () => { delete borradores[claveBor]; pintarBloques(true); });
   const terminar = () => pintarBloques(true);
 
   const cont = c.querySelector(".rondas");
@@ -5371,6 +5359,7 @@ function tarjetaBloque(dia, bloqueId, series) {
       if (descTexto(s)) { const d = document.createElement("span"); d.className = "desc"; d.textContent = descTexto(s); li.querySelector(".sv").appendChild(d); }
       if (!hecha(s) && tipoDe(s.ejercicio_id) === "carrera") { const o = objetivoSerie(s); if (o) { const ob = document.createElement("span"); ob.className = "objetivo"; ob.textContent = textoObjetivo(o); li.querySelector(".sv").appendChild(ob); } }
       if (esDistancia(tipoDe(s.ejercicio_id)) && li.querySelector(".sv").children.length > 1) li.classList.add("fila-dist-bloque");
+      li.dataset.rondaSerie = s.id;
       li.querySelector(".sv").setAttribute("aria-label", "Apuntar ronda " + r + ", " + nombreEj(s.ejercicio_id) + ": " + serieTexto(s));
       li.querySelector(".sv").addEventListener("click", () => { if (!li.dataset.deslizado) editar(s, li); });
       const notaT = !notaComun && r === rondas[0] ? notasT[primera.findIndex(x => x.ejercicio_id === s.ejercicio_id)] : "";
@@ -5414,7 +5403,7 @@ function tarjetaBloque(dia, bloqueId, series) {
   [fa, fb].forEach((inp, k) => inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); (form.classList.contains("br-fuerza") ? (k ? fa : fc) : (k ? fc : fb)).focus(); } }));
   form.addEventListener("submit", e => {
     e.preventDefault();
-    if (!editando) return;
+    if (!e.submitter?.matches(".anadir") || !editando) return;
     const rec = leerRecuperacion(fc.value);
     if (!rec) { fc.focus(); return; }
     const fila = { ...editando, descanso: rec.descanso, rec_dist: rec.rec_dist, hecha: dia.id <= iso(new Date()) };
@@ -5458,10 +5447,18 @@ function tarjetaBloque(dia, bloqueId, series) {
       const copia = { peso: fila.peso, pct: fila.pct, reps: fila.reps, tiempo: fila.tiempo, distancia: fila.distancia, max_tiempo: !!fila.max_tiempo, max_reps: !!fila.max_reps, rango_min: n0(fila.rango_min), rango_max: n0(fila.rango_max), por_lado: !!fila.por_lado, descanso: fila.descanso, rec_dist: fila.rec_dist, ciclo_id: fila.ciclo_id || "" };
       series.filter(x => x.ejercicio_id === fila.ejercicio_id && x.id !== fila.id && !hecha(x)).forEach(x => cambiar("series", { ...x, ...copia }, true));
     }
+    delete borradores[claveBor];
     cambiar("series", fila);
     terminar(fila);
     if (fila.hecha) avisarSiPR(fila);
   });
+  const bor = borradores[claveBor], sBor = bor && series.find(x => x.id === bor.sid);
+  if (sBor) {
+    editar(sBor, c.querySelector('li[data-ronda-serie="' + CSS.escape(sBor.id) + '"]'), false);
+    ponerBrM(bor.m, true); ponerBrModo(bor.pct);
+    fa.value = bor.a; fb.value = bor.b; fc.value = bor.c;
+    brTodas.querySelector("input").checked = bor.todas; fotoR = bor.foto; pintarBrCalc();
+  } else if (bor) delete borradores[claveBor];
   return c;
 }
 
@@ -11110,7 +11107,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v319" + (BETA ? " beta" : "");
+const VERSION_APP = "v320" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

@@ -7633,6 +7633,58 @@ function abrirRegistroBilbo(id) {
   const ult = fila.lastElementChild;
   if (ult) setTimeout(() => { fila.scrollLeft = fila.scrollWidth; }, 0);   // el ciclo más reciente a la vista
 }
+// MEJ-RIT-002: calculadora efímera, sin acceso de escritura al modelo ni preferencias.
+function leerDuracionCalculadora(texto) {
+  const t = texto.trim();
+  let segundos;
+  if (/^\d+(?:[.,]\d+)?$/.test(t)) segundos = Number(t.replace(",", ".")) * 60;
+  else {
+    const m = t.match(/^(\d+):([0-5]\d)(?::([0-5]\d))?(?:[.,](\d+))?$/);
+    if (!m) return NaN;
+    segundos = m[3] === undefined ? Number(m[1]) * 60 + Number(m[2]) : Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
+    if (m[3] !== undefined && Number(m[2]) > 59) return NaN;
+    if (m[4]) segundos += Number("0." + m[4]);
+  }
+  return segundos > 0 && segundos <= Number.MAX_SAFE_INTEGER && Number.isFinite(segundos) ? segundos : NaN;
+}
+function limpiarResultadoRitmos() {
+  $("crResultado").textContent = "—"; $("crAviso").textContent = "Introduce los dos valores y pulsa Calcular.";
+}
+function configurarCalculadoraRitmos() {
+  const op = $("crOperacion").value;
+  $("crDistanciaCampo").hidden = op === "distancia";
+  $("crTiempoCampo").hidden = op === "tiempo";
+  $("crRitmoCampo").hidden = op === "ritmo";
+  $("crResultadoEtiqueta").textContent = op === "ritmo" ? "Ritmo calculado (min/km)" : op === "tiempo" ? "Tiempo total calculado" : "Distancia calculada";
+  ["crDistancia", "crTiempo", "crRitmo"].forEach(id => { $(id).value = ""; });
+  limpiarResultadoRitmos();
+}
+function abrirCalculadoraRitmos() {
+  $("crFormulario").reset(); configurarCalculadoraRitmos(); $("dlgRitmos").showModal(); $("crOperacion").focus();
+}
+$("crOperacion").addEventListener("change", configurarCalculadoraRitmos);
+["crDistancia", "crTiempo", "crRitmo"].forEach(id => $(id).addEventListener("input", limpiarResultadoRitmos));
+$("crUnidad").addEventListener("change", limpiarResultadoRitmos);
+$("dlgRitmos").addEventListener("close", () => { $("crFormulario").reset(); configurarCalculadoraRitmos(); });
+$("crFormulario").addEventListener("submit", ev => {
+  ev.preventDefault(); limpiarResultadoRitmos();
+  const op = $("crOperacion").value, n = $("crDistancia").value.trim();
+  const d = /^(?:\d+(?:[.,]\d+)?|[.,]\d+)$/.test(n) ? Number(n.replace(",", ".")) * ($("crUnidad").value === "km" ? 1000 : 1) : NaN;
+  const t = leerDuracionCalculadora($("crTiempo").value), p = leerDuracionCalculadora($("crRitmo").value);
+  const valido = v => Number.isFinite(v) && v > 0 && v <= Number.MAX_SAFE_INTEGER;
+  const error = (texto, id) => { $("crAviso").textContent = texto; $(id).focus(); };
+  if (op !== "distancia" && !valido(d)) { error("Distancia: introduce un número positivo, sin escribir la unidad; elígela en m o km.", "crDistancia"); return; }
+  if (op !== "tiempo" && !valido(t)) { error("Tiempo total no válido. Usa minutos o m:ss / h:mm:ss; minutos y segundos internos van de 00 a 59.", "crTiempo"); return; }
+  if (op !== "ritmo" && !valido(p)) { error("Ritmo no válido. Usa minutos por km o m:ss / h:mm:ss, con segundos de 00 a 59.", "crRitmo"); return; }
+  const valor = op === "ritmo" ? 1000 * t / d : op === "tiempo" ? p * d / 1000 : 1000 * t / p;
+  if (!valido(valor)) { $("crAviso").textContent = "Los valores están fuera del rango calculable. Revisa las entradas."; return; }
+  const nf = (v, digitos) => v.toLocaleString("es-ES", { maximumFractionDigits: digitos });
+  $("crResultado").textContent = op === "distancia"
+    ? valor < 0.001 ? "<0,001 m" : nf(valor / 1000, 6) + " km · " + nf(valor, 3) + " m"
+    : (valor < 0.5 ? "<0:01" : fmtTiempo(valor)) + (op === "ritmo" ? " min/km" : "");
+  $("crAviso").textContent = op === "distancia" ? "Distancia redondeada al milímetro. Resultado informativo, no se guarda ni se aplica." : "Presentación redondeada al segundo. Resultado informativo, no se guarda ni se aplica.";
+});
+
 function pintarMarcas() {
   const raiz = $("marcasCont");
   raiz.textContent = "";
@@ -7640,6 +7692,10 @@ function pintarMarcas() {
   marcasFuerza(raiz);
   marcasBilbo(raiz);
   const cont = apartadoMarcas(raiz, "carrera", "Carrera");
+  const calculadora = document.createElement("button");
+  calculadora.type = "button"; calculadora.id = "calculadoraRitmosAbrir"; calculadora.className = "nav-btn";
+  calculadora.textContent = "Calculadora de ritmos";
+  calculadora.addEventListener("click", abrirCalculadoraRitmos); cont.appendChild(calculadora);
   const { forma: f, carga } = rendimiento();
   const s1 = seccionMarcas("Forma en carrera");
   if (!f) s1.appendChild(nota("Apunta series o rodajes de carrera con metros y tiempo para estimar tu forma, tus marcas previstas y tus ritmos."));
@@ -11158,7 +11214,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v322" + (BETA ? " beta" : "");
+const VERSION_APP = "v323" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

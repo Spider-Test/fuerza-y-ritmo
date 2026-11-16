@@ -27,7 +27,7 @@
   window.addEventListener("pageshow", actualizar);
 })();
 </script>
-<link rel="stylesheet" href="estilos.css?v=v322">
+<link rel="stylesheet" href="estilos.css?v=v323">
 </head>
 <body>
 
@@ -410,6 +410,31 @@
     </div>
   </form>
 </dialog>
+<dialog id="dlgRitmos" aria-labelledby="crTitulo">
+  <form id="crFormulario" class="d-form" novalidate>
+    <h3 id="crTitulo">Calculadora de ritmos</h3>
+    <label class="campo">Operación
+      <select id="crOperacion"><option value="ritmo">Calcular ritmo: distancia + tiempo total</option><option value="tiempo">Calcular tiempo total: distancia + ritmo</option><option value="distancia">Calcular distancia: tiempo total + ritmo</option></select>
+    </label>
+    <div id="crDistanciaCampo">
+      <label class="campo" for="crDistancia">Distancia</label>
+      <div class="cr-distancia"><input id="crDistancia" inputmode="decimal" autocomplete="off" placeholder="Ej.: 400 o 0,4" aria-describedby="crDistanciaAyuda"><label class="campo">Unidad <select id="crUnidad"><option value="m">metros (m)</option><option value="km">kilómetros (km)</option></select></label></div>
+      <p id="crDistanciaAyuda" class="menu-det">Solo el número, con coma o punto decimal. Ej.: 400 m o 0,4 km con su unidad seleccionada.</p>
+    </div>
+    <label id="crTiempoCampo" class="campo">Tiempo total
+      <input id="crTiempo" inputmode="text" autocomplete="off" placeholder="Ej.: 2:00 o 1:02:30" aria-describedby="crTiempoAyuda">
+      <span id="crTiempoAyuda" class="menu-det">Minutos (30 o 1,5), m:ss (2:00) o h:mm:ss (1:02:30). Segundos decimales: 2:00,5. Un número solo son minutos.</span>
+    </label>
+    <label id="crRitmoCampo" class="campo">Ritmo (min/km)
+      <input id="crRitmo" inputmode="text" autocomplete="off" placeholder="Ej.: 4:30" aria-describedby="crRitmoAyuda">
+      <span id="crRitmoAyuda" class="menu-det">Minutos por km (4,5), m:ss (4:30) o h:mm:ss. Segundos decimales: 4:30,5. No es el tiempo total.</span>
+    </label>
+    <div class="cr-salida"><strong id="crResultadoEtiqueta"></strong><output id="crResultado" aria-live="polite">—</output></div>
+    <p id="crAviso" role="status" class="menu-det"></p>
+    <div class="d-botones"><button type="button" class="nav-btn" data-cerrar="">Cerrar</button><button type="submit" class="anadir" data-enter>Calcular</button></div>
+  </form>
+</dialog>
+
 <dialog id="dlgNombre" aria-labelledby="nomTit">
   <form method="dialog" class="d-form">
     <h3 id="nomTit"></h3>
@@ -1050,6 +1075,6 @@
 <div class="toast" id="toast" role="status" hidden><span id="toastTxt"></span><button type="button" id="toastBtn">Deshacer</button></div>
 <div class="fiesta" id="fiesta" aria-hidden="true"></div>
 
-<script src="app.js?v=v322"></script>
+<script src="app.js?v=v323"></script>
 </body>
 </html>

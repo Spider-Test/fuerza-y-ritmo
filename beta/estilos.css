@@ -2985,3 +2985,10 @@ button.ens-ok { min-width: 44px; min-height: 44px; padding: 0; background: trans
 .ens-obj { margin: -2px 4px 4px 48px; font-size: 12px; line-height: 1.3; color: var(--muted); }
 /* MEJ-RM-001 (v339): botón «Usar sugerido» */
 .en-objpct .en-usar { flex: 0 0 auto; min-height: 44px; padding: 0 14px; margin-left: auto; font-size: 14px; font-weight: 700; }
+
+/* v341 (INC-BLQ): nombre del tramo = botón a la ficha; «por lado» del tramo y del ejercicio nuevo del editor de superserie */
+.tr-nombre { border: 0; background: none; color: inherit; font: inherit; font-weight: 700; text-align: left; padding: 0 4px; min-height: 44px; min-width: 44px; text-decoration: underline dotted; text-underline-offset: 3px; cursor: pointer; }
+.tr-nombre:focus-visible { outline: 2px solid var(--acento, currentColor); outline-offset: 1px; border-radius: 4px; }
+.tr-n { display: inline-flex; align-items: center; flex-wrap: wrap; }
+.tramo .tr-lado, .eb-lado { align-self: flex-start; min-height: 44px; }
+.ops-fuerza .por-lado:disabled, .ns-extra .por-lado:disabled { opacity: 1; }

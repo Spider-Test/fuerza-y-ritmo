@@ -4469,7 +4469,8 @@ function bloque(dia, id, series, grupo, parte, copia) {
   // Una línea menos: en fuerza, el descanso y OK van junto a «Reps ▾ · Por lado»
   const opsF = b.querySelector(".ops-fuerza"), filaDesc = b.querySelector(".ns-desc");
   // Fuerza: series junto al nombre; fila «[reps] Reps ▾   [peso] kg»; abajo «Por lado · ⏱ descanso · OK»
-  { const cl = b.querySelector(".por-lado"); if (cl) { if (ladoDe(id) && !series.length) cl.checked = true; cl.closest("label").hidden = true; } }
+  // v341: si la ficha manda «por lado», la casilla se ve marcada (y fija, porque lo que se guarda es siempre «por lado»); sin «por lado» en la ficha sigue oculta
+  { const cl = b.querySelector(".por-lado"); if (cl) { if (ladoDe(id) && !series.length) cl.checked = true; const mando = ladoDe(id); cl.closest("label").hidden = !mando; if (mando) { cl.checked = true; cl.disabled = true; cl.title = "Marcado en la ficha del ejercicio"; } } }
   if (opsF && tipo === "fuerza" && sinCarga(id) && !series.some(cargaGuardada)) {
     b.classList.add("sin-peso");   // Medidas de la ficha; no se infiere carga por el nombre.
     if (medidaDe(id) === "tiempo" && !series.length) ponerPorT(true);
@@ -5142,6 +5143,13 @@ function ebCamposDibujo(cont, id, d, nuevo) {
     input.addEventListener("input", () => { d.texto[k] = input.value; ebValidar(); }); label.appendChild(input); grid.appendChild(label);
   });
   cont.appendChild(grid);
+  if (nuevo && !esDistancia(tipoDe(id))) {   // v341
+    const lb = document.createElement("label"), ck = document.createElement("input");
+    lb.className = "lado-op eb-lado"; ck.type = "checkbox"; ck.className = "por-lado"; ck.checked = !!d.base.por_lado;
+    ck.setAttribute("aria-label", "Por lado: " + nombreEj(id));
+    ck.addEventListener("change", () => { d.base.por_lado = ck.checked; });
+    lb.append(ck, tipoDe(id) === "movilidad" ? " Por lado (izq. y der.)" : " Por lado"); cont.appendChild(lb);
+  }
 }
 const ebValoresCambiados = () => ebE.ejs.filter(id => !ebE.quitar.has(id)).map(id => ({ id, ...ebParcheValores(id, ebE.edicion[id], false) })).filter(p => p.error || Object.keys(p.valores).length);
 
@@ -5155,6 +5163,7 @@ function ebNuevoEjercicio(id) {
   const hist = seriesDe(id), ult = hist[hist.length - 1];
   const v = ult ? valores(ult) : { reps: admite(id, "reps") ? 10 : 0 };
   const base = { ...v, peso: sinCarga(id) ? 0 : n0(v.peso), pct: sinCarga(id) ? 0 : n0(v.pct) };
+  if (!esDistancia(tipoDe(id))) base.por_lado = ladoDe(id);   // v341: «por lado» según la ficha (no según la última serie), visible y editable antes de guardar
   const edicion = ebBorradorValores(id, [base]); edicion.base = base;
   return { id, edicion };
 }
@@ -5705,8 +5714,14 @@ function pintarTramos() {
       '<div class="ns-fila"><input class="in-a" autocomplete="off"><span class="por"></span><input class="in-b" autocomplete="off"><button type="button" class="medida-btn tr-medida" hidden>Reps ▾</button><button type="button" class="modo tr-modo" hidden aria-label="Cambiar entre kg y % del 1RM">kg</button></div>' +
       '<p class="calc tr-calc" hidden></p>' +
       '<input class="in-c" inputmode="decimal" autocomplete="off" placeholder="⏱ descanso después: 1,30 o 300 m" aria-label="Descanso después de este tramo (tiempo o metros); en el último, es el descanso entre rondas">';
-    fila.querySelector(".tr-n").textContent = (k + 1) + ". " + nombreEj(t.ejercicio_id);
-    fila.querySelector(".tr-n").appendChild(etiquetaTipo(tipoDe(t.ejercicio_id)));
+    // v341 (INC-BLQ): el nombre del tramo abre la ficha del ejercicio (sobre el creador; al cerrarla se vuelve aquí con los valores intactos)
+    const nEl = fila.querySelector(".tr-n"), nBtn = document.createElement("button");
+    nEl.append((k + 1) + ". ");
+    nBtn.type = "button"; nBtn.className = "tr-nombre"; nBtn.textContent = nombreEj(t.ejercicio_id);
+    nBtn.setAttribute("aria-label", "Ver la ficha de " + nombreEj(t.ejercicio_id));
+    nBtn.addEventListener("click", () => abrirFichaDesdeCreador(t.ejercicio_id));
+    nEl.append(nBtn, etiquetaTipo(tipoDe(t.ejercicio_id)));
+    t.k = dist ? "d" : tipoDe(t.ejercicio_id) === "movilidad" ? "m" : "f";
     const [a, b, cc] = [".in-a", ".in-b", ".in-c"].map(x => fila.querySelector(x));
     const mov = tipoDe(t.ejercicio_id) === "movilidad";
     const fza = !dist && !mov, med = fza ? medidaDe(t.ejercicio_id) : "";
@@ -5748,12 +5763,44 @@ function pintarTramos() {
     a.addEventListener("input", () => { if (fza && /%\s*$/.test(a.value) && !tm.hidden) { a.value = a.value.replace(/\s*%\s*$/, ""); t.p = true; } t.a = a.value; if (fza) pintarTc(); });
     b.addEventListener("input", () => { t.b = b.value; });
     cc.addEventListener("input", () => { t.c = cc.value; });
+    // v341: «por lado» por tramo (fuerza y movilidad, como el formulario normal; en distancia no procede). Sin tocar la casilla, sigue a la ficha.
+    if (!dist) {
+      const lb = document.createElement("label"), ck = document.createElement("input");
+      lb.className = "lado-op tr-lado"; ck.type = "checkbox"; ck.className = "por-lado";
+      ck.checked = t.lado === undefined ? ladoDe(t.ejercicio_id) : !!t.lado;
+      ck.addEventListener("change", () => { t.lado = ck.checked; });
+      lb.append(ck, mov ? " Por lado (izq. y der.)" : " Por lado");
+      fila.insertBefore(lb, cc);
+    }
     const q = fila.querySelector(".quitar");
     q.setAttribute("aria-label", "Quitar el tramo " + (k + 1));
     q.addEventListener("click", () => { tramos.splice(k, 1); pintarTramos(); });
     cont.appendChild(fila);
   });
 }
+// v341: ficha del ejercicio abierta desde el creador de superseries. El creador (otro diálogo) sigue abierto debajo y conserva los tramos; al cerrarla
+// se repintan los tramos para reflejar lo que haya cambiado (nombre, tipo/medida, «por lado»). Si el ejercicio cambia de clase (distancia / movilidad /
+// fuerza), los valores escritos de ese tramo no significarían lo mismo y se vacían.
+let fichaDeCreador = false;
+function abrirFichaDesdeCreador(id) {
+  if (!ejercicioVivo(id)) return;
+  fichaDeCreador = true;
+  abrirDetalle(id);
+}
+function volverDeFichaAlCreador() {
+  if (!fichaDeCreador || $("detalle").open) return;
+  fichaDeCreador = false;
+  if (!$("dlgBloque").open) return;
+  tramos = tramos.filter(t => ejercicioVivo(t.ejercicio_id));
+  tramos.forEach(t => {
+    const dist = esDistancia(tipoDe(t.ejercicio_id)), k = dist ? "d" : tipoDe(t.ejercicio_id) === "movilidad" ? "m" : "f";
+    if (t.k && t.k !== k) { t.a = ""; t.b = ""; delete t.m; delete t.p; }
+  });
+  pintarTramos();
+}
+$("detalle").addEventListener("close", volverDeFichaAlCreador);
+// Red de seguridad: si por cualquier motivo el navegador no emitiera «close» al cerrar la ficha, el primer gesto sobre el creador la sincroniza.
+["pointerdown", "focusin"].forEach(ev => $("dlgBloque").addEventListener(ev, volverDeFichaAlCreador, true));
 $("blqAnadir").addEventListener("click", () => abrirSelector(diaBloque, id => {
   const h = seriesDe(id), u = h[h.length - 1];
   const dist = esDistancia(tipoDe(id)), mov = tipoDe(id) === "movilidad";
@@ -5789,12 +5836,13 @@ $("blqCrear").addEventListener("click", () => {
     } else if (tipoDe(t.ejercicio_id) === "movilidad") {
       v.reps = parseInt(t.a, 10) || 0;
       v.tiempo = leerSegs(t.b);
+      v.por_lado = t.lado === undefined ? ladoDe(t.ejercicio_id) : !!t.lado;   // v341
       if (isNaN(v.tiempo) || (!(v.reps > 0) && !(v.tiempo > 0))) { aviso.textContent = "Pon las repeticiones o el tiempo del tramo " + (k + 1) + "."; return; }
     } else {
       const conPct = t.p || /%\s*$/.test(String(t.a));
       v.peso = parseFloat((String(t.a).trim().replace(/\s*%\s*$/, "") || "0").replace(",", "."));
       if (conPct && v.peso > 0) { v.pct = v.peso; v.peso = kgDePct(t.ejercicio_id, v.pct); }   // v251: sin 1RM en la ficha se guarda el % (sin kg)
-      if (ladoDe(t.ejercicio_id)) v.por_lado = true;
+      v.por_lado = t.lado === undefined ? ladoDe(t.ejercicio_id) : !!t.lado;   // v341
       if (!(v.peso >= 0)) { aviso.textContent = "Revisa el peso del tramo " + (k + 1) + "."; return; }
       const esMx = t.m === "maxr" || t.m === "maxt" || /^\s*(m[aá]x|amrap|fallo)/i.test(t.b);
       if (t.m === "t" || t.m === "maxt" || !t.m && medidaDe(t.ejercicio_id) === "tiempo") {
@@ -11696,7 +11744,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v340" + (BETA ? " beta" : "");
+const VERSION_APP = "v341" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

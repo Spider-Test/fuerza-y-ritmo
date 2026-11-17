@@ -6182,19 +6182,44 @@ function insertarEnLista(l, valor, tras) {
   if (tras === undefined || tras < 0) items.push(valor); else items.splice(tras + 1, 0, valor);
   guardarLista(fresca, { items });
 }
-async function guardarEnLista(nombreSugerido, series) {
-  elegirLista("¿En qué lista lo guardo?", async l => {
-    const nombre = await pedirNombre("Nombre del entrenamiento", nombreSugerido, "Se guarda como una copia nueva e independiente, también en tus plantillas. Puede tener el mismo nombre que otras entradas; no se reemplaza nada.");
-    if (!nombre) return;
-    const fresca = db.listas[l.id];
-    if (!fresca || fresca.borrado) { setEstado("La lista ya no está disponible. No se ha guardado el entrenamiento."); return; }
-    const items = itemsDe(series).map(it => it.bloque ? { bloque: true, seccion: it.seccion || "", tramos: it.tramos } : { ejercicio_id: it.ejercicio_id, seccion: it.seccion || "", series: it.series });
-    const antes = [["listas", { ...fresca, items: copiaJson(fresca.items || []) }]], id = nuevoId();
-    cambiar("plantillas", { id, nombre, items, borrado: false });
-    antes.push(["plantillas", { ...db.plantillas[id], borrado: true }]);
-    insertarEnLista(fresca, id);
-    avisoDeshacer("«" + nombre + "» guardado en la lista «" + fresca.nombre + "» como copia independiente", antes);
+// MEJ-LISTAS-003 (v337): ubicaciones donde guardar en una lista organizada. Cada bloque/semana (sep) es una ubicación (termina en el siguiente
+// sep o mesociclo) y cada mesociclo sin bloques propios también (termina en el siguiente mesociclo). «tras» es la posición de items detrás de la que se inserta.
+function ubicacionesLista(l) {
+  const items = l.items || [], out = []; let gr = null;
+  items.forEach((x, i) => {
+    if (esGrupoL(x)) {
+      gr = x.titulo || "";
+      let fin = items.length; for (let k = i + 1; k < items.length; k++) if (esGrupoL(items[k])) { fin = k; break; }
+      if (!items.slice(i + 1, fin).some(esSep)) out.push({ titulo: x.titulo || "Mesociclo", gr: null, tras: fin - 1 });
+    } else if (esSep(x)) {
+      let fin = items.length; for (let k = i + 1; k < items.length; k++) if (esSep(items[k]) || esGrupoL(items[k])) { fin = k; break; }
+      out.push({ titulo: x.titulo || "Bloque", gr, tras: fin - 1 });
+    }
   });
+  const base = out.map(o => "Al final de «" + o.titulo + "»" + (o.gr ? " · " + o.gr : ""));
+  return out.map((o, n) => ({ ...o, texto: base[n] + (base.filter(t => t === base[n]).length > 1 ? " (n.º " + (base.slice(0, n + 1).filter(t => t === base[n]).length) + ")" : "") }));
+}
+function guardarEnLista(nombreSugerido, series) {
+  elegirLista("¿En qué lista lo guardo?", l => {
+    const fresca = db.listas[l.id] || l, sitios = ubicacionesLista(fresca);
+    if (sitios.length < 2) { guardarEnListaEn(l, null, nombreSugerido, series); return; }   // lista plana o una sola ubicación: al final, sin preguntar
+    const estructura = JSON.stringify(fresca.items || []);
+    abrirMenu("¿Dónde lo guardo en «" + fresca.nombre + "»?", "Se añade al final del sitio que elijas", sitios.map(s => ({ texto: s.texto, accion: () => guardarEnListaEn(l, { tras: s.tras, estructura }, nombreSugerido, series) }))
+      .concat([{ texto: "Al final de la lista", accion: () => guardarEnListaEn(l, { tras: undefined, estructura }, nombreSugerido, series) }]));
+  });
+}
+async function guardarEnListaEn(l, ubi, nombreSugerido, series) {
+  const nombre = await pedirNombre("Nombre del entrenamiento", nombreSugerido, "Se guarda como una copia nueva e independiente, también en tus plantillas. Puede tener el mismo nombre que otras entradas; no se reemplaza nada.");
+  if (!nombre) return;
+  const fresca = db.listas[l.id];
+  if (!fresca || fresca.borrado) { setEstado("La lista ya no está disponible. No se ha guardado el entrenamiento."); return; }
+  if (ubi && JSON.stringify(fresca.items || []) !== ubi.estructura) { setEstado("La lista ha cambiado mientras escribías. No se ha guardado el entrenamiento; vuelve a intentarlo."); return; }
+  const items = itemsDe(series).map(it => it.bloque ? { bloque: true, seccion: it.seccion || "", tramos: it.tramos } : { ejercicio_id: it.ejercicio_id, seccion: it.seccion || "", series: it.series });
+  const antes = [["listas", { ...fresca, items: copiaJson(fresca.items || []) }]], id = nuevoId();
+  cambiar("plantillas", { id, nombre, items, borrado: false });
+  antes.push(["plantillas", { ...db.plantillas[id], borrado: true }]);
+  insertarEnLista(fresca, id, ubi ? ubi.tras : undefined);
+  avisoDeshacer("«" + nombre + "» guardado en la lista «" + fresca.nombre + "» como copia independiente", antes);
 }
 // Renombrar una posición no modifica la plantilla original ni las demás referencias a su ID.
 async function renombrarEntradaLista(listaId, i, plantillaId) {
@@ -11602,7 +11627,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v336" + (BETA ? " beta" : "");
+const VERSION_APP = "v337" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

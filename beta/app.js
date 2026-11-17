@@ -4734,7 +4734,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
   const pendiente = series.find(s => !hecha(s)), ultDelDia = series[series.length - 1];
   const ult = pendiente || ultDelDia || historia[historia.length - 1];
   if (ult) rellenarCon(ult, ult === pendiente || ult === ultDelDia);
-  else if (dist && distDeNombre(ej.nombre)) fa.value = distCampo(distDeNombre(ej.nombre));
+  else if (dist && distDeNombre(ej.nombre)) { fa.value = distCampo(distDeNombre(ej.nombre)); sincRitmo(); }   // v336: con la distancia por defecto la fila «Ritmo/km» ya se muestra (vacía)
   if (chkBilbo && pendiente && pendiente.ciclo_id) { chkBilbo.checked = true; fb.value = ""; fb.placeholder = "reps máx"; }
   // Borrador: lo escrito sin pulsar OK no se pierde aunque el día se vuelva a pintar (al añadir o mover otro ejercicio)
   const claveBor = dia.id + "|" + (grupo || "") + "|" + idK + "|" + (parte || "");
@@ -11602,7 +11602,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v335" + (BETA ? " beta" : "");
+const VERSION_APP = "v336" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

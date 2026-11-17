@@ -27,7 +27,7 @@
   window.addEventListener("pageshow", actualizar);
 })();
 </script>
-<link rel="stylesheet" href="estilos.css?v=v327">
+<link rel="stylesheet" href="estilos.css?v=v328">
 </head>
 <body>
 
@@ -1032,7 +1032,8 @@
     <p class="en-grupo" id="enGrupo"></p>
     <h2 class="en-ej" id="enEj"></h2>
     <div class="en-accesos"><button type="button" class="nav-btn en-video" id="enVideo" aria-haspopup="dialog" hidden>▶ Ver vídeo del ejercicio</button>
-    <button type="button" class="nav-btn en-ficha" id="enFicha" aria-haspopup="dialog">ⓘ Ficha del ejercicio</button></div>
+    <button type="button" class="nav-btn en-ficha" id="enFicha" aria-haspopup="dialog">ⓘ Ficha del ejercicio</button>
+    <button type="button" class="nav-btn en-series" id="enSeries" aria-haspopup="dialog">☰ Ver todas las series</button></div>
     <button type="button" class="en-nota" id="enNota" hidden></button>
     <p class="en-serie" id="enSerie"></p>
     <p class="en-valor" id="enValor"></p>
@@ -1059,6 +1060,11 @@
   <div class="en-pie"><button type="button" class="nav-btn" id="enAnt">‹ Anterior</button><button type="button" class="nav-btn" id="enSig">Siguiente ›</button></div>
 </dialog>
 
+<dialog id="dlgEnSeries" aria-labelledby="ensTit">
+  <form method="dialog" class="d-cab"><h3 class="d-tit" id="ensTit">Todas las series</h3><button class="cerrar" aria-label="Cerrar">✕</button></form>
+  <div class="d-cuerpo" id="ensCuerpo"></div>
+</dialog>
+
 <div class="sel-acciones" id="selSerBarra" hidden><span class="sel-n" id="selSerN"></span><button type="button" id="selSerAgrupar">Agrupar en superserie</button><button type="button" id="selSerSalir">Cancelar</button></div>
 <div class="sel-acciones" id="selPlantAcciones" hidden>
   <button type="button" id="selPlantDia">Añadir a un día</button>
@@ -1077,6 +1083,6 @@
 <div class="toast" id="toast" role="status" hidden><span id="toastTxt"></span><button type="button" id="toastBtn">Deshacer</button></div>
 <div class="fiesta" id="fiesta" aria-hidden="true"></div>
 
-<script src="app.js?v=v327"></script>
+<script src="app.js?v=v328"></script>
 </body>
 </html>

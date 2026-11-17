@@ -10918,7 +10918,7 @@ function pintarCabDia(dia) {
 
 // ---------- Deshacer, deslizar y récords ----------
 let deshacerPend = null, timerAviso = null;
-const capaArriba = () => ($("dlgEntreno").open ? $("dlgEntreno") : document.body);
+const capaArriba = () => ($("dlgEnSeries").open ? $("dlgEnSeries") : $("dlgEntreno").open ? $("dlgEntreno") : document.body);   // v328: el aviso con Deshacer va en la capa más alta
 function avisoDeshacer(texto, deshacer, pr) {
   const t = $("toast");
   deshacerSug = null;
@@ -11291,7 +11291,143 @@ $("enCalentSi").addEventListener("click", () => {
 });
 $("enCalentNo").addEventListener("click", () => { const s = serieEnt(); if (s) rechazarCalent(ent.dia.id, s.ejercicio_id, [s]); pintarEntreno(); });
 $("enSig").addEventListener("click", () => { if (ent.i < ent.cola.length - 1) { ent.i++; pintarEntreno(); } });
+// ---------- MEJ-ENT-015 (v328): vista de todas las series de la ocurrencia actual + Autorrellenar peso ----------
+// La pantalla de serie activa no cambia. La vista agrupa por la MISMA ocurrencia que las instrucciones del entreno (día / entreno / parte / copia o, en superserie,
+// solo el ejercicio en curso de ese bloque, por ronda). Los borradores de reps/kg viven en memoria mientras dura el entreno y no confirman nada.
+// «Hecha» reutiliza EXACTAMENTE la acción de la pantalla actual (#enHecha): descanso, progreso, orden y marcas son los de siempre.
+const ensKgTxt = s => pesoMostrado(s) ? num(pesoMostrado(s)) : "";
+const ensRepsTxt = s => ((s.ciclo_id === "auto" || esRango(s)) && !hecha(s)) ? "" : String(n0(s.reps) || "");
+// Series con campos kg/reps (los mismos criterios que decide pintarEntreno para ["kg", "reps"])
+function ensKgReps(s) {
+  const tipo = tipoDe(s.ejercicio_id);
+  if (esDistancia(tipo) || tipo === "movilidad") return false;
+  if (sinCarga(s.ejercicio_id) && !cargaGuardada(s)) return false;
+  return !((n0(s.tiempo) > 0 || s.max_tiempo) && !(n0(s.reps) > 0) || conDistFuerza(s) && !(n0(s.reps) > 0));
+}
+// Peso libre en kg: ni calentamiento, ni peso de ciclo/Bilbo, ni porcentaje del RM
+const ensPesoLibre = s => ensKgReps(s) && !s.calentamiento && !s.ciclo_id && !(n0(s.pct) > 0);
+const ensFilas = () => { const s = serieEnt(); return s ? ocurrenciaNotaEntreno(s).filter(x => !x.borrado).sort(sOrden) : []; };
+function ensAplicarBorradorActiva() {
+  const s = serieEnt(), b = s && ent.borr && ent.borr[s.id];
+  if (!b || hecha(s) || !ensPesoLibre(s)) return;
+  if (b.kg !== undefined) $("enA").value = b.kg;
+  if (b.reps !== undefined) $("enB").value = b.reps;
+}
+function pintarVistaSeries() {
+  const cuerpo = $("ensCuerpo"), filas = ensFilas(), act = serieEnt(), desp = $("dlgEnSeries").scrollTop;
+  if (!act || !filas.length) { $("dlgEnSeries").close(); return; }
+  const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt !== undefined) x.textContent = txt; return x; };
+  cuerpo.textContent = "";
+  const nombre = nombreEj(act.ejercicio_id), bloque = !!act.bloque_id;
+  cuerpo.appendChild(el("p", "ens-ej", nombre));
+  cuerpo.appendChild(el("p", "ens-sub", (bloque ? "Superserie · " + filas.length + (filas.length === 1 ? " ronda" : " rondas") + " · " : "") + (act.grupo || "Entreno") + (act.seccion ? " · " + act.seccion : "")));
+  const hayKg = filas.some(ensPesoLibre);
+  const cab = el("div", "ens-fila ens-cab");
+  cab.append(el("span", "", bloque ? "Ronda" : "Serie"), el("span", "", "Reps"));
+  const kgCab = el("span", "ens-kgcab"); kgCab.appendChild(el("span", "", "Kg"));
+  let auto = null;
+  if (hayKg) {
+    auto = el("button", "nav-btn ens-auto", "Autorrellenar"); auto.type = "button"; auto.id = "ensAuto"; auto.disabled = true;
+    auto.setAttribute("aria-label", "Autorrellenar peso: copia el peso de la serie elegida a las series pendientes que hay debajo");
+    kgCab.appendChild(auto);
+  }
+  cab.append(kgCab, el("span", "", "Hecha")); cuerpo.appendChild(cab);
+  let n = 0;
+  filas.forEach(s => {
+    n += s.calentamiento ? 0 : 1;
+    const f = el("div", "ens-fila"); f.dataset.sid = s.id;
+    if (s.id === act.id) f.classList.add("ens-activa");
+    const kgRep = ensKgReps(s), hecho = hecha(s), b = (ent.borr && ent.borr[s.id]) || {};
+    f.appendChild(el("span", "ens-n", s.calentamiento ? "Cal." : bloque ? "R" + n0(s.ronda || n) : String(n)));
+    if (!kgRep) {   // otras medidas: solo lectura (se editan en la pantalla de la serie)
+      const t = el("span", "ens-texto", serieTexto(s)); f.appendChild(t); t.style.gridColumn = "2 / 4";
+    } else {
+      const rIn = document.createElement("input"), kIn = document.createElement("input");
+      [rIn, kIn].forEach(i => { i.autocomplete = "off"; });
+      rIn.inputMode = "numeric"; kIn.inputMode = "decimal"; rIn.dataset.campo = "reps"; kIn.dataset.campo = "kg";
+      rIn.setAttribute("aria-label", "Repeticiones, " + (s.calentamiento ? "calentamiento" : "serie " + n)); kIn.setAttribute("aria-label", "Peso en kg, " + (s.calentamiento ? "calentamiento" : "serie " + n));
+      const editable = !hecho && ensPesoLibre(s);
+      rIn.value = b.reps !== undefined ? b.reps : ensRepsTxt(s); kIn.value = b.kg !== undefined ? b.kg : ensKgTxt(s);
+      if (editable) {
+        rIn.placeholder = (s.ciclo_id || esRango(s)) ? "máx" : "0"; kIn.placeholder = "0";
+        rIn.addEventListener("input", () => { ent.borr = ent.borr || {}; ent.borr[s.id] = { ...(ent.borr[s.id] || {}), reps: rIn.value }; });
+        kIn.addEventListener("input", () => { ent.borr = ent.borr || {}; ent.borr[s.id] = { ...(ent.borr[s.id] || {}), kg: kIn.value }; ent.ensFuente = s.id; ensActualizarAuto(); });
+      } else { rIn.readOnly = kIn.readOnly = true; rIn.classList.add("ens-ro"); kIn.classList.add("ens-ro"); }
+      if (hayKg && ensPesoLibre(s) || hecho && !s.calentamiento && !s.ciclo_id && !(n0(s.pct) > 0)) kIn.addEventListener("focus", () => { ent.ensFuente = s.id; ensActualizarAuto(); });
+      f.append(rIn, kIn);
+    }
+    if (hecho) f.appendChild(el("span", "ens-ok", "✓"));
+    else if (kgRep && ensPesoLibre(s)) {
+      const bt = el("button", "nav-btn ens-hecha", "✓"); bt.type = "button"; bt.setAttribute("aria-label", "Marcar hecha la " + (bloque ? "ronda " : "serie ") + n);
+      bt.addEventListener("click", () => ensConfirmar(s.id)); f.appendChild(bt);
+    } else f.appendChild(el("span", "ens-no", "–"));
+    cuerpo.appendChild(f);
+  });
+  cuerpo.appendChild(el("p", "ens-nota", "Escribir aquí no confirma nada: lo escrito es un borrador hasta que pulses ✓ en esa serie (hace lo mismo que «✓ Hecha» de la pantalla de la serie)." + (hayKg ? " «Autorrellenar» copia el peso de la serie elegida a las series pendientes de debajo (no toca hechas, reps ni notas)." : "")));
+  cuerpo.appendChild(el("p", "aviso ens-aviso", ""));
+  $("dlgEnSeries").scrollTop = desp;
+  ensActualizarAuto();
+}
+function ensActualizarAuto() {
+  const b = $("ensAuto"); if (!b) return;
+  const filas = ensFilas(), i = filas.findIndex(x => x.id === ent.ensFuente);
+  b.disabled = i < 0;
+  b.textContent = i < 0 ? "Autorrellenar" : "Autorrellenar ↓";
+}
+function ensAviso(t) { const p = document.querySelector("#ensCuerpo .ens-aviso"); if (p) p.textContent = t; }
+function ensAutorrellenar() {
+  const filas = ensFilas(), i = filas.findIndex(x => x.id === ent.ensFuente);
+  if (i < 0) { ensAviso("Toca el peso de una serie para elegirla como origen."); return; }
+  const campo = document.querySelector('#ensCuerpo .ens-fila[data-sid="' + filas[i].id + '"] input[data-campo="kg"]');
+  const kg = parseFloat((campo ? campo.value.trim() : "").replace(",", "."));
+  if (!(kg > 0)) { ensAviso("Escribe antes el peso de esa serie."); return; }
+  const destinos = filas.slice(i + 1).filter(x => !hecha(x) && ensPesoLibre(x));
+  if (!destinos.length) { ensAviso("No hay series pendientes debajo de esa serie."); return; }
+  const antes = destinos.map(x => ["series", { ...x }]), act = serieEnt();
+  destinos.forEach(x => { cambiar("series", { ...x, peso: kg }, true); if (ent.borr && ent.borr[x.id]) delete ent.borr[x.id].kg; });
+  persistir();
+  pintarBloques(true);
+  if (act && destinos.some(x => x.id === act.id)) $("enA").value = num(kg);
+  pintarVistaSeries();
+  avisoDeshacer("Autorrellenar: " + destinos.length + (destinos.length === 1 ? " serie" : " series") + " a " + num(kg) + " kg",
+    antes.concat([["fn", () => { if (ent && $("dlgEnSeries").open) pintarVistaSeries(); }]]));
+}
+function ensConfirmar(id) {
+  const k = ent.cola.indexOf(id);
+  if (k < 0 || hecha(db.series[id])) return;
+  const previa = ent.i, b = (ent.borr && ent.borr[id]) || {};
+  ent.i = k; pintarEntreno();
+  if (b.kg !== undefined) $("enA").value = b.kg;
+  if (b.reps !== undefined) $("enB").value = b.reps;
+  $("enAviso").textContent = "";
+  $("enHecha").click();   // la misma acción que la pantalla de la serie
+  const error = $("enAviso").textContent;
+  if (error) { ent.i = previa; pintarEntreno(); ensAplicarBorradorActiva(); pintarVistaSeries(); ensAviso(error); return; }
+  if (ent.borr) delete ent.borr[id];
+  $("dlgEnSeries").close();
+}
+$("enSeries").addEventListener("click", () => {
+  const s = serieEnt();
+  if (!s) return;
+  ent.borr = ent.borr || {};
+  if (!hecha(s) && ensPesoLibre(s) && ent.campos[0] === "kg" && ent.campos[1] === "reps") {   // lo escrito en la pantalla actual pasa a ser borrador de la vista
+    const b = {}, kgT = $("enA").value.trim(), rT = $("enB").value.trim();
+    if (kgT !== ensKgTxt(s)) b.kg = kgT;
+    if (rT !== ensRepsTxt(s)) b.reps = rT;
+    if (Object.keys(b).length) ent.borr[s.id] = { ...(ent.borr[s.id] || {}), ...b };
+  }
+  ent.ensFuente = null;
+  pintarVistaSeries();
+  $("dlgEnSeries").showModal();
+});
+$("ensCuerpo").addEventListener("click", e => { if (e.target.closest("#ensAuto")) ensAutorrellenar(); });
+$("dlgEnSeries").addEventListener("close", () => {
+  if ($("toast").parentNode === $("dlgEnSeries")) capaArriba().appendChild($("toast"));
+  if (ent) ensAplicarBorradorActiva();
+});
+
 function salirEntreno() {
+  if ($("dlgEnSeries").open) $("dlgEnSeries").close();
   if ($("dlgEntreno").open) $("dlgEntreno").close();
 }
 $("dlgEntreno").addEventListener("close", () => {
@@ -11306,7 +11442,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v327" + (BETA ? " beta" : "");
+const VERSION_APP = "v328" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

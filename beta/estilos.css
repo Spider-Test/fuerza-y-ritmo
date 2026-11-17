@@ -2934,3 +2934,22 @@ button.en-nota { border: 0; text-align: left; font-family: inherit; cursor: poin
 }
 .dia.varios-entrenos .grupo { border: 0; border-radius: 0; background: none; }
 .dia.varios-entrenos .grupo + .grupo { border-top: 1px solid var(--line); }
+
+/* MEJ-ENT-015 (v328): vista de todas las series de la ocurrencia y Autorrellenar */
+.en-series { align-self: flex-start; flex-shrink: 0; min-height: 44px; height: auto; padding: 8px 12px; border-radius: 10px; font-size: 14px; font-weight: 600; color: var(--muted); white-space: normal; text-align: left; }
+#dlgEnSeries .d-cuerpo { gap: 6px; }
+.ens-ej { margin: 0; font-weight: 700; font-size: 17px; overflow-wrap: anywhere; }
+.ens-sub { margin: 0 0 6px; font-size: 13px; color: var(--muted); }
+.ens-fila { display: grid; grid-template-columns: 40px minmax(0, 1fr) minmax(0, 1fr) 52px; gap: 8px; align-items: center; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+.ens-fila.ens-activa { background: var(--accent-soft); border-radius: 8px; }
+.ens-cab { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; border-bottom-color: transparent; padding-bottom: 0; align-items: end; }
+.ens-kgcab { display: flex; flex-direction: column; gap: 4px; align-items: stretch; }
+.ens-auto { min-height: 36px; padding: 4px 6px; font-size: 12px; font-weight: 700; text-transform: none; letter-spacing: 0; color: var(--accent); }
+.ens-n { font-weight: 700; color: var(--muted); font-size: 14px; }
+.ens-fila input { width: 100%; min-width: 0; min-height: 44px; font-size: 18px; font-weight: 700; text-align: center; color: var(--fg); }
+.ens-fila input.ens-ro { background: transparent; border-color: transparent; color: var(--muted); }
+.ens-texto { font-size: 14px; color: var(--muted); overflow-wrap: anywhere; }
+.ens-ok { text-align: center; color: var(--accent); font-weight: 800; font-size: 20px; }
+.ens-no { text-align: center; color: var(--muted); }
+.ens-hecha { min-width: 44px; min-height: 44px; padding: 0; font-size: 20px; color: var(--accent); }
+.ens-nota { margin: 8px 0 0; font-size: 12px; color: var(--muted); line-height: 1.4; }

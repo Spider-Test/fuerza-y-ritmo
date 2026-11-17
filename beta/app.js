@@ -2179,24 +2179,25 @@ async function guardarPlantilla(nombreSugerido, series) {
 // y cuyas series llevan TODAS la marca `calentamiento`. Al guardarlo se fuerza esa marca y la parte «Calentamiento»; así se distingue de una plantilla normal sin
 // ningún campo nuevo y las versiones anteriores lo tratan como una plantilla más (con las series ya marcadas). Se aplica como COPIA: series nuevas (otros id) al
 // principio del entreno, con la marca de calentamiento (fuera de récords y estadísticas); editarlas no toca la plantilla y borrar la plantilla no toca las copias.
-const esPlantillaCalentamiento = p => { const it = (p && p.items) || []; return it.length > 0 && it.every(x => !x.bloque && Array.isArray(x.series) && x.series.length > 0 && x.series.every(v => !!v.calentamiento)); };
+const esPlantillaCalentamiento = p => {   // v333: también con superseries (items {bloque, tramos}); una plantilla normal con superseries (series sin marca) no cuenta
+  const it = (p && p.items) || [], marcadas = ss => Array.isArray(ss) && ss.length > 0 && ss.every(v => !!v.calentamiento);
+  return it.length > 0 && it.every(x => x.bloque ? Array.isArray(x.tramos) && x.tramos.length > 0 && x.tramos.every(t => marcadas(t.series)) : marcadas(x.series));
+};
 // v274: «Guardar calentamiento…» está en el menú ⋯ de cada PARTE cuyo nombre contiene «calentamiento» (o «warm-up»): guarda solo lo de esa parte; si hay varias, cada una por separado
 async function guardarCalentamientoParte(dia, grupo, parte) {
   const todas = seriesDelDia(dia.id).filter(s => (s.grupo || "") === grupo && (s.seccion || "") === parte).sort((a, b) => a.orden - b.orden);
-  const warm = todas.filter(s => !s.bloque_id), deBloque = todas.filter(s => s.bloque_id);
-  if (!warm.length) { avisoImportante("No se puede guardar", deBloque.length ? "Esta parte solo tiene superseries y el calentamiento guardado no admite superseries. Añade ejercicios sueltos a la parte para guardarla." : "Esta parte no tiene ejercicios con series que guardar."); return; }
-  if (deBloque.length) {
-    const nB = new Set(deBloque.map(x => x.bloque_id)).size, nEj = new Set(warm.map(x => x.ejercicio_id)).size;
-    const ok = await confirmar("Esta parte incluye superseries", "El calentamiento guardado no admite superseries. Se guardarán las " + warm.length + (warm.length === 1 ? " serie suelta" : " series sueltas") + " (" + nEj + (nEj === 1 ? " ejercicio" : " ejercicios") + ") y NO se guardarán " + nB + (nB === 1 ? " superserie" : " superseries") + " con " + deBloque.length + (deBloque.length === 1 ? " serie" : " series") + ". La parte no cambia.", "Guardar sin las superseries");
-    if (!ok) return;
-  }
-  const nombre = await pedirNombre("Guardar calentamiento", parte + (grupo ? " · " + grupo : ""), "Se guarda una copia ordenada de esta parte con sus ejercicios, repeticiones, tiempo, distancia, peso, descansos y notas. Si ya tienes un calentamiento guardado con este nombre, se reemplaza.");
+  if (!todas.length) { avisoImportante("No se puede guardar", "Esta parte no tiene ejercicios con series que guardar."); return; }
+  const nombre = await pedirNombre("Guardar calentamiento", parte + (grupo ? " · " + grupo : ""), "Se guarda una copia ordenada de esta parte (también sus superseries) con sus ejercicios, repeticiones, tiempo, distancia, peso, descansos y notas. Si ya tienes un calentamiento guardado con este nombre, se reemplaza.");
   if (!nombre) return;
   const existe = vivos("plantillas").find(p => norm(p.nombre) === norm(nombre));
   if (existe && !esPlantillaCalentamiento(existe)) { setEstado("Ya hay una plantilla normal con ese nombre; elige otro para el calentamiento", true); return; }
-  const items = itemsDe(warm).map(it => ({ ejercicio_id: it.ejercicio_id, seccion: "Calentamiento", series: it.series.map(v => ({ ...v, calentamiento: true })) }));
+  // v333: las superseries se guardan como items {bloque: true, tramos} (mismo formato que las plantillas normales), en el orden de la parte; todas las series con la marca de calentamiento
+  const marca = v => ({ ...v, calentamiento: true });
+  const items = itemsDe(todas).map(it => it.bloque
+    ? { bloque: true, seccion: "Calentamiento", tramos: it.tramos.map(t => ({ ejercicio_id: t.ejercicio_id, series: t.series.map(marca) })) }
+    : { ejercicio_id: it.ejercicio_id, seccion: "Calentamiento", series: it.series.map(marca) });
   cambiar("plantillas", { id: existe ? existe.id : nuevoId(), nombre, items, borrado: false });
-  setEstado("Calentamiento «" + nombre + "» guardado (" + contarSeries(items) + " series)" + (deBloque.length ? " · sin las superseries de la parte" : ""));
+  setEstado("Calentamiento «" + nombre + "» guardado (" + contarSeries(items) + " series)");
 }
 function elegirCalentamientoGuardado(dia, grupo) {
   const ps = vivos("plantillas").filter(esPlantillaCalentamiento).sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
@@ -2206,19 +2207,29 @@ function elegirCalentamientoGuardado(dia, grupo) {
 function aplicarCalentamiento(dia, grupo, p) {
   const f = dia.id, delGrupo = seriesDelDia(f).filter(s => (s.grupo || "") === grupo);
   const parte = nombresPartes(f, grupo).find(esNombreCalentamiento) || "Calentamiento";
-  const items = (p.items || []).filter(it => ejercicioVivo(it.ejercicio_id) && !it.bloque), n = contarSeries(items);
+  // v333: también las superseries (copia con id nuevos de series y de bloque; mismas rondas, orden y descansos)
+  const items = (p.items || []).map(it => it.bloque ? { ...it, tramos: (it.tramos || []).filter(t => ejercicioVivo(t.ejercicio_id) && (t.series || []).length) } : it)
+    .filter(it => it.bloque ? it.tramos.length : ejercicioVivo(it.ejercicio_id));
+  const rondasDe = it => Math.max.apply(null, it.tramos.map(t => t.series.length));
+  const n = items.reduce((s, it) => s + (it.bloque ? rondasDe(it) * it.tramos.length : it.series.length), 0);
   if (!n) { setEstado("El calentamiento guardado ya no tiene ejercicios disponibles", true); return; }
   const base = (delGrupo.length ? Math.min(...delGrupo.map(s => n0(s.orden))) : Date.now()) - n - 1;   // todas antes de lo que ya hay en el entreno
   const creadas = []; let k = 0;
+  const nueva = (ejercicio_id, v, extra) => {
+    const fila = Object.assign({ id: nuevoId(), fecha: f, ejercicio_id, orden: base + k++, peso: n0(v.peso), reps: n0(v.reps), distancia: n0(v.distancia), tiempo: n0(v.tiempo),
+      descanso: n0(v.descanso), rec_dist: n0(v.rec_dist), pct: n0(v.pct), ciclo_id: v.bilbo ? "auto" : "", calentamiento: true, por_lado: !!v.por_lado, nota: v.nota || "", letra_nueva: false,
+      max_tiempo: !!v.max_tiempo, max_reps: !!v.max_reps, rango_min: n0(v.rango_min), rango_max: n0(v.rango_max), hecha: false, meso_id: "", grupo, seccion: parte, bloque_id: "", ronda: 0, copia: 0, borrado: false }, extra);
+    creadas.push(fila); cambiar("series", fila, true);
+  };
   items.forEach(it => {
+    if (it.bloque) {
+      const bloque_id = nuevoId(), rondas = rondasDe(it);
+      for (let r = 0; r < rondas; r++) it.tramos.forEach(t => nueva(t.ejercicio_id, t.series[r] || t.series[t.series.length - 1], { bloque_id, ronda: r + 1 }));
+      return;
+    }
     const usadas = delGrupo.concat(creadas).filter(s => s.ejercicio_id === it.ejercicio_id && !s.bloque_id && (s.seccion || "") === parte).map(s => n0(s.copia) > 1 ? n0(s.copia) : 1);
     const copia = usadas.length ? Math.max(...usadas) + 1 : 0;   // si ya hay ese ejercicio en el calentamiento, otra tarjeta (no se mezclan)
-    it.series.forEach(v => {
-      const fila = { id: nuevoId(), fecha: f, ejercicio_id: it.ejercicio_id, orden: base + k++, peso: n0(v.peso), reps: n0(v.reps), distancia: n0(v.distancia), tiempo: n0(v.tiempo),
-        descanso: n0(v.descanso), rec_dist: n0(v.rec_dist), pct: n0(v.pct), ciclo_id: v.bilbo ? "auto" : "", calentamiento: true, por_lado: !!v.por_lado, nota: v.nota || "", letra_nueva: false,
-        max_tiempo: !!v.max_tiempo, max_reps: !!v.max_reps, rango_min: n0(v.rango_min), rango_max: n0(v.rango_max), hecha: false, meso_id: "", grupo, seccion: parte, bloque_id: "", ronda: 0, copia, borrado: false };
-      creadas.push(fila); cambiar("series", fila, true);
-    });
+    it.series.forEach(v => nueva(it.ejercicio_id, v, { copia }));
   });
   const kp = f + "|" + grupo;
   if (ordenPartes[kp] && !ordenPartes[kp].includes(parte)) ordenPartes[kp] = [parte, ...ordenPartes[kp]];   // la parte nueva va la primera
@@ -2277,6 +2288,17 @@ function pintarCalentamientoDlg() {
   cuerpo.appendChild(el("p", "eb-nota", "Edita ejercicios y valores y pulsa «Guardar cambios». Las copias ya añadidas a tus entrenos no cambian. Todas las series se guardan como calentamiento (fuera de récords y estadísticas)."));
   const lista = el("div", "cal-items");
   ce.items.forEach((it, i) => {
+    if (it.bloque) {   // v333: las superseries se ven (solo lectura): se editan en la copia del día o volviendo a guardar el calentamiento
+      const cajaB = el("section", "cal-item cal-bloque"), cabB = el("div", "cal-item-cab"), rondasB = Math.max.apply(null, (it.tramos || []).map(t => t.series.length).concat(1));
+      cabB.appendChild(el("strong", "cal-item-n", "Superserie ×" + rondasB + " · " + (it.tramos || []).map(t => nombreEj(t.ejercicio_id) || "Ejercicio eliminado").join(" + ")));
+      const bsB = el("span", "cal-item-bs");
+      const subirB = boton("↑", "nav-btn eb-paso", () => { leerCalentamientoCampos(); [ce.items[i - 1], ce.items[i]] = [ce.items[i], ce.items[i - 1]]; pintarCalentamientoDlg(); }, "Subir la superserie"); subirB.disabled = i === 0;
+      const bajarB = boton("↓", "nav-btn eb-paso", () => { leerCalentamientoCampos(); [ce.items[i + 1], ce.items[i]] = [ce.items[i], ce.items[i + 1]]; pintarCalentamientoDlg(); }, "Bajar la superserie"); bajarB.disabled = i === ce.items.length - 1;
+      bsB.append(subirB, bajarB); cabB.appendChild(bsB); cajaB.appendChild(cabB);
+      (it.tramos || []).forEach(t => cajaB.appendChild(el("p", "eb-nota", nombreEj(t.ejercicio_id) + ": " + t.series.map(v => (n0(v.reps) > 0 ? n0(v.reps) + " reps" : v.max_reps ? "máx" : "") + (n0(v.peso) > 0 ? " · " + num(v.peso) + " kg" : "") + (n0(v.tiempo) > 0 ? " · " + fmtTiempo(v.tiempo) : "") + (n0(v.distancia) > 0 ? " · " + fmtDist(v.distancia) : "")).join(" | "))));
+      cajaB.appendChild(el("p", "eb-nota", "Las superseries no se editan aquí: edítalas en la copia del día o vuelve a guardar el calentamiento. Aquí puedes subirla o bajarla, renombrar, eliminar y aplicar el calentamiento."));
+      lista.appendChild(cajaB); return;
+    }
     const tipo = tipoDe(it.ejercicio_id), campos = CAL_CAMPOS[tipo] || ["reps", "tiempo"];
     const caja = el("section", "cal-item");
     const cab = el("div", "cal-item-cab");
@@ -2336,9 +2358,9 @@ function guardarCalentamientoEditado() {
   const p = db.plantillas[ce.id];
   if (!p || p.borrado) { $("dlgCalent").close(); setEstado("Este calentamiento ya no existe", true); return; }
   let falta = "";
-  ce.items.forEach(it => it.series.forEach((v, j) => { if (!falta && !(n0(v.reps) > 0 || v.max_reps || n0(v.tiempo) > 0 || n0(v.distancia) > 0)) falta = nombreEj(it.ejercicio_id) + " serie " + (j + 1) + ": pon repeticiones, tiempo o distancia"; }));
+  ce.items.filter(it => !it.bloque).forEach(it => it.series.forEach((v, j) => { if (!falta && !(n0(v.reps) > 0 || v.max_reps || n0(v.tiempo) > 0 || n0(v.distancia) > 0)) falta = nombreEj(it.ejercicio_id) + " serie " + (j + 1) + ": pon repeticiones, tiempo o distancia"; }));
   if (err || falta) { msg.textContent = err || falta; return; }
-  const items = ce.items.map(it => ({ ...it, seccion: "Calentamiento", series: it.series.map(v => ({ ...v, calentamiento: true })) }));
+  const items = ce.items.map(it => it.bloque ? { ...it, seccion: "Calentamiento", tramos: it.tramos.map(t => ({ ...t, series: t.series.map(v => ({ ...v, calentamiento: true })) })) } : ({ ...it, seccion: "Calentamiento", series: it.series.map(v => ({ ...v, calentamiento: true })) }));
   const antes = { ...p };
   cambiar("plantillas", { ...p, items });
   $("dlgCalent").close(); pintarCalentamientos(); pintarPlan();
@@ -11479,7 +11501,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v332" + (BETA ? " beta" : "");
+const VERSION_APP = "v333" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

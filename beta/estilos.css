@@ -2992,3 +2992,7 @@ button.ens-ok { min-width: 44px; min-height: 44px; padding: 0; background: trans
 .tr-n { display: inline-flex; align-items: center; flex-wrap: wrap; }
 .ops-fuerza .por-lado:disabled, .ns-extra .por-lado:disabled { opacity: 1; }
 .eb-ej-t .eb-ej-n.tr-nombre { display: inline-block; max-width: 100%; text-align: left; }
+/* v343: etiqueta informativa «↔ Por lado» (solo lectura, sin aspecto de botón) */
+.lado-tag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); font-size: 11px; font-weight: 600; line-height: 1.5; white-space: nowrap; vertical-align: middle; pointer-events: none; user-select: none; }
+.tr-n .lado-tag { margin-left: 4px; }
+.eb-ej-nl { display: inline-flex; align-items: center; flex-wrap: wrap; max-width: 100%; }

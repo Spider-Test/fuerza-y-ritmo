@@ -4249,6 +4249,16 @@ function etiquetaTipo(tipo) {
   return t;
 }
 
+// v343: etiqueta de SOLO LECTURA «↔ Por lado» (creador y «Editar superserie»): informa de lo que dice la ficha; no es un control (ni enfocable ni pulsable).
+// Solo con «por lado» en la ficha y nunca en distancia (que no lleva «por lado»). Se vuelve a pintar al volver de la ficha.
+function etiquetaLado(id) {
+  if (!ladoDe(id) || esDistancia(tipoDe(id))) return null;
+  const t = document.createElement("span");
+  t.className = "lado-tag";
+  t.textContent = "↔ Por lado";
+  return t;
+}
+
 function bloque(dia, id, series, grupo, parte, copia) {
   const idK = copia > 1 ? id + "#" + copia : id;   // clave de esta tarjeta (el mismo ejercicio puede ir dos veces)
   const ej = db.ejercicios[id], tipo = tipoDe(id), dist = esDistancia(tipo), mov = tipo === "movilidad";
@@ -5106,7 +5116,10 @@ function ebNombreBoton(id) {
   b.type = "button"; b.className = "eb-ej-n tr-nombre"; b.textContent = nombreEj(id);
   b.setAttribute("aria-label", "Ver la ficha de " + nombreEj(id));
   b.addEventListener("click", () => abrirFichaDesde("editor", id));
-  return b;
+  const lt = etiquetaLado(id);   // v343: «↔ Por lado» informativo, a continuación del nombre
+  if (!lt) return b;
+  const w = document.createElement("span"); w.className = "eb-ej-nl"; w.append(b, lt);
+  return w;
 }
 // Al volver de la ficha: refresca las series de la base (la ficha puede haber cambiado «por lado» de las pendientes), reconstruye solo las tarjetas
 // cuyo ejercicio cambió de medida o de clase conservando el texto compatible, y quita del borrador lo que se haya eliminado. Nada más del borrador cambia.
@@ -5759,6 +5772,7 @@ function pintarTramos() {
     nBtn.setAttribute("aria-label", "Ver la ficha de " + nombreEj(t.ejercicio_id));
     nBtn.addEventListener("click", () => abrirFichaDesde("creador", t.ejercicio_id));
     nEl.append(nBtn, etiquetaTipo(tipoDe(t.ejercicio_id)));
+    { const lt = etiquetaLado(t.ejercicio_id); if (lt) nEl.append(lt); }   // v343
     t.k = claseEj(t.ejercicio_id);
     const [a, b, cc] = [".in-a", ".in-b", ".in-c"].map(x => fila.querySelector(x));
     const mov = tipoDe(t.ejercicio_id) === "movilidad";
@@ -11779,7 +11793,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v342" + (BETA ? " beta" : "");
+const VERSION_APP = "v343" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

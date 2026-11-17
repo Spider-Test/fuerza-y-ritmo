@@ -2990,5 +2990,5 @@ button.ens-ok { min-width: 44px; min-height: 44px; padding: 0; background: trans
 .tr-nombre { border: 0; background: none; color: inherit; font: inherit; font-weight: 700; text-align: left; padding: 0 4px; min-height: 44px; min-width: 44px; text-decoration: underline dotted; text-underline-offset: 3px; cursor: pointer; }
 .tr-nombre:focus-visible { outline: 2px solid var(--acento, currentColor); outline-offset: 1px; border-radius: 4px; }
 .tr-n { display: inline-flex; align-items: center; flex-wrap: wrap; }
-.tramo .tr-lado, .eb-lado { align-self: flex-start; min-height: 44px; }
 .ops-fuerza .por-lado:disabled, .ns-extra .por-lado:disabled { opacity: 1; }
+.eb-ej-t .eb-ej-n.tr-nombre { display: inline-block; max-width: 100%; text-align: left; }

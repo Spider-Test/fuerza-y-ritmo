@@ -2950,6 +2950,8 @@ button.en-nota { border: 0; text-align: left; font-family: inherit; cursor: poin
 .ens-fila input.ens-ro { background: transparent; border-color: transparent; color: var(--muted); }
 .ens-texto { font-size: 14px; color: var(--muted); overflow-wrap: anywhere; }
 .ens-ok { text-align: center; color: var(--accent); font-weight: 800; font-size: 20px; }
+button.ens-ok { min-width: 44px; min-height: 44px; padding: 0; background: transparent; border-color: transparent; }
+.ens-deshacer { margin-left: 10px; min-height: 36px; padding: 2px 10px; font-size: 13px; }
 .ens-no { text-align: center; color: var(--muted); }
 .ens-hecha { min-width: 44px; min-height: 44px; padding: 0; font-size: 20px; color: var(--accent); }
 .ens-nota { margin: 8px 0 0; font-size: 12px; color: var(--muted); line-height: 1.4; }

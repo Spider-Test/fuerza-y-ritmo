@@ -10959,10 +10959,10 @@ function celebrar() {
   setTimeout(() => { f.classList.remove("on"); f.textContent = ""; }, 1800);
 }
 // Avisa del récord (con celebración) o, si no lo es, de que la serie está hecha; las dos con Deshacer
-function avisarSiPR(fila, deshacer) {
+function avisarSiPR(fila, deshacer, sinAviso) {   // v330: sinAviso (solo desde «Ver todas las series») omite el aviso flotante (también el de récord, que sale en la línea de mensaje de la vista; la celebración se mantiene)
   const pr = hecha(fila) && prsEj(fila.ejercicio_id).has(fila.id);
-  if (pr) { celebrar(); avisoDeshacer("¡Nuevo récord! " + nombreEj(fila.ejercicio_id) + " · " + serieTexto(fila), deshacer, true); }
-  else if (deshacer) avisoDeshacer("Serie hecha · " + nombreEj(fila.ejercicio_id), deshacer);
+  if (pr) { celebrar(); if (!sinAviso) avisoDeshacer("¡Nuevo récord! " + nombreEj(fila.ejercicio_id) + " · " + serieTexto(fila), deshacer, true); }   // desde la vista, el récord se muestra en su línea de mensaje
+  else if (deshacer && !sinAviso) avisoDeshacer("Serie hecha · " + nombreEj(fila.ejercicio_id), deshacer);
   return pr;
 }
 function marcarHecha(antes, fila) {
@@ -10971,10 +10971,10 @@ function marcarHecha(antes, fila) {
   avisarSiPR(fila, [["series", antes]]);
 }
 // Volver a pendiente una serie hecha: deja de contar para récords, volumen y marcas; los objetivos se recalculan
-function desmarcar(s) {
+function desmarcar(s, sinAviso) {
   cambiar("series", { ...s, hecha: false });
   pintarBloques(true);
-  avisoDeshacer("Serie marcada como pendiente · " + nombreEj(s.ejercicio_id), [["series", s]]);
+  if (!sinAviso) avisoDeshacer("Serie marcada como pendiente · " + nombreEj(s.ejercicio_id), [["series", s]]);
 }
 function botonHecha(s, texto, nombre) {
   const b = document.createElement("button");
@@ -11214,7 +11214,7 @@ $("enHecha").addEventListener("click", () => {
   const yaHecha = hecha(s);
   cambiar("series", fila);
   pintarBloques(true);
-  avisarSiPR(fila, [["series", s]]);
+  avisarSiPR(fila, [["series", s]], ent.ensSilencio);
   if (yaHecha) { pintarEntreno(); return; }
   siguientePendiente();
   if (!$("enFin").hidden) return;   // era la última: no hay descanso
@@ -11358,7 +11358,11 @@ function pintarVistaSeries() {
       if (hayKg && ensPesoLibre(s) || hecho && !s.calentamiento && !s.ciclo_id && !(n0(s.pct) > 0)) kIn.addEventListener("focus", () => { ent.ensFuente = s.id; ensActualizarAuto(); });
       f.append(rIn, kIn);
     }
-    if (hecho) f.appendChild(el("span", "ens-ok", "✓"));
+    if (hecho) {   // v330: el ✓ de una fila hecha es pulsable: vuelve a pendiente
+      const bt = el("button", "nav-btn ens-ok", "✓"); bt.type = "button";
+      bt.setAttribute("aria-label", "Hecha: " + (s.calentamiento ? "calentamiento" : (bloque ? "ronda " : "serie ") + n) + ". Pulsa para marcarla como pendiente"); bt.title = "Marcar como pendiente";
+      bt.addEventListener("click", () => ensDesmarcar(s.id)); f.appendChild(bt);
+    }
     else if (kgRep && ensPesoLibre(s)) {
       const bt = el("button", "nav-btn ens-hecha", "✓"); bt.type = "button"; bt.setAttribute("aria-label", "Marcar hecha la " + (bloque ? "ronda " : "serie ") + n);
       bt.addEventListener("click", () => ensConfirmar(s.id)); f.appendChild(bt);
@@ -11376,7 +11380,27 @@ function ensActualizarAuto() {
   b.disabled = i < 0;
   b.textContent = i < 0 ? "Autorrellenar" : "Autorrellenar ↓";
 }
-function ensAviso(t, bien) { const p = document.querySelector("#ensCuerpo .ens-aviso"); if (p) { p.textContent = t; p.classList.toggle("ens-bien", !!bien); } }
+function ensAviso(t, bien, deshacer) {   // v330: el aviso va en línea (con «Deshacer» opcional), sin flotar sobre los controles
+  const p = document.querySelector("#ensCuerpo .ens-aviso");
+  if (!p) return;
+  p.textContent = t; p.classList.toggle("ens-bien", !!bien);
+  if (deshacer) { const b = document.createElement("button"); b.type = "button"; b.className = "nav-btn ens-deshacer"; b.textContent = "Deshacer"; b.addEventListener("click", deshacer); p.appendChild(b); }
+}
+function ensEtiqueta(filas, id) {
+  const fi = filas.findIndex(x => x.id === id), bloque = !!(ent.ensRef && ent.ensRef.bloque_id);
+  return (bloque ? "Ronda " : "Serie ") + (bloque ? n0(filas[fi].ronda) : filas.slice(0, fi + 1).filter(x => !x.calentamiento).length);
+}
+// Volver a pendiente desde la vista: la misma acción que «↺ Marcar como pendiente» (sin aviso flotante); la serie pasa a ser la activa
+function ensDesmarcar(id) {
+  const s = db.series[id], k = ent.cola.indexOf(id);
+  if (!s || !hecha(s) || k < 0) return;
+  ent.i = k;
+  $("enFin").hidden = true;
+  desmarcar(s, true);
+  pintarEntreno();
+  pintarVistaSeries();
+  ensAviso(ensEtiqueta(ensFilas(), id) + " pendiente", true);
+}
 function ensAutorrellenar() {
   const filas = ensFilas(), i = filas.findIndex(x => x.id === ent.ensFuente);
   if (i < 0) { ensAviso("Toca el peso de una serie para elegirla como origen."); return; }
@@ -11391,8 +11415,11 @@ function ensAutorrellenar() {
   pintarBloques(true);
   if (act && destinos.some(x => x.id === act.id)) $("enA").value = num(kg);
   pintarVistaSeries();
-  avisoDeshacer("Autorrellenar: " + destinos.length + (destinos.length === 1 ? " serie" : " series") + " a " + num(kg) + " kg",
-    antes.concat([["fn", () => { if (ent && $("dlgEnSeries").open) pintarVistaSeries(); }]]));
+  ensAviso("Autorrellenar: " + destinos.length + (destinos.length === 1 ? " serie" : " series") + " a " + num(kg) + " kg", true, () => {
+    antes.forEach(([t, f]) => { const c = { ...f }; delete c.sucio; cambiar(t, c, true); });   // igual que el Deshacer del aviso flotante
+    persistir(); pintarTodo(); if (ent) pintarEntreno();
+    pintarVistaSeries(); ensAviso("Autorrellenar deshecho", true);
+  });
 }
 function ensConfirmar(id) {
   const k = ent.cola.indexOf(id);
@@ -11402,15 +11429,17 @@ function ensConfirmar(id) {
   if (b.kg !== undefined) $("enA").value = b.kg;
   if (b.reps !== undefined) $("enB").value = b.reps;
   $("enAviso").textContent = "";
-  $("enHecha").click();   // la misma acción que la pantalla de la serie
+  ent.ensSilencio = true;
+  try { $("enHecha").click(); } finally { ent.ensSilencio = false; }   // la misma acción que la pantalla de la serie, sin el aviso flotante
   const error = $("enAviso").textContent;
   if (error) { ent.i = previa; pintarEntreno(); ensAplicarBorradorActiva(); pintarVistaSeries(); ensAviso(error); return; }
   if (ent.borr) delete ent.borr[id];
   // v329: la vista sigue abierta y ligada a su ocurrencia; se repinta (conserva scroll, borradores y la serie origen de Autorrellenar si sigue en la lista)
-  const filas = ensFilas(), fi = filas.findIndex(x => x.id === id), bloque = !!(ent.ensRef && ent.ensRef.bloque_id), pos = bloque ? n0(filas[fi].ronda) : filas.slice(0, fi + 1).filter(x => !x.calentamiento).length;
+  const filas = ensFilas();
   const fin = !$("enFin").hidden, desc = !$("enDescanso").hidden;
   pintarVistaSeries();
-  ensAviso((bloque ? "Ronda " : "Serie ") + pos + " hecha" + (fin ? " · entreno completado" : desc ? " · descanso en marcha" : "") + (filas.length && filas.every(hecha) ? ". Todas las series de este ejercicio están hechas." : ""), true);
+  const pr = hecha(db.series[id]) && prsEj(db.series[id].ejercicio_id).has(id);
+  ensAviso(ensEtiqueta(filas, id) + " hecha" + (pr ? " · ¡Nuevo récord!" : "") + (fin ? " · entreno completado" : desc ? " · descanso en marcha" : "") + (filas.length && filas.every(hecha) ? ". Todas las series de este ejercicio están hechas." : ""), true);
 }
 $("enSeries").addEventListener("click", () => {
   const s = serieEnt();
@@ -11449,7 +11478,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v329" + (BETA ? " beta" : "");
+const VERSION_APP = "v330" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

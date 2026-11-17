@@ -891,10 +891,14 @@ async function api(ruta, opciones = {}, reintento = false) {
 // Columnas OPCIONALES de ejercicios, que llegan con migraciones posteriores: «medidas» (P6, v262) y «regiones» y «tecnica» (P8, v263, clasificación).
 // Si el servidor aún no las tiene (o se revierten), se detecta en la primera lectura o escritura y, en esta sesión, se sincroniza sin ellas: la
 // app sigue funcionando como antes. Se vuelve a intentar en cada carga de la app. P6 y P8 son independientes (pueden estar una sí y otra no).
+// v340: el mismo mecanismo vale para CUALQUIER tabla de TABLAS. COLUMNAS_OPCIONALES declara, por tabla, las columnas que pueden no existir aún en el
+// servidor (hoy solo las tres de ejercicios; una versión futura que añada una columna a otra tabla la declara aquí) y faltanPorTabla guarda las que
+// el servidor ha rechazado en esta carga. Se reinicia en cada carga de la app.
 let columnaMedidas = true;
-const columnasFaltan = new Set();
-const COLUMNAS_EJ_OPCIONALES = ["medidas", "regiones", "tecnica"];
-const camposDe = t => t === "ejercicios" && columnasFaltan.size ? TABLAS[t].campos.filter(c => !columnasFaltan.has(c)) : TABLAS[t].campos;
+const COLUMNAS_OPCIONALES = { ejercicios: ["medidas", "regiones", "tecnica"] };
+const faltanPorTabla = Object.fromEntries(Object.keys(TABLAS).map(t => [t, new Set()]));
+const columnasFaltan = faltanPorTabla.ejercicios;
+const camposDe = t => faltanPorTabla[t].size ? TABLAS[t].campos.filter(c => !faltanPorTabla[t].has(c)) : TABLAS[t].campos;
 // v263: la clasificación (Región y Técnica) solo se muestra cuando el servidor la soporta. «soporte-p8» recuerda, en este dispositivo, que la
 // última lectura de ejercicios con esas columnas funcionó (así se ve también sin conexión); se pone a false en cuanto el servidor las rechaza.
 let soporteClasif = leerGeneral("soporte-p8") === true;
@@ -905,22 +909,47 @@ function ponerSoporteClasif(v) {
   try { localStorage.setItem(PREFIJO + "soporte-p8", JSON.stringify(v)); } catch { /* sin almacenamiento: solo esta sesión */ }
   if (typeof aplicarClasificacionUI === "function") aplicarClasificacionUI();
 }
-async function faltaColumnaOpcional(r) {
+async function faltaColumnaOpcional(r, tabla = "ejercicios") {
   if (r.ok || r.status !== 400) return false;
   const txt = await r.clone().text().catch(() => "");
-  const col = COLUMNAS_EJ_OPCIONALES.find(c => !columnasFaltan.has(c) && new RegExp("\\b" + c + "\\b").test(txt));
+  // En ejercicios basta con que el texto nombre la columna (como siempre); en el resto de tablas, además, debe ser un error de columna inexistente
+  // («Could not find the 'x' column…», «column t.x does not exist»), para no confundirlo con otro 400 que mencione el nombre.
+  if (tabla !== "ejercicios" && !/could not find|does not exist|PGRST204|42703/i.test(txt)) return false;
+  const col = (COLUMNAS_OPCIONALES[tabla] || []).find(c => !faltanPorTabla[tabla].has(c) && new RegExp("\\b" + c + "\\b").test(txt));
   if (!col) return false;
-  columnasFaltan.add(col);
-  if (col === "medidas") columnaMedidas = false;
-  else ponerSoporteClasif(false);
+  faltanPorTabla[tabla].add(col);
+  if (tabla === "ejercicios") {
+    if (col === "medidas") columnaMedidas = false;
+    else ponerSoporteClasif(false);
+  } else {
+    // Recuerda, en esta cuenta y dispositivo, que el servidor no tenía la columna: cuando aparezca, los valores solo-locales se suben una vez
+    const m = leer("cols-ausentes-v1") || {};
+    if (!m[tabla + "." + col]) { m[tabla + "." + col] = true; escribir("cols-ausentes-v1", m); }
+  }
   return true;
+}
+// Si una columna que faltaba ya existe en el servidor (la lectura con ella ha funcionado), marca como pendientes las filas locales con un valor
+// distinto del por defecto, ANTES de mezclar (si no, el valor nulo del servidor lo borraría), para que se suban una vez. No se aplica a ejercicios.
+function columnasQueVuelven(tabla) {
+  if (tabla === "ejercicios") return;
+  const m = leer("cols-ausentes-v1");
+  if (!m) return;
+  const vuelven = (COLUMNAS_OPCIONALES[tabla] || []).filter(c => m[tabla + "." + c] && !faltanPorTabla[tabla].has(c));
+  if (!vuelven.length) return;
+  Object.values(db[tabla]).forEach(v => {
+    if (v.sucio || v.conflicto) return;
+    if (vuelven.some(c => v[c] !== undefined && v[c] !== null && JSON.stringify(v[c]) !== JSON.stringify(c in DEFECTOS ? DEFECTOS[c] : 0))) v.sucio = true;
+  });
+  guardarLocal();
+  vuelven.forEach(c => delete m[tabla + "." + c]);
+  escribir("cols-ausentes-v1", m);
 }
 // Aislamiento adicional en el cliente; la autorización sigue siendo responsabilidad de RLS.
 function filtroPropietario(tabla) {
   const uid = encodeURIComponent(sesion.user_id);
   return tabla === "ejercicios" ? "&and=(or(user_id.eq." + uid + ",compartido.eq.true))" : "&user_id=eq." + uid;
 }
-async function leerTablaCompleta(tabla, desde = "") {
+async function leerTablaCompleta(tabla, desde = "", reintentos = 0) {
   const campos = [...new Set([...camposDe(tabla), "user_id", "servidor_ts"])];
   const orden = "servidor_ts.asc," + TABLAS[tabla].clave + ".asc";
   const ruta = "/rest/v1/" + tabla + "?select=" + campos.join(",") + "&order=" + orden + filtroPropietario(tabla) + desde;
@@ -931,8 +960,9 @@ async function leerTablaCompleta(tabla, desde = "") {
   // Una página corta tampoco implica final: puede haber un límite menor en Supabase.
   for (;;) {
     const r = await api(ruta + siguiente + "&limit=" + tamano);
-    if (!r.ok && tabla === "ejercicios" && await faltaColumnaOpcional(r)) return leerTablaCompleta(tabla, desde);   // servidor sin P6 o sin P8
+    if (!r.ok && reintentos < 3 && await faltaColumnaOpcional(r, tabla)) return leerTablaCompleta(tabla, desde, reintentos + 1);   // servidor sin una columna opcional (ejercicios: P6/P8)
     if (!r.ok) return { respuesta: r, filas: [] };
+    if (!siguiente) columnasQueVuelven(tabla);
     if (tabla === "ejercicios" && !columnasFaltan.has("regiones") && !columnasFaltan.has("tecnica")) ponerSoporteClasif(true);   // v263: el servidor devolvió las columnas de P8
     const pagina = await r.json();
     if (!Array.isArray(pagina)) throw new Error("Respuesta de sincronización no válida");
@@ -1148,7 +1178,7 @@ function mezclar(tabla, f) {
   if (local && tr === tl && igual()) return false;
   const fila = {};
   camposDe(tabla).forEach(c => { fila[c] = f[c]; });
-  if (tabla === "ejercicios" && local) columnasFaltan.forEach(c => { if (local[c] !== undefined) fila[c] = local[c]; });   // sin P6/P8, se conservan en local
+  if (local) faltanPorTabla[tabla].forEach(c => { if (local[c] !== undefined) fila[c] = local[c]; });   // columna que el servidor no tiene (ejercicios sin P6/P8, etc.): se conserva en local
   fila.actualizado = new Date(tr).toISOString();
   fila.sucio = false;
   db[tabla][k] = fila;
@@ -1598,9 +1628,11 @@ async function sincronizar() {
         }
         const filas = pend.map(v => { const f = {}; camposDe(t).forEach(c => { f[c] = v[c] ?? (c in DEFECTOS ? DEFECTOS[c] : 0); }); f.user_id = t === "ejercicios" ? (v.user_id || sesion.user_id) : sesion.user_id; return f; });   // los ejercicios del catálogo conservan a su dueño
         if (t === "ejercicios") { fallosEjercicios = await subirEjercicios(filas); guardarLocal(); continue; }
-        const w = await api("/rest/v1/" + t + "?on_conflict=" + TABLAS[t].conflicto, {
+        const subir = () => api("/rest/v1/" + t + "?on_conflict=" + TABLAS[t].conflicto, {
           method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify(filas)
         });
+        let w = await subir();
+        for (let k = 0; k < 3 && !w.ok && await faltaColumnaOpcional(w, t); k++) { faltanPorTabla[t].forEach(c => filas.forEach(f => { delete f[c]; })); w = await subir(); }   // servidor sin una columna opcional: se sube sin ella
         if (!w.ok) throw await errorGuardado(t, w);
         filas.forEach(f => { const v = db[t][f[TABLAS[t].clave]]; if (v && v.actualizado === f.actualizado) v.sucio = false; });
         guardarLocal();
@@ -1799,10 +1831,14 @@ function confirmarSemanaConBoton(form) {
 }
 let esperaLetra = leer("espera-letra-v1") || {};
 // Marca que un ejercicio o bloque empieza una letra nueva (C1…) o sigue la anterior (B3…)
+// v342: SOLO tras esta acción (empezar letra nueva / seguir con la anterior) los grupos de letra del ejercicio afectado se pintan desplegados y quedan
+// guardados como abiertos: la numeración cambia, con ella la clave del grupo, y de otro modo el grupo con el que se trabaja saldría plegado.
+let abrirLetrasDe = null;
 function ponerLetraNueva(dia, grupo, clave, espera, v) {
   if (espera) { if (v) esperaLetra[dia.id + "|" + clave] = 1; else delete esperaLetra[dia.id + "|" + clave]; escribir("espera-letra-v1", esperaLetra); }
   else { seriesDeItem(dia.id, grupo, clave).forEach(x => cambiar("series", { ...x, letra_nueva: v }, true)); persistir(); }
-  pintarDia(dia);
+  abrirLetrasDe = { dia: dia.id, clave, previa: !!v };
+  try { pintarDia(dia); } finally { abrirLetrasDe = null; }
 }
 async function editarNota(dia, seriesItem, titulo, claveEspera) {
   const actual = (seriesItem.find(x => x.nota) || {}).nota || (!seriesItem.length && claveEspera ? esperaNota[dia.id + "|" + claveEspera] || "" : "");
@@ -3924,7 +3960,7 @@ function pintarDiaSinAncla(dia) {
         dest.appendChild(el);
       });
       // Con dos letras o más en la parte, cada letra (B1, B2… / C1, C2…) va en su propio desplegable
-      if (porLetra.length > 1) porLetra.forEach(({ letra, items }) => {
+      if (porLetra.length > 1) porLetra.forEach(({ letra, items }, iL) => {
         const lc = document.createElement("div");
         lc.className = "letra-caja";
         lc.dataset.letra = letra;
@@ -3942,6 +3978,10 @@ function pintarDiaSinAncla(dia) {
         items.forEach(x => lc.appendChild(x.el));
         const claveL = "l|" + dia.id + "|" + g.nombre + "|" + p.nombre + "|" + letra;
         const ponerL = pl => { lc.classList.toggle("l-plegada", pl); cabL.setAttribute("aria-expanded", String(!pl)); };
+        if (abrirLetrasDe && abrirLetrasDe.dia === dia.id && gruposPlegados[claveL] !== 0) {   // v342
+          const idxL = porLetra.findIndex(l => l.items.some(x => x.id === abrirLetrasDe.clave));
+          if (idxL >= 0 && (iL === idxL || (abrirLetrasDe.previa && iL === idxL - 1))) { gruposPlegados[claveL] = 0; escribir("grupos-plegados-v1", gruposPlegados); }
+        }
         ponerL(gruposPlegados[claveL] !== 0);
         cabL.addEventListener("click", () => {
           const pl = !lc.classList.contains("l-plegada");
@@ -4133,6 +4173,16 @@ function etiquetaTipo(tipo) {
   const t = document.createElement("span");
   t.className = "tipo-tag t-" + tipo;
   t.textContent = TIPOS[tipo].nombre;
+  return t;
+}
+
+// v343: etiqueta de SOLO LECTURA «↔ Por lado» (creador y «Editar superserie»): informa de lo que dice la ficha; no es un control (ni enfocable ni pulsable).
+// Solo con «por lado» en la ficha y nunca en distancia (que no lleva «por lado»). Se vuelve a pintar al volver de la ficha.
+function etiquetaLado(id) {
+  if (!ladoDe(id) || esDistancia(tipoDe(id))) return null;
+  const t = document.createElement("span");
+  t.className = "lado-tag";
+  t.textContent = "↔ Por lado";
   return t;
 }
 
@@ -4364,7 +4414,8 @@ function bloque(dia, id, series, grupo, parte, copia) {
   // Una línea menos: en fuerza, el descanso y OK van junto a «Reps ▾ · Por lado»
   const opsF = b.querySelector(".ops-fuerza"), filaDesc = b.querySelector(".ns-desc");
   // Fuerza: series junto al nombre; fila «[reps] Reps ▾   [peso] kg»; abajo «Por lado · ⏱ descanso · OK»
-  { const cl = b.querySelector(".por-lado"); if (cl) { if (ladoDe(id) && !series.length) cl.checked = true; cl.closest("label").hidden = true; } }
+  // v341: si la ficha manda «por lado», la casilla se ve marcada (y fija, porque lo que se guarda es siempre «por lado»); sin «por lado» en la ficha sigue oculta
+  { const cl = b.querySelector(".por-lado"); if (cl) { if (ladoDe(id) && !series.length) cl.checked = true; const mando = ladoDe(id); cl.closest("label").hidden = !mando; if (mando) { cl.checked = true; cl.disabled = true; cl.title = "Marcado en la ficha del ejercicio"; } } }
   if (opsF && tipo === "fuerza" && sinCarga(id) && !series.some(cargaGuardada)) {
     b.classList.add("sin-peso");   // Medidas de la ficha; no se infiere carga por el nombre.
     if (medidaDe(id) === "tiempo" && !series.length) ponerPorT(true);
@@ -4940,7 +4991,7 @@ function meterEnBloque(dia, seriesBloque, ejercicioId, sueltas) {
       return;
     }
     const v = venidas.length ? venidas[venidas.length - 1] : base;   // faltan series para esta ronda: planificada, con los valores de la última
-    const fila = { id: nuevoId(), fecha: dia.id, ejercicio_id: ejercicioId, meso_id: b0.meso_id || "", peso: sinCarga(ejercicioId) ? 0 : n0(v.peso), reps: n0(v.reps), distancia: n0(v.distancia), tiempo: n0(v.tiempo), pct: sinCarga(ejercicioId) ? 0 : n0(v.pct), por_lado: !!v.por_lado,
+    const fila = { id: nuevoId(), fecha: dia.id, ejercicio_id: ejercicioId, meso_id: b0.meso_id || "", peso: sinCarga(ejercicioId) ? 0 : n0(v.peso), reps: n0(v.reps), distancia: n0(v.distancia), tiempo: n0(v.tiempo), pct: sinCarga(ejercicioId) ? 0 : n0(v.pct), por_lado: esDistancia(tipoDe(ejercicioId)) ? !!v.por_lado : ladoDe(ejercicioId),   // v342: «por lado» de la ficha
       descanso: n0(v.descanso), rec_dist: n0(v.rec_dist), max_reps: !!v.max_reps, max_tiempo: !!v.max_tiempo, rango_min: n0(v.rango_min), rango_max: n0(v.rango_max),
       ciclo_id: "", calentamiento: false, nota: v.nota || "", hecha: false, borrado: false, ...comun };
     nuevas.push(fila);
@@ -4984,7 +5035,48 @@ function ebTextoValor(s, k, id) {
 function ebBorradorValores(id, filas) {
   const campos = ebCamposValores(id, filas), ini = {};
   campos.forEach(k => { const v = [...new Set(filas.map(s => ebTextoValor(s, k, id)))]; ini[k] = v.length === 1 ? v[0] : ""; });
-  return { campos, ini, texto: { ...ini }, filas };
+  return { campos, ini, texto: { ...ini }, filas, k: claseEj(id) };
+}
+// v342: el nombre de cada ejercicio del editor abre su ficha (sobre el editor, que conserva el borrador)
+function ebNombreBoton(id) {
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "eb-ej-n tr-nombre"; b.textContent = nombreEj(id);
+  b.setAttribute("aria-label", "Ver la ficha de " + nombreEj(id));
+  b.addEventListener("click", () => abrirFichaDesde("editor", id));
+  const lt = etiquetaLado(id);   // v343: «↔ Por lado» informativo, a continuación del nombre
+  if (!lt) return b;
+  const w = document.createElement("span"); w.className = "eb-ej-nl"; w.append(b, lt);
+  return w;
+}
+// Al volver de la ficha: refresca las series de la base (la ficha puede haber cambiado «por lado» de las pendientes), reconstruye solo las tarjetas
+// cuyo ejercicio cambió de medida o de clase conservando el texto compatible, y quita del borrador lo que se haya eliminado. Nada más del borrador cambia.
+function ebTrasFicha() {
+  const e = ebE; if (!e) return;
+  const fresco = seriesDelDia(e.dia.id).filter(x => x.bloque_id === e.bloqueId).sort((a, b) => n0(a.ronda) - n0(b.ronda) || a.orden - b.orden);
+  e.base = fresco;
+  const reconstruir = (id, d, filas, nuevo) => {
+    const nd = ebBorradorValores(id, filas);
+    if (d.k === nd.k) nd.campos.forEach(k => { if (d.campos.includes(k) && (nuevo || d.texto[k] !== d.ini[k])) nd.texto[k] = d.texto[k]; });   // misma clase: se conserva lo escrito en los campos que siguen existiendo
+    return nd;
+  };
+  const quitados = [];
+  e.ejs.slice().forEach(id => {
+    if (!ejercicioVivo(id) || !fresco.some(x => x.ejercicio_id === id)) {
+      quitados.push(id); e.ejs.splice(e.ejs.indexOf(id), 1); e.orden = e.orden.filter(it => it !== id); e.quitar.delete(id); delete e.edicion[id]; return;
+    }
+    const todas = fresco.filter(x => x.ejercicio_id === id), pend = todas.filter(x => !hecha(x) && !x.calentamiento), d = e.edicion[id];
+    const nd = reconstruir(id, d, pend.length ? pend : todas, false); nd.filas = pend;
+    e.edicion[id] = nd;
+  });
+  e.nuevos.slice().forEach(n => {
+    if (!ejercicioVivo(n.id)) { quitados.push(n.id); e.nuevos.splice(e.nuevos.indexOf(n), 1); e.orden = e.orden.filter(it => it !== n); return; }
+    if (n.edicion.k !== claseEj(n.id)) { const f = ebNuevoEjercicio(n.id); n.edicion = f.edicion; return; }
+    const nd = reconstruir(n.id, n.edicion, [n.edicion.base], true); nd.base = n.edicion.base; n.edicion = nd;
+  });
+  if (!e.ejs.length) { $("dlgEditBloque").close(); setEstado("La superserie se ha quedado sin ejercicios al eliminar uno en su ficha. Ábrela de nuevo."); return; }
+  e.conf = false;
+  pintarEditorBloque();
+  if (quitados.length) setEstado("«" + quitados.map(id => db.ejercicios[id] ? db.ejercicios[id].nombre : "Ejercicio").join("», «") + "» ya no existe: se ha quitado del borrador.");
 }
 function ebLeerCampo(k, texto, id) {
   const t = texto.trim().toLowerCase(), numero = /^\d+(?:[.,]\d+)?$/;
@@ -5129,7 +5221,7 @@ function pintarEditorBloque() {
   const filaExistente = id => {
     const li = el("li", "eb-ej"), fuera = e.quitar.has(id), n = e.base.filter(x => x.ejercicio_id === id).length;
     const t = el("div", "eb-ej-t");
-    t.appendChild(el("span", "eb-ej-n", nombreEj(id)));
+    t.appendChild(ebNombreBoton(id));
     t.appendChild(el("span", "eb-ej-d", fuera ? "Se quedará suelto en este entreno con sus " + n + " series, tal como están" : n + (n === 1 ? " serie" : " series")));
     li.appendChild(t);
     if (!fuera) {
@@ -5145,7 +5237,7 @@ function pintarEditorBloque() {
   const filaNueva = nuevo => {
     const id = nuevo.id;
     const li = el("li", "eb-ej eb-nuevo"), t = el("div", "eb-ej-t");
-    t.appendChild(el("span", "eb-ej-n", nombreEj(id)));
+    t.appendChild(ebNombreBoton(id));
     t.appendChild(el("span", "eb-ej-d", "Nuevo · una serie en cada una de las " + e.n + " rondas"));
     ebCamposDibujo(t, id, nuevo.edicion, true);
     li.appendChild(t);
@@ -5238,7 +5330,7 @@ function guardarEditorBloque() {
   e.nuevos.forEach(nuevo => {
     const id = nuevo.id, v = { ...nuevo.edicion.base, ...ebParcheValores(id, nuevo.edicion, true).valores };
     rondasAct().forEach(r => {
-      const f = { id: nuevoId(), fecha: dia.id, ejercicio_id: id, meso_id: b0.meso_id || "", peso: n0(v.peso), reps: n0(v.reps), distancia: n0(v.distancia), tiempo: n0(v.tiempo), pct: n0(v.pct), por_lado: !!v.por_lado,
+      const f = { id: nuevoId(), fecha: dia.id, ejercicio_id: id, meso_id: b0.meso_id || "", peso: n0(v.peso), reps: n0(v.reps), distancia: n0(v.distancia), tiempo: n0(v.tiempo), pct: n0(v.pct), por_lado: esDistancia(tipoDe(id)) ? !!v.por_lado : ladoDe(id),   // v342: «por lado» lo manda la ficha, con su valor actual al guardar
         descanso: n0(v.descanso), rec_dist: n0(v.rec_dist), max_reps: !!v.max_reps, max_tiempo: !!v.max_tiempo, rango_min: n0(v.rango_min), rango_max: n0(v.rango_max),
         ciclo_id: "", calentamiento: false, nota: v.nota || "", hecha: false, borrado: false, grupo: b0.grupo || "", seccion: b0.seccion || "", bloque_id: e.bloqueId, ronda: r, orden: orden++, letra_nueva: !!b0.letra_nueva, copia: 0 };
       trab.set(f.id, f); rangoNuevo.set(f.id, nuevo); nNuevas++;
@@ -5623,8 +5715,15 @@ function pintarTramos() {
       '<div class="ns-fila"><input class="in-a" autocomplete="off"><span class="por"></span><input class="in-b" autocomplete="off"><button type="button" class="medida-btn tr-medida" hidden>Reps ▾</button><button type="button" class="modo tr-modo" hidden aria-label="Cambiar entre kg y % del 1RM">kg</button></div>' +
       '<p class="calc tr-calc" hidden></p>' +
       '<input class="in-c" inputmode="decimal" autocomplete="off" placeholder="⏱ descanso después: 1,30 o 300 m" aria-label="Descanso después de este tramo (tiempo o metros); en el último, es el descanso entre rondas">';
-    fila.querySelector(".tr-n").textContent = (k + 1) + ". " + nombreEj(t.ejercicio_id);
-    fila.querySelector(".tr-n").appendChild(etiquetaTipo(tipoDe(t.ejercicio_id)));
+    // v341 (INC-BLQ): el nombre del tramo abre la ficha del ejercicio (sobre el creador; al cerrarla se vuelve aquí con los valores intactos)
+    const nEl = fila.querySelector(".tr-n"), nBtn = document.createElement("button");
+    nEl.append((k + 1) + ". ");
+    nBtn.type = "button"; nBtn.className = "tr-nombre"; nBtn.textContent = nombreEj(t.ejercicio_id);
+    nBtn.setAttribute("aria-label", "Ver la ficha de " + nombreEj(t.ejercicio_id));
+    nBtn.addEventListener("click", () => abrirFichaDesde("creador", t.ejercicio_id));
+    nEl.append(nBtn, etiquetaTipo(tipoDe(t.ejercicio_id)));
+    { const lt = etiquetaLado(t.ejercicio_id); if (lt) nEl.append(lt); }   // v343
+    t.k = claseEj(t.ejercicio_id);
     const [a, b, cc] = [".in-a", ".in-b", ".in-c"].map(x => fila.querySelector(x));
     const mov = tipoDe(t.ejercicio_id) === "movilidad";
     const fza = !dist && !mov, med = fza ? medidaDe(t.ejercicio_id) : "";
@@ -5672,6 +5771,35 @@ function pintarTramos() {
     cont.appendChild(fila);
   });
 }
+// v341: ficha del ejercicio abierta desde el creador de superseries. El creador (otro diálogo) sigue abierto debajo y conserva los tramos; al cerrarla
+// se repintan los tramos para reflejar lo que haya cambiado (nombre, tipo/medida, «por lado»). Si el ejercicio cambia de clase (distancia / movilidad /
+// fuerza), los valores escritos de ese tramo no significarían lo mismo y se vacían.
+// Mecanismo común (creador de superseries y «Editar superserie»): la ficha se abre sobre el diálogo de origen, que sigue abierto debajo con su borrador;
+// al cerrarla se vuelve a él y se refresca lo que la ficha haya cambiado.
+let fichaDesde = null;   // "creador" | "editor" | null
+const claseEj = id => esDistancia(tipoDe(id)) ? "d" : tipoDe(id) === "movilidad" ? "m" : "f";   // distancia / movilidad / fuerza: si cambia, los valores escritos ya no significan lo mismo
+function abrirFichaDesde(origen, id) {
+  if (!ejercicioVivo(id)) return;
+  fichaDesde = origen;
+  abrirDetalle(id);
+}
+function volverDeFicha() {
+  if (!fichaDesde || $("detalle").open) return;
+  const o = fichaDesde; fichaDesde = null;
+  if (o === "creador" && $("dlgBloque").open) volverAlCreador();
+  else if (o === "editor" && $("dlgEditBloque").open) ebTrasFicha();
+}
+function volverAlCreador() {
+  tramos = tramos.filter(t => ejercicioVivo(t.ejercicio_id));
+  tramos.forEach(t => {
+    const k = claseEj(t.ejercicio_id);
+    if (t.k && t.k !== k) { t.a = ""; t.b = ""; delete t.m; delete t.p; }
+  });
+  pintarTramos();
+}
+$("detalle").addEventListener("close", volverDeFicha);
+// Red de seguridad: si por cualquier motivo el navegador no emitiera «close» al cerrar la ficha, el primer gesto sobre el diálogo de origen la sincroniza.
+["pointerdown", "focusin"].forEach(ev => ["dlgBloque", "dlgEditBloque"].forEach(d => $(d).addEventListener(ev, volverDeFicha, true)));
 $("blqAnadir").addEventListener("click", () => abrirSelector(diaBloque, id => {
   const h = seriesDe(id), u = h[h.length - 1];
   const dist = esDistancia(tipoDe(id)), mov = tipoDe(id) === "movilidad";
@@ -5707,12 +5835,13 @@ $("blqCrear").addEventListener("click", () => {
     } else if (tipoDe(t.ejercicio_id) === "movilidad") {
       v.reps = parseInt(t.a, 10) || 0;
       v.tiempo = leerSegs(t.b);
+      v.por_lado = ladoDe(t.ejercicio_id);   // v342
       if (isNaN(v.tiempo) || (!(v.reps > 0) && !(v.tiempo > 0))) { aviso.textContent = "Pon las repeticiones o el tiempo del tramo " + (k + 1) + "."; return; }
     } else {
       const conPct = t.p || /%\s*$/.test(String(t.a));
       v.peso = parseFloat((String(t.a).trim().replace(/\s*%\s*$/, "") || "0").replace(",", "."));
       if (conPct && v.peso > 0) { v.pct = v.peso; v.peso = kgDePct(t.ejercicio_id, v.pct); }   // v251: sin 1RM en la ficha se guarda el % (sin kg)
-      if (ladoDe(t.ejercicio_id)) v.por_lado = true;
+      v.por_lado = ladoDe(t.ejercicio_id);   // v342: lo manda solo la ficha (valor actual al crear)
       if (!(v.peso >= 0)) { aviso.textContent = "Revisa el peso del tramo " + (k + 1) + "."; return; }
       const esMx = t.m === "maxr" || t.m === "maxt" || /^\s*(m[aá]x|amrap|fallo)/i.test(t.b);
       if (t.m === "t" || t.m === "maxt" || !t.m && medidaDe(t.ejercicio_id) === "tiempo") {
@@ -11611,7 +11740,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v312" + (BETA ? " beta" : "");
+const VERSION_APP = "v313" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

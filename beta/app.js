@@ -11306,7 +11306,8 @@ function ensKgReps(s) {
 }
 // Peso libre en kg: ni calentamiento, ni peso de ciclo/Bilbo, ni porcentaje del RM
 const ensPesoLibre = s => ensKgReps(s) && !s.calentamiento && !s.ciclo_id && !(n0(s.pct) > 0);
-const ensFilas = () => { const s = serieEnt(); return s ? ocurrenciaNotaEntreno(s).filter(x => !x.borrado).sort(sOrden) : []; };
+// v329: la vista queda ligada a la ocurrencia con la que se abrió (ent.ensRef); no cambia de ejercicio aunque la acción «Hecha» avance a otra serie
+const ensFilas = () => { const r = ent && ent.ensRef; return r ? ocurrenciaNotaEntreno(r).filter(x => !x.borrado).sort(sOrden) : []; };
 function ensAplicarBorradorActiva() {
   const s = serieEnt(), b = s && ent.borr && ent.borr[s.id];
   if (!b || hecha(s) || !ensPesoLibre(s)) return;
@@ -11314,13 +11315,14 @@ function ensAplicarBorradorActiva() {
   if (b.reps !== undefined) $("enB").value = b.reps;
 }
 function pintarVistaSeries() {
-  const cuerpo = $("ensCuerpo"), filas = ensFilas(), act = serieEnt(), desp = $("dlgEnSeries").scrollTop;
-  if (!act || !filas.length) { $("dlgEnSeries").close(); return; }
+  const cuerpo = $("ensCuerpo"), filas = ensFilas(), base = ent && ent.ensRef, desp = $("dlgEnSeries").scrollTop;
+  if (!ent || !base || !filas.length) { if ($("dlgEnSeries").open) $("dlgEnSeries").close(); return; }
+  const activa = serieEnt(), act = activa && filas.some(x => x.id === activa.id) ? activa : filas.find(x => !hecha(x)) || null;   // resaltada: la activa si es de esta ocurrencia; si no, la primera pendiente
   const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt !== undefined) x.textContent = txt; return x; };
   cuerpo.textContent = "";
-  const nombre = nombreEj(act.ejercicio_id), bloque = !!act.bloque_id;
+  const nombre = nombreEj(base.ejercicio_id), bloque = !!base.bloque_id;
   cuerpo.appendChild(el("p", "ens-ej", nombre));
-  cuerpo.appendChild(el("p", "ens-sub", (bloque ? "Superserie · " + filas.length + (filas.length === 1 ? " ronda" : " rondas") + " · " : "") + (act.grupo || "Entreno") + (act.seccion ? " · " + act.seccion : "")));
+  cuerpo.appendChild(el("p", "ens-sub", (bloque ? "Superserie · " + filas.length + (filas.length === 1 ? " ronda" : " rondas") + " · " : "") + (base.grupo || "Entreno") + (base.seccion ? " · " + base.seccion : "")));
   const hayKg = filas.some(ensPesoLibre);
   const cab = el("div", "ens-fila ens-cab");
   cab.append(el("span", "", bloque ? "Ronda" : "Serie"), el("span", "", "Reps"));
@@ -11336,7 +11338,7 @@ function pintarVistaSeries() {
   filas.forEach(s => {
     n += s.calentamiento ? 0 : 1;
     const f = el("div", "ens-fila"); f.dataset.sid = s.id;
-    if (s.id === act.id) f.classList.add("ens-activa");
+    if (act && s.id === act.id) f.classList.add("ens-activa");
     const kgRep = ensKgReps(s), hecho = hecha(s), b = (ent.borr && ent.borr[s.id]) || {};
     f.appendChild(el("span", "ens-n", s.calentamiento ? "Cal." : bloque ? "R" + n0(s.ronda || n) : String(n)));
     if (!kgRep) {   // otras medidas: solo lectura (se editan en la pantalla de la serie)
@@ -11364,7 +11366,7 @@ function pintarVistaSeries() {
     cuerpo.appendChild(f);
   });
   cuerpo.appendChild(el("p", "ens-nota", "Escribir aquí no confirma nada: lo escrito es un borrador hasta que pulses ✓ en esa serie (hace lo mismo que «✓ Hecha» de la pantalla de la serie)." + (hayKg ? " «Autorrellenar» copia el peso de la serie elegida a las series pendientes de debajo (no toca hechas, reps ni notas)." : "")));
-  cuerpo.appendChild(el("p", "aviso ens-aviso", ""));
+  const pie = el("p", "aviso ens-aviso", filas.every(hecha) ? "Todas las series de este ejercicio están hechas. Cierra esta ventana cuando quieras." : ""); if (filas.every(hecha)) pie.classList.add("ens-bien"); cuerpo.appendChild(pie);
   $("dlgEnSeries").scrollTop = desp;
   ensActualizarAuto();
 }
@@ -11374,7 +11376,7 @@ function ensActualizarAuto() {
   b.disabled = i < 0;
   b.textContent = i < 0 ? "Autorrellenar" : "Autorrellenar ↓";
 }
-function ensAviso(t) { const p = document.querySelector("#ensCuerpo .ens-aviso"); if (p) p.textContent = t; }
+function ensAviso(t, bien) { const p = document.querySelector("#ensCuerpo .ens-aviso"); if (p) { p.textContent = t; p.classList.toggle("ens-bien", !!bien); } }
 function ensAutorrellenar() {
   const filas = ensFilas(), i = filas.findIndex(x => x.id === ent.ensFuente);
   if (i < 0) { ensAviso("Toca el peso de una serie para elegirla como origen."); return; }
@@ -11404,7 +11406,11 @@ function ensConfirmar(id) {
   const error = $("enAviso").textContent;
   if (error) { ent.i = previa; pintarEntreno(); ensAplicarBorradorActiva(); pintarVistaSeries(); ensAviso(error); return; }
   if (ent.borr) delete ent.borr[id];
-  $("dlgEnSeries").close();
+  // v329: la vista sigue abierta y ligada a su ocurrencia; se repinta (conserva scroll, borradores y la serie origen de Autorrellenar si sigue en la lista)
+  const filas = ensFilas(), fi = filas.findIndex(x => x.id === id), bloque = !!(ent.ensRef && ent.ensRef.bloque_id), pos = bloque ? n0(filas[fi].ronda) : filas.slice(0, fi + 1).filter(x => !x.calentamiento).length;
+  const fin = !$("enFin").hidden, desc = !$("enDescanso").hidden;
+  pintarVistaSeries();
+  ensAviso((bloque ? "Ronda " : "Serie ") + pos + " hecha" + (fin ? " · entreno completado" : desc ? " · descanso en marcha" : "") + (filas.length && filas.every(hecha) ? ". Todas las series de este ejercicio están hechas." : ""), true);
 }
 $("enSeries").addEventListener("click", () => {
   const s = serieEnt();
@@ -11417,6 +11423,7 @@ $("enSeries").addEventListener("click", () => {
     if (Object.keys(b).length) ent.borr[s.id] = { ...(ent.borr[s.id] || {}), ...b };
   }
   ent.ensFuente = null;
+  ent.ensRef = { ...s };   // identidad de la ocurrencia con la que se abre la vista
   pintarVistaSeries();
   $("dlgEnSeries").showModal();
 });
@@ -11442,7 +11449,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v328" + (BETA ? " beta" : "");
+const VERSION_APP = "v329" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

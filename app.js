@@ -1906,6 +1906,58 @@ document.addEventListener("pointerdown", e => {
 window.addEventListener("blur", terminarModoOrden);
 document.addEventListener("visibilitychange", () => { if (document.hidden) terminarModoOrden(); });
 
+// ---------- MEJ-UI-021 (v334): una sola fila fija bajo la cabecera del día con el desplegable más profundo que sigue abierto y se ha desplazado fuera de la vista ----------
+// Los encabezados de entreno y parte no son sticky (en móvil «solo el día queda fijo» y en escritorio nunca lo fueron), así que esta fila la gestiona JS: efímera, sin datos,
+// sin tocar el scroll (solo lee posiciones). Muestra «Entreno › Parte», con «Plegar» (misma acción que pulsar su título) y, al tocar el nombre, vuelve a ese encabezado.
+// Al plegarlo pasa a mostrar el del padre; al salir del contenedor desaparece. Se oculta con Reordenar, arrastre, ventanas, zoom con pellizco o mientras se escribe.
+const ctxFijo = (() => {
+  const barra = document.createElement("div"), ruta = document.createElement("button"), plegar = document.createElement("button"), sonda = document.createElement("div");
+  barra.id = "ctxFijo"; barra.className = "ctx-fijo"; barra.hidden = true; barra.setAttribute("role", "group"); barra.setAttribute("aria-label", "Desplegable abierto");
+  ruta.type = "button"; ruta.className = "ctx-ruta"; plegar.type = "button"; plegar.className = "ctx-plegar"; plegar.textContent = "Plegar ▴";
+  sonda.className = "ctx-sonda"; sonda.setAttribute("aria-hidden", "true");
+  barra.append(ruta, plegar); document.body.append(barra, sonda);
+  let cab = null, pendiente = false;   // cab: encabezado representado
+  const nombre = (el, sel) => { const x = el && el.querySelector(sel); return x ? x.textContent.trim() : ""; };
+  const ocultar = () => { if (!barra.hidden) barra.hidden = true; cab = null; };
+  function actualizar() {
+    pendiente = false;
+    const vista = $("vistaSemana");
+    const foco = document.activeElement;
+    if (!vista || vista.offsetParent === null || document.querySelector("dialog[open]") || zonaReordenar || arrastreActivo || vista.querySelector(".reordenando") ||
+        (window.visualViewport && visualViewport.scale > 1.02) || (foco && foco !== document.body && vista.contains(foco) && foco.matches("input, textarea, [contenteditable]"))) return ocultar();
+    const tope = sonda.getBoundingClientRect().top;
+    const dia = [...vista.querySelectorAll(".dia:not(.plegado)")].find(d => { const r = d.getBoundingClientRect(); return r.top <= tope + 1 && r.bottom > tope + 60; });
+    if (!dia) return ocultar();
+    const dr = dia.getBoundingClientRect(), dcab = dia.querySelector(":scope > .dia-cab"), cr0 = dcab && dcab.getBoundingClientRect();
+    const cs0 = dcab && getComputedStyle(dcab), pegada = cs0 && cs0.position === "sticky" ? parseFloat(cs0.top) || 0 : null;
+    const L = pegada !== null && Math.abs(cr0.top - pegada) <= 2 ? cr0.bottom : tope;   // debajo de la cabecera del día si está fijada (en escritorio su «top» propio)
+    let mejor = null, prof = -1;
+    dia.querySelectorAll(".grupo:not(.g-plegado) > .grupo-cab, .parte-caja:not(.p-plegada) > .parte-cab").forEach(h => {
+      const r = h.getBoundingClientRect(), c = h.parentElement.getBoundingClientRect();
+      if (!(r.height > 0) || r.bottom > L + 2 || c.bottom <= L + 46) return;   // solo los que se han ido por arriba y cuyo contenedor sigue bajo la fila
+      let d = 0; for (let e = h; e && e !== dia; e = e.parentElement) d++;
+      if (d >= prof) { prof = d; mejor = h; }
+    });
+    if (!mejor) return ocultar();
+    cab = mejor;
+    const esParte = mejor.classList.contains("parte-cab"), grupo = mejor.closest(".grupo");
+    const g = nombre(grupo && grupo.querySelector(":scope > .grupo-cab"), ".gn-txt") || nombre(grupo && grupo.querySelector(":scope > .grupo-cab"), ".g-nombre"), p = esParte ? nombre(mejor, ".p-nombre") : "";
+    const texto = [g, p].filter(Boolean).join(" › ") || "Desplegable abierto";
+    if (ruta.textContent !== texto) { ruta.textContent = texto; ruta.title = texto; ruta.setAttribute("aria-label", "Ir al encabezado: " + texto); plegar.setAttribute("aria-label", "Plegar " + (p || g)); }
+    barra.style.left = dr.left + "px"; barra.style.width = dr.width + "px"; barra.style.top = L + "px";
+    if (barra.hidden) barra.hidden = false;
+  }
+  const pedir = () => { if (!pendiente) { pendiente = true; requestAnimationFrame(actualizar); } };
+  plegar.addEventListener("click", () => { const t = cab && cab.querySelector(".p-toggle, .g-toggle"); if (t) { t.click(); pedir(); setTimeout(pedir, 120); } });
+  ruta.addEventListener("click", () => { if (!cab) return; const L = barra.getBoundingClientRect().bottom; window.scrollTo({ top: window.scrollY + cab.getBoundingClientRect().top - L - 2, behavior: "auto" }); pedir(); });
+  addEventListener("scroll", pedir, { passive: true }); addEventListener("resize", pedir);
+  if (window.visualViewport) visualViewport.addEventListener("resize", pedir);
+  document.addEventListener("click", () => setTimeout(pedir, 60), true);
+  document.addEventListener("focusin", pedir); document.addEventListener("focusout", () => setTimeout(pedir, 0));
+  new MutationObserver(pedir).observe($("vistaSemana"), { subtree: true, childList: true, attributes: true, attributeFilter: ["class", "hidden"] });
+  return { pedir };
+})();
+
 // ---------- Semana ----------
 const dias = DIAS.map((_, i) => {
   const col = document.createElement("section");
@@ -2169,24 +2221,25 @@ async function guardarPlantilla(nombreSugerido, series) {
 // y cuyas series llevan TODAS la marca `calentamiento`. Al guardarlo se fuerza esa marca y la parte «Calentamiento»; así se distingue de una plantilla normal sin
 // ningún campo nuevo y las versiones anteriores lo tratan como una plantilla más (con las series ya marcadas). Se aplica como COPIA: series nuevas (otros id) al
 // principio del entreno, con la marca de calentamiento (fuera de récords y estadísticas); editarlas no toca la plantilla y borrar la plantilla no toca las copias.
-const esPlantillaCalentamiento = p => { const it = (p && p.items) || []; return it.length > 0 && it.every(x => !x.bloque && Array.isArray(x.series) && x.series.length > 0 && x.series.every(v => !!v.calentamiento)); };
+const esPlantillaCalentamiento = p => {   // v333: también con superseries (items {bloque, tramos}); una plantilla normal con superseries (series sin marca) no cuenta
+  const it = (p && p.items) || [], marcadas = ss => Array.isArray(ss) && ss.length > 0 && ss.every(v => !!v.calentamiento);
+  return it.length > 0 && it.every(x => x.bloque ? Array.isArray(x.tramos) && x.tramos.length > 0 && x.tramos.every(t => marcadas(t.series)) : marcadas(x.series));
+};
 // v274: «Guardar calentamiento…» está en el menú ⋯ de cada PARTE cuyo nombre contiene «calentamiento» (o «warm-up»): guarda solo lo de esa parte; si hay varias, cada una por separado
 async function guardarCalentamientoParte(dia, grupo, parte) {
   const todas = seriesDelDia(dia.id).filter(s => (s.grupo || "") === grupo && (s.seccion || "") === parte).sort((a, b) => a.orden - b.orden);
-  const warm = todas.filter(s => !s.bloque_id), deBloque = todas.filter(s => s.bloque_id);
-  if (!warm.length) { avisoImportante("No se puede guardar", deBloque.length ? "Esta parte solo tiene superseries y el calentamiento guardado no admite superseries. Añade ejercicios sueltos a la parte para guardarla." : "Esta parte no tiene ejercicios con series que guardar."); return; }
-  if (deBloque.length) {
-    const nB = new Set(deBloque.map(x => x.bloque_id)).size, nEj = new Set(warm.map(x => x.ejercicio_id)).size;
-    const ok = await confirmar("Esta parte incluye superseries", "El calentamiento guardado no admite superseries. Se guardarán las " + warm.length + (warm.length === 1 ? " serie suelta" : " series sueltas") + " (" + nEj + (nEj === 1 ? " ejercicio" : " ejercicios") + ") y NO se guardarán " + nB + (nB === 1 ? " superserie" : " superseries") + " con " + deBloque.length + (deBloque.length === 1 ? " serie" : " series") + ". La parte no cambia.", "Guardar sin las superseries");
-    if (!ok) return;
-  }
-  const nombre = await pedirNombre("Guardar calentamiento", parte + (grupo ? " · " + grupo : ""), "Se guarda una copia ordenada de esta parte con sus ejercicios, repeticiones, tiempo, distancia, peso, descansos y notas. Si ya tienes un calentamiento guardado con este nombre, se reemplaza.");
+  if (!todas.length) { avisoImportante("No se puede guardar", "Esta parte no tiene ejercicios con series que guardar."); return; }
+  const nombre = await pedirNombre("Guardar calentamiento", parte + (grupo ? " · " + grupo : ""), "Se guarda una copia ordenada de esta parte (también sus superseries) con sus ejercicios, repeticiones, tiempo, distancia, peso, descansos y notas. Si ya tienes un calentamiento guardado con este nombre, se reemplaza.");
   if (!nombre) return;
   const existe = vivos("plantillas").find(p => norm(p.nombre) === norm(nombre));
   if (existe && !esPlantillaCalentamiento(existe)) { setEstado("Ya hay una plantilla normal con ese nombre; elige otro para el calentamiento", true); return; }
-  const items = itemsDe(warm).map(it => ({ ejercicio_id: it.ejercicio_id, seccion: "Calentamiento", series: it.series.map(v => ({ ...v, calentamiento: true })) }));
+  // v333: las superseries se guardan como items {bloque: true, tramos} (mismo formato que las plantillas normales), en el orden de la parte; todas las series con la marca de calentamiento
+  const marca = v => ({ ...v, calentamiento: true });
+  const items = itemsDe(todas).map(it => it.bloque
+    ? { bloque: true, seccion: "Calentamiento", tramos: it.tramos.map(t => ({ ejercicio_id: t.ejercicio_id, series: t.series.map(marca) })) }
+    : { ejercicio_id: it.ejercicio_id, seccion: "Calentamiento", series: it.series.map(marca) });
   cambiar("plantillas", { id: existe ? existe.id : nuevoId(), nombre, items, borrado: false });
-  setEstado("Calentamiento «" + nombre + "» guardado (" + contarSeries(items) + " series)" + (deBloque.length ? " · sin las superseries de la parte" : ""));
+  setEstado("Calentamiento «" + nombre + "» guardado (" + contarSeries(items) + " series)");
 }
 function elegirCalentamientoGuardado(dia, grupo) {
   const ps = vivos("plantillas").filter(esPlantillaCalentamiento).sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
@@ -2196,19 +2249,29 @@ function elegirCalentamientoGuardado(dia, grupo) {
 function aplicarCalentamiento(dia, grupo, p) {
   const f = dia.id, delGrupo = seriesDelDia(f).filter(s => (s.grupo || "") === grupo);
   const parte = nombresPartes(f, grupo).find(esNombreCalentamiento) || "Calentamiento";
-  const items = (p.items || []).filter(it => ejercicioVivo(it.ejercicio_id) && !it.bloque), n = contarSeries(items);
+  // v333: también las superseries (copia con id nuevos de series y de bloque; mismas rondas, orden y descansos)
+  const items = (p.items || []).map(it => it.bloque ? { ...it, tramos: (it.tramos || []).filter(t => ejercicioVivo(t.ejercicio_id) && (t.series || []).length) } : it)
+    .filter(it => it.bloque ? it.tramos.length : ejercicioVivo(it.ejercicio_id));
+  const rondasDe = it => Math.max.apply(null, it.tramos.map(t => t.series.length));
+  const n = items.reduce((s, it) => s + (it.bloque ? rondasDe(it) * it.tramos.length : it.series.length), 0);
   if (!n) { setEstado("El calentamiento guardado ya no tiene ejercicios disponibles", true); return; }
   const base = (delGrupo.length ? Math.min(...delGrupo.map(s => n0(s.orden))) : Date.now()) - n - 1;   // todas antes de lo que ya hay en el entreno
   const creadas = []; let k = 0;
+  const nueva = (ejercicio_id, v, extra) => {
+    const fila = Object.assign({ id: nuevoId(), fecha: f, ejercicio_id, orden: base + k++, peso: n0(v.peso), reps: n0(v.reps), distancia: n0(v.distancia), tiempo: n0(v.tiempo),
+      descanso: n0(v.descanso), rec_dist: n0(v.rec_dist), pct: n0(v.pct), ciclo_id: v.bilbo ? "auto" : "", calentamiento: true, por_lado: !!v.por_lado, nota: v.nota || "", letra_nueva: false,
+      max_tiempo: !!v.max_tiempo, max_reps: !!v.max_reps, rango_min: n0(v.rango_min), rango_max: n0(v.rango_max), hecha: false, meso_id: "", grupo, seccion: parte, bloque_id: "", ronda: 0, copia: 0, borrado: false }, extra);
+    creadas.push(fila); cambiar("series", fila, true);
+  };
   items.forEach(it => {
+    if (it.bloque) {
+      const bloque_id = nuevoId(), rondas = rondasDe(it);
+      for (let r = 0; r < rondas; r++) it.tramos.forEach(t => nueva(t.ejercicio_id, t.series[r] || t.series[t.series.length - 1], { bloque_id, ronda: r + 1 }));
+      return;
+    }
     const usadas = delGrupo.concat(creadas).filter(s => s.ejercicio_id === it.ejercicio_id && !s.bloque_id && (s.seccion || "") === parte).map(s => n0(s.copia) > 1 ? n0(s.copia) : 1);
     const copia = usadas.length ? Math.max(...usadas) + 1 : 0;   // si ya hay ese ejercicio en el calentamiento, otra tarjeta (no se mezclan)
-    it.series.forEach(v => {
-      const fila = { id: nuevoId(), fecha: f, ejercicio_id: it.ejercicio_id, orden: base + k++, peso: n0(v.peso), reps: n0(v.reps), distancia: n0(v.distancia), tiempo: n0(v.tiempo),
-        descanso: n0(v.descanso), rec_dist: n0(v.rec_dist), pct: n0(v.pct), ciclo_id: v.bilbo ? "auto" : "", calentamiento: true, por_lado: !!v.por_lado, nota: v.nota || "", letra_nueva: false,
-        max_tiempo: !!v.max_tiempo, max_reps: !!v.max_reps, rango_min: n0(v.rango_min), rango_max: n0(v.rango_max), hecha: false, meso_id: "", grupo, seccion: parte, bloque_id: "", ronda: 0, copia, borrado: false };
-      creadas.push(fila); cambiar("series", fila, true);
-    });
+    it.series.forEach(v => nueva(it.ejercicio_id, v, { copia }));
   });
   const kp = f + "|" + grupo;
   if (ordenPartes[kp] && !ordenPartes[kp].includes(parte)) ordenPartes[kp] = [parte, ...ordenPartes[kp]];   // la parte nueva va la primera
@@ -2267,6 +2330,17 @@ function pintarCalentamientoDlg() {
   cuerpo.appendChild(el("p", "eb-nota", "Edita ejercicios y valores y pulsa «Guardar cambios». Las copias ya añadidas a tus entrenos no cambian. Todas las series se guardan como calentamiento (fuera de récords y estadísticas)."));
   const lista = el("div", "cal-items");
   ce.items.forEach((it, i) => {
+    if (it.bloque) {   // v333: las superseries se ven (solo lectura): se editan en la copia del día o volviendo a guardar el calentamiento
+      const cajaB = el("section", "cal-item cal-bloque"), cabB = el("div", "cal-item-cab"), rondasB = Math.max.apply(null, (it.tramos || []).map(t => t.series.length).concat(1));
+      cabB.appendChild(el("strong", "cal-item-n", "Superserie ×" + rondasB + " · " + (it.tramos || []).map(t => nombreEj(t.ejercicio_id) || "Ejercicio eliminado").join(" + ")));
+      const bsB = el("span", "cal-item-bs");
+      const subirB = boton("↑", "nav-btn eb-paso", () => { leerCalentamientoCampos(); [ce.items[i - 1], ce.items[i]] = [ce.items[i], ce.items[i - 1]]; pintarCalentamientoDlg(); }, "Subir la superserie"); subirB.disabled = i === 0;
+      const bajarB = boton("↓", "nav-btn eb-paso", () => { leerCalentamientoCampos(); [ce.items[i + 1], ce.items[i]] = [ce.items[i], ce.items[i + 1]]; pintarCalentamientoDlg(); }, "Bajar la superserie"); bajarB.disabled = i === ce.items.length - 1;
+      bsB.append(subirB, bajarB); cabB.appendChild(bsB); cajaB.appendChild(cabB);
+      (it.tramos || []).forEach(t => cajaB.appendChild(el("p", "eb-nota", nombreEj(t.ejercicio_id) + ": " + t.series.map(v => (n0(v.reps) > 0 ? n0(v.reps) + " reps" : v.max_reps ? "máx" : "") + (n0(v.peso) > 0 ? " · " + num(v.peso) + " kg" : "") + (n0(v.tiempo) > 0 ? " · " + fmtTiempo(v.tiempo) : "") + (n0(v.distancia) > 0 ? " · " + fmtDist(v.distancia) : "")).join(" | "))));
+      cajaB.appendChild(el("p", "eb-nota", "Las superseries no se editan aquí: edítalas en la copia del día o vuelve a guardar el calentamiento. Aquí puedes subirla o bajarla, renombrar, eliminar y aplicar el calentamiento."));
+      lista.appendChild(cajaB); return;
+    }
     const tipo = tipoDe(it.ejercicio_id), campos = CAL_CAMPOS[tipo] || ["reps", "tiempo"];
     const caja = el("section", "cal-item");
     const cab = el("div", "cal-item-cab");
@@ -2326,9 +2400,9 @@ function guardarCalentamientoEditado() {
   const p = db.plantillas[ce.id];
   if (!p || p.borrado) { $("dlgCalent").close(); setEstado("Este calentamiento ya no existe", true); return; }
   let falta = "";
-  ce.items.forEach(it => it.series.forEach((v, j) => { if (!falta && !(n0(v.reps) > 0 || v.max_reps || n0(v.tiempo) > 0 || n0(v.distancia) > 0)) falta = nombreEj(it.ejercicio_id) + " serie " + (j + 1) + ": pon repeticiones, tiempo o distancia"; }));
+  ce.items.filter(it => !it.bloque).forEach(it => it.series.forEach((v, j) => { if (!falta && !(n0(v.reps) > 0 || v.max_reps || n0(v.tiempo) > 0 || n0(v.distancia) > 0)) falta = nombreEj(it.ejercicio_id) + " serie " + (j + 1) + ": pon repeticiones, tiempo o distancia"; }));
   if (err || falta) { msg.textContent = err || falta; return; }
-  const items = ce.items.map(it => ({ ...it, seccion: "Calentamiento", series: it.series.map(v => ({ ...v, calentamiento: true })) }));
+  const items = ce.items.map(it => it.bloque ? { ...it, seccion: "Calentamiento", tramos: it.tramos.map(t => ({ ...t, series: t.series.map(v => ({ ...v, calentamiento: true })) })) } : ({ ...it, seccion: "Calentamiento", series: it.series.map(v => ({ ...v, calentamiento: true })) }));
   const antes = { ...p };
   cambiar("plantillas", { ...p, items });
   $("dlgCalent").close(); pintarCalentamientos(); pintarPlan();
@@ -10866,8 +10940,8 @@ function pintarCabDia(dia) {
 
 // ---------- Deshacer, deslizar y récords ----------
 let deshacerPend = null, timerAviso = null;
-const capaArriba = () => ($("dlgEntreno").open ? $("dlgEntreno") : document.body);
-function avisoDeshacer(texto, deshacer, pr) {
+const capaArriba = () => ($("dlgEnSeries").open ? $("dlgEnSeries") : $("dlgEntreno").open ? $("dlgEntreno") : document.body);   // v328: el aviso con Deshacer va en la capa más alta
+function avisoDeshacer(texto, deshacer, pr, arriba) {   // v331: «arriba» (solo tras ✓ Hecha en la pantalla de serie) lo coloca en una zona libre y lo acorta; los demás usos no cambian
   const t = $("toast");
   deshacerSug = null;
   if (t.parentNode !== capaArriba()) capaArriba().appendChild(t);
@@ -10875,9 +10949,10 @@ function avisoDeshacer(texto, deshacer, pr) {
   $("toastTxt").textContent = texto;
   $("toastBtn").hidden = !deshacerPend;
   t.classList.toggle("pr", !!pr);
+  t.classList.toggle("toast-arriba", !!arriba);
   t.hidden = false;
   clearTimeout(timerAviso);
-  timerAviso = setTimeout(() => { t.hidden = true; deshacerPend = null; }, pr ? 6000 : 5000);
+  timerAviso = setTimeout(() => { t.hidden = true; deshacerPend = null; }, arriba ? 3500 : pr ? 6000 : 5000);
 }
 $("toastBtn").addEventListener("click", () => {
   if (deshacerSug) { const f = deshacerSug; deshacerSug = null; $("toast").hidden = true; f(); return; }
@@ -10907,10 +10982,10 @@ function celebrar() {
   setTimeout(() => { f.classList.remove("on"); f.textContent = ""; }, 1800);
 }
 // Avisa del récord (con celebración) o, si no lo es, de que la serie está hecha; las dos con Deshacer
-function avisarSiPR(fila, deshacer) {
+function avisarSiPR(fila, deshacer, modo) {   // v332: modo «vista» (Ver todas las series): ningún aviso flotante (el récord sale en su línea de mensaje); modo «pantalla» (pantalla de serie): sin aviso normal, solo el de récord (arriba); sin modo: como siempre
   const pr = hecha(fila) && prsEj(fila.ejercicio_id).has(fila.id);
-  if (pr) { celebrar(); avisoDeshacer("¡Nuevo récord! " + nombreEj(fila.ejercicio_id) + " · " + serieTexto(fila), deshacer, true); }
-  else if (deshacer) avisoDeshacer("Serie hecha · " + nombreEj(fila.ejercicio_id), deshacer);
+  if (pr) { celebrar(); if (modo !== "vista") avisoDeshacer("¡Nuevo récord! " + nombreEj(fila.ejercicio_id) + " · " + serieTexto(fila), deshacer, true, modo === "pantalla"); }
+  else if (deshacer && !modo) avisoDeshacer("Serie hecha · " + nombreEj(fila.ejercicio_id), deshacer);
   return pr;
 }
 function marcarHecha(antes, fila) {
@@ -10919,10 +10994,10 @@ function marcarHecha(antes, fila) {
   avisarSiPR(fila, [["series", antes]]);
 }
 // Volver a pendiente una serie hecha: deja de contar para récords, volumen y marcas; los objetivos se recalculan
-function desmarcar(s) {
+function desmarcar(s, sinAviso) {
   cambiar("series", { ...s, hecha: false });
   pintarBloques(true);
-  avisoDeshacer("Serie marcada como pendiente · " + nombreEj(s.ejercicio_id), [["series", s]]);
+  if (!sinAviso) avisoDeshacer("Serie marcada como pendiente · " + nombreEj(s.ejercicio_id), [["series", s]]);
 }
 function botonHecha(s, texto, nombre) {
   const b = document.createElement("button");
@@ -11161,7 +11236,7 @@ $("enHecha").addEventListener("click", () => {
   const yaHecha = hecha(s);
   cambiar("series", fila);
   pintarBloques(true);
-  avisarSiPR(fila, [["series", s]]);
+  avisarSiPR(fila, [["series", s]], ent.ensSilencio ? "vista" : "pantalla");   // v332: sin aviso «Serie hecha» (se corrige con «↺ Marcar como pendiente»); el de récord se conserva
   if (yaHecha) { pintarEntreno(); return; }
   siguientePendiente();
   if (!$("enFin").hidden) return;   // era la última: no hay descanso
@@ -11225,7 +11300,7 @@ $("enVideo").addEventListener("click", () => {
   if ($("dlgEntreno").open && e && idYoutube(e.video_url)) verVideo(e);
 });
 $("enAnt").addEventListener("click", () => { if (ent.i > 0) { ent.i--; pintarEntreno(); } });
-$("enDesmarcar").addEventListener("click", () => { const s = serieEnt(); if (!s || !hecha(s)) return; $("enFin").hidden = true; desmarcar(s); pintarEntreno(); });
+$("enDesmarcar").addEventListener("click", () => { const s = serieEnt(); if (!s || !hecha(s)) return; $("enFin").hidden = true; desmarcar(s, true); pintarEntreno(); });   // v332: sin aviso flotante
 $("enCalentSi").addEventListener("click", () => {
   const s = serieEnt();
   if (!s || !ent.calent) return;
@@ -11238,7 +11313,179 @@ $("enCalentSi").addEventListener("click", () => {
 });
 $("enCalentNo").addEventListener("click", () => { const s = serieEnt(); if (s) rechazarCalent(ent.dia.id, s.ejercicio_id, [s]); pintarEntreno(); });
 $("enSig").addEventListener("click", () => { if (ent.i < ent.cola.length - 1) { ent.i++; pintarEntreno(); } });
+// ---------- MEJ-ENT-015 (v328): vista de todas las series de la ocurrencia actual + Autorrellenar peso ----------
+// La pantalla de serie activa no cambia. La vista agrupa por la MISMA ocurrencia que las instrucciones del entreno (día / entreno / parte / copia o, en superserie,
+// solo el ejercicio en curso de ese bloque, por ronda). Los borradores de reps/kg viven en memoria mientras dura el entreno y no confirman nada.
+// «Hecha» reutiliza EXACTAMENTE la acción de la pantalla actual (#enHecha): descanso, progreso, orden y marcas son los de siempre.
+const ensKgTxt = s => pesoMostrado(s) ? num(pesoMostrado(s)) : "";
+const ensRepsTxt = s => ((s.ciclo_id === "auto" || esRango(s)) && !hecha(s)) ? "" : String(n0(s.reps) || "");
+// Series con campos kg/reps (los mismos criterios que decide pintarEntreno para ["kg", "reps"])
+function ensKgReps(s) {
+  const tipo = tipoDe(s.ejercicio_id);
+  if (esDistancia(tipo) || tipo === "movilidad") return false;
+  if (sinCarga(s.ejercicio_id) && !cargaGuardada(s)) return false;
+  return !((n0(s.tiempo) > 0 || s.max_tiempo) && !(n0(s.reps) > 0) || conDistFuerza(s) && !(n0(s.reps) > 0));
+}
+// Peso libre en kg: ni calentamiento, ni peso de ciclo/Bilbo, ni porcentaje del RM
+const ensPesoLibre = s => ensKgReps(s) && !s.calentamiento && !s.ciclo_id && !(n0(s.pct) > 0);
+// v329: la vista queda ligada a la ocurrencia con la que se abrió (ent.ensRef); no cambia de ejercicio aunque la acción «Hecha» avance a otra serie
+const ensFilas = () => { const r = ent && ent.ensRef; return r ? ocurrenciaNotaEntreno(r).filter(x => !x.borrado).sort(sOrden) : []; };
+function ensAplicarBorradorActiva() {
+  const s = serieEnt(), b = s && ent.borr && ent.borr[s.id];
+  if (!b || hecha(s) || !ensPesoLibre(s)) return;
+  if (b.kg !== undefined) $("enA").value = b.kg;
+  if (b.reps !== undefined) $("enB").value = b.reps;
+}
+function pintarVistaSeries() {
+  const cuerpo = $("ensCuerpo"), filas = ensFilas(), base = ent && ent.ensRef, desp = $("dlgEnSeries").scrollTop;
+  if (!ent || !base || !filas.length) { if ($("dlgEnSeries").open) $("dlgEnSeries").close(); return; }
+  const activa = serieEnt(), act = activa && filas.some(x => x.id === activa.id) ? activa : filas.find(x => !hecha(x)) || null;   // resaltada: la activa si es de esta ocurrencia; si no, la primera pendiente
+  const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt !== undefined) x.textContent = txt; return x; };
+  cuerpo.textContent = "";
+  const nombre = nombreEj(base.ejercicio_id), bloque = !!base.bloque_id;
+  cuerpo.appendChild(el("p", "ens-ej", nombre));
+  cuerpo.appendChild(el("p", "ens-sub", (bloque ? "Superserie · " + filas.length + (filas.length === 1 ? " ronda" : " rondas") + " · " : "") + (base.grupo || "Entreno") + (base.seccion ? " · " + base.seccion : "")));
+  const hayKg = filas.some(ensPesoLibre);
+  const cab = el("div", "ens-fila ens-cab");
+  cab.append(el("span", "", bloque ? "Ronda" : "Serie"), el("span", "", "Reps"));
+  const kgCab = el("span", "ens-kgcab"); kgCab.appendChild(el("span", "", "Kg"));
+  let auto = null;
+  if (hayKg) {
+    auto = el("button", "nav-btn ens-auto", "Autorrellenar"); auto.type = "button"; auto.id = "ensAuto"; auto.disabled = true;
+    auto.setAttribute("aria-label", "Autorrellenar peso: copia el peso de la serie elegida a las series pendientes que hay debajo");
+    kgCab.appendChild(auto);
+  }
+  cab.append(kgCab, el("span", "", "Hecha")); cuerpo.appendChild(cab);
+  let n = 0;
+  filas.forEach(s => {
+    n += s.calentamiento ? 0 : 1;
+    const f = el("div", "ens-fila"); f.dataset.sid = s.id;
+    if (act && s.id === act.id) f.classList.add("ens-activa");
+    const kgRep = ensKgReps(s), hecho = hecha(s), b = (ent.borr && ent.borr[s.id]) || {};
+    f.appendChild(el("span", "ens-n", s.calentamiento ? "Cal." : bloque ? "R" + n0(s.ronda || n) : String(n)));
+    if (!kgRep) {   // otras medidas: solo lectura (se editan en la pantalla de la serie)
+      const t = el("span", "ens-texto", serieTexto(s)); f.appendChild(t); t.style.gridColumn = "2 / 4";
+    } else {
+      const rIn = document.createElement("input"), kIn = document.createElement("input");
+      [rIn, kIn].forEach(i => { i.autocomplete = "off"; });
+      rIn.inputMode = "numeric"; kIn.inputMode = "decimal"; rIn.dataset.campo = "reps"; kIn.dataset.campo = "kg";
+      rIn.setAttribute("aria-label", "Repeticiones, " + (s.calentamiento ? "calentamiento" : "serie " + n)); kIn.setAttribute("aria-label", "Peso en kg, " + (s.calentamiento ? "calentamiento" : "serie " + n));
+      const editable = !hecho && ensPesoLibre(s);
+      rIn.value = b.reps !== undefined ? b.reps : ensRepsTxt(s); kIn.value = b.kg !== undefined ? b.kg : ensKgTxt(s);
+      if (editable) {
+        rIn.placeholder = (s.ciclo_id || esRango(s)) ? "máx" : "0"; kIn.placeholder = "0";
+        rIn.addEventListener("input", () => { ent.borr = ent.borr || {}; ent.borr[s.id] = { ...(ent.borr[s.id] || {}), reps: rIn.value }; });
+        kIn.addEventListener("input", () => { ent.borr = ent.borr || {}; ent.borr[s.id] = { ...(ent.borr[s.id] || {}), kg: kIn.value }; ent.ensFuente = s.id; ensActualizarAuto(); });
+      } else { rIn.readOnly = kIn.readOnly = true; rIn.classList.add("ens-ro"); kIn.classList.add("ens-ro"); }
+      if (hayKg && ensPesoLibre(s) || hecho && !s.calentamiento && !s.ciclo_id && !(n0(s.pct) > 0)) kIn.addEventListener("focus", () => { ent.ensFuente = s.id; ensActualizarAuto(); });
+      f.append(rIn, kIn);
+    }
+    if (hecho) {   // v330: el ✓ de una fila hecha es pulsable: vuelve a pendiente
+      const bt = el("button", "nav-btn ens-ok", "✓"); bt.type = "button";
+      bt.setAttribute("aria-label", "Hecha: " + (s.calentamiento ? "calentamiento" : (bloque ? "ronda " : "serie ") + n) + ". Pulsa para marcarla como pendiente"); bt.title = "Marcar como pendiente";
+      bt.addEventListener("click", () => ensDesmarcar(s.id)); f.appendChild(bt);
+    }
+    else if (kgRep && ensPesoLibre(s)) {
+      const bt = el("button", "nav-btn ens-hecha", "✓"); bt.type = "button"; bt.setAttribute("aria-label", "Marcar hecha la " + (bloque ? "ronda " : "serie ") + n);
+      bt.addEventListener("click", () => ensConfirmar(s.id)); f.appendChild(bt);
+    } else f.appendChild(el("span", "ens-no", "–"));
+    cuerpo.appendChild(f);
+  });
+  cuerpo.appendChild(el("p", "ens-nota", "Escribir aquí no confirma nada: lo escrito es un borrador hasta que pulses ✓ en esa serie (hace lo mismo que «✓ Hecha» de la pantalla de la serie)." + (hayKg ? " «Autorrellenar» copia el peso de la serie elegida a las series pendientes de debajo (no toca hechas, reps ni notas)." : "")));
+  const pie = el("p", "aviso ens-aviso", filas.every(hecha) ? "Todas las series de este ejercicio están hechas. Cierra esta ventana cuando quieras." : ""); if (filas.every(hecha)) pie.classList.add("ens-bien"); cuerpo.appendChild(pie);
+  $("dlgEnSeries").scrollTop = desp;
+  ensActualizarAuto();
+}
+function ensActualizarAuto() {
+  const b = $("ensAuto"); if (!b) return;
+  const filas = ensFilas(), i = filas.findIndex(x => x.id === ent.ensFuente);
+  b.disabled = i < 0;
+  b.textContent = i < 0 ? "Autorrellenar" : "Autorrellenar ↓";
+}
+function ensAviso(t, bien, deshacer) {   // v330: el aviso va en línea (con «Deshacer» opcional), sin flotar sobre los controles
+  const p = document.querySelector("#ensCuerpo .ens-aviso");
+  if (!p) return;
+  p.textContent = t; p.classList.toggle("ens-bien", !!bien);
+  if (deshacer) { const b = document.createElement("button"); b.type = "button"; b.className = "nav-btn ens-deshacer"; b.textContent = "Deshacer"; b.addEventListener("click", deshacer); p.appendChild(b); }
+}
+function ensEtiqueta(filas, id) {
+  const fi = filas.findIndex(x => x.id === id), bloque = !!(ent.ensRef && ent.ensRef.bloque_id);
+  return (bloque ? "Ronda " : "Serie ") + (bloque ? n0(filas[fi].ronda) : filas.slice(0, fi + 1).filter(x => !x.calentamiento).length);
+}
+// Volver a pendiente desde la vista: la misma acción que «↺ Marcar como pendiente» (sin aviso flotante); la serie pasa a ser la activa
+function ensDesmarcar(id) {
+  const s = db.series[id], k = ent.cola.indexOf(id);
+  if (!s || !hecha(s) || k < 0) return;
+  ent.i = k;
+  $("enFin").hidden = true;
+  desmarcar(s, true);
+  pintarEntreno();
+  pintarVistaSeries();
+  ensAviso(ensEtiqueta(ensFilas(), id) + " pendiente", true);
+}
+function ensAutorrellenar() {
+  const filas = ensFilas(), i = filas.findIndex(x => x.id === ent.ensFuente);
+  if (i < 0) { ensAviso("Toca el peso de una serie para elegirla como origen."); return; }
+  const campo = document.querySelector('#ensCuerpo .ens-fila[data-sid="' + filas[i].id + '"] input[data-campo="kg"]');
+  const kg = parseFloat((campo ? campo.value.trim() : "").replace(",", "."));
+  if (!(kg > 0)) { ensAviso("Escribe antes el peso de esa serie."); return; }
+  const destinos = filas.slice(i + 1).filter(x => !hecha(x) && ensPesoLibre(x));
+  if (!destinos.length) { ensAviso("No hay series pendientes debajo de esa serie."); return; }
+  const antes = destinos.map(x => ["series", { ...x }]), act = serieEnt();
+  destinos.forEach(x => { cambiar("series", { ...x, peso: kg }, true); if (ent.borr && ent.borr[x.id]) delete ent.borr[x.id].kg; });
+  persistir();
+  pintarBloques(true);
+  if (act && destinos.some(x => x.id === act.id)) $("enA").value = num(kg);
+  pintarVistaSeries();
+  ensAviso("Autorrellenar: " + destinos.length + (destinos.length === 1 ? " serie" : " series") + " a " + num(kg) + " kg", true, () => {
+    antes.forEach(([t, f]) => { const c = { ...f }; delete c.sucio; cambiar(t, c, true); });   // igual que el Deshacer del aviso flotante
+    persistir(); pintarTodo(); if (ent) pintarEntreno();
+    pintarVistaSeries(); ensAviso("Autorrellenar deshecho", true);
+  });
+}
+function ensConfirmar(id) {
+  const k = ent.cola.indexOf(id);
+  if (k < 0 || hecha(db.series[id])) return;
+  const previa = ent.i, b = (ent.borr && ent.borr[id]) || {};
+  ent.i = k; pintarEntreno();
+  if (b.kg !== undefined) $("enA").value = b.kg;
+  if (b.reps !== undefined) $("enB").value = b.reps;
+  $("enAviso").textContent = "";
+  ent.ensSilencio = true;
+  try { $("enHecha").click(); } finally { ent.ensSilencio = false; }   // la misma acción que la pantalla de la serie, sin el aviso flotante
+  const error = $("enAviso").textContent;
+  if (error) { ent.i = previa; pintarEntreno(); ensAplicarBorradorActiva(); pintarVistaSeries(); ensAviso(error); return; }
+  if (ent.borr) delete ent.borr[id];
+  // v329: la vista sigue abierta y ligada a su ocurrencia; se repinta (conserva scroll, borradores y la serie origen de Autorrellenar si sigue en la lista)
+  const filas = ensFilas();
+  const fin = !$("enFin").hidden, desc = !$("enDescanso").hidden;
+  pintarVistaSeries();
+  const pr = hecha(db.series[id]) && prsEj(db.series[id].ejercicio_id).has(id);
+  ensAviso(ensEtiqueta(filas, id) + " hecha" + (pr ? " · ¡Nuevo récord!" : "") + (fin ? " · entreno completado" : desc ? " · descanso en marcha" : "") + (filas.length && filas.every(hecha) ? ". Todas las series de este ejercicio están hechas." : ""), true);
+}
+$("enSeries").addEventListener("click", () => {
+  const s = serieEnt();
+  if (!s) return;
+  ent.borr = ent.borr || {};
+  if (!hecha(s) && ensPesoLibre(s) && ent.campos[0] === "kg" && ent.campos[1] === "reps") {   // lo escrito en la pantalla actual pasa a ser borrador de la vista
+    const b = {}, kgT = $("enA").value.trim(), rT = $("enB").value.trim();
+    if (kgT !== ensKgTxt(s)) b.kg = kgT;
+    if (rT !== ensRepsTxt(s)) b.reps = rT;
+    if (Object.keys(b).length) ent.borr[s.id] = { ...(ent.borr[s.id] || {}), ...b };
+  }
+  ent.ensFuente = null;
+  ent.ensRef = { ...s };   // identidad de la ocurrencia con la que se abre la vista
+  pintarVistaSeries();
+  $("dlgEnSeries").showModal();
+});
+$("ensCuerpo").addEventListener("click", e => { if (e.target.closest("#ensAuto")) ensAutorrellenar(); });
+$("dlgEnSeries").addEventListener("close", () => {
+  if ($("toast").parentNode === $("dlgEnSeries")) capaArriba().appendChild($("toast"));
+  if (ent) ensAplicarBorradorActiva();
+});
+
 function salirEntreno() {
+  if ($("dlgEnSeries").open) $("dlgEnSeries").close();
   if ($("dlgEntreno").open) $("dlgEntreno").close();
 }
 $("dlgEntreno").addEventListener("close", () => {
@@ -11253,7 +11500,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v308" + (BETA ? " beta" : "");
+const VERSION_APP = "v309" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

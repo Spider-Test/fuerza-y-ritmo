@@ -2932,3 +2932,37 @@ button.en-nota { border: 0; text-align: left; font-family: inherit; cursor: poin
 }
 .dia.varios-entrenos .grupo { border: 0; border-radius: 0; background: none; }
 .dia.varios-entrenos .grupo + .grupo { border-top: 1px solid var(--line); }
+
+/* MEJ-ENT-015 (v328): vista de todas las series de la ocurrencia y Autorrellenar */
+.en-series { align-self: flex-start; flex-shrink: 0; min-height: 44px; height: auto; padding: 8px 12px; border-radius: 10px; font-size: 14px; font-weight: 600; color: var(--muted); white-space: normal; text-align: left; }
+#dlgEnSeries .d-cuerpo { gap: 6px; }
+.ens-ej { margin: 0; font-weight: 700; font-size: 17px; overflow-wrap: anywhere; }
+.ens-sub { margin: 0 0 6px; font-size: 13px; color: var(--muted); }
+.ens-fila { display: grid; grid-template-columns: 40px minmax(0, 1fr) minmax(0, 1fr) 52px; gap: 8px; align-items: center; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+.ens-fila.ens-activa { background: var(--accent-soft); border-radius: 8px; }
+.ens-cab { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; border-bottom-color: transparent; padding-bottom: 0; align-items: end; }
+.ens-kgcab { display: flex; flex-direction: column; gap: 4px; align-items: stretch; }
+.ens-auto { min-height: 36px; padding: 4px 6px; font-size: 12px; font-weight: 700; text-transform: none; letter-spacing: 0; color: var(--accent); }
+.ens-n { font-weight: 700; color: var(--muted); font-size: 14px; }
+.ens-fila input { width: 100%; min-width: 0; min-height: 44px; font-size: 18px; font-weight: 700; text-align: center; color: var(--fg); }
+.ens-fila input.ens-ro { background: transparent; border-color: transparent; color: var(--muted); }
+.ens-texto { font-size: 14px; color: var(--muted); overflow-wrap: anywhere; }
+.ens-ok { text-align: center; color: var(--accent); font-weight: 800; font-size: 20px; }
+button.ens-ok { min-width: 44px; min-height: 44px; padding: 0; background: transparent; border-color: transparent; }
+.ens-deshacer { margin-left: 10px; min-height: 36px; padding: 2px 10px; font-size: 13px; }
+.ens-no { text-align: center; color: var(--muted); }
+.ens-hecha { min-width: 44px; min-height: 44px; padding: 0; font-size: 20px; color: var(--accent); }
+.ens-nota { margin: 8px 0 0; font-size: 12px; color: var(--muted); line-height: 1.4; }
+
+/* v329: mensajes correctos de la vista de series (no en rojo) */
+.ens-aviso.ens-bien { color: var(--accent); font-weight: 600; }
+
+/* v331: aviso tras «✓ Hecha» en la pantalla de serie: arriba, bajo la cabecera, para no cubrir ‹ ›, Hecha, descanso ni campos */
+.toast.toast-arriba, dialog .toast.toast-arriba { top: calc(env(safe-area-inset-top, 0px) + 72px); bottom: auto; max-width: calc(100vw - 24px); }
+
+/* MEJ-UI-021 (v334): fila fija con el desplegable (entreno › parte) más profundo abierto; se coloca bajo la cabecera del día */
+.ctx-sonda { position: fixed; top: var(--sticky-cabecera, 0px); left: 0; width: 0; height: 0; visibility: hidden; pointer-events: none; }
+.ctx-fijo { position: fixed; z-index: 14; box-sizing: border-box; display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 4px 0 12px; background: var(--card); border-bottom: 1px solid var(--line); }
+.ctx-fijo[hidden] { display: none; }
+.ctx-ruta { flex: 1; min-width: 0; min-height: 44px; padding: 0; border: 0; background: none; color: var(--entreno, var(--fg)); font: inherit; font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: 0.04em; text-transform: uppercase; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.ctx-plegar { flex: none; min-width: 44px; min-height: 44px; padding: 0 12px; border: 0; border-radius: 8px; background: none; color: var(--accent); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }

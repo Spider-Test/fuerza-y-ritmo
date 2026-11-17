@@ -4496,6 +4496,54 @@ function bloque(dia, id, series, grupo, parte, copia) {
     fb.setAttribute("aria-label", t ? "Distancia en " + UD() + " (opcional)" : "Tiempo (minutos y segundos)");
   };
   if (modoDist) modoDist.addEventListener("click", () => { const x = fa.value; ponerPorTiempo(!porTiempo); fa.value = fb.value; fb.value = x; fa.focus(); pintarObjetivo(); });
+  // MEJ-RIT-001 (v335): «Ritmo/km» (min : seg) enlazado con el tiempo y la distancia en Semana (carrera, al crear y al editar). El dato guardado sigue siendo el tiempo y la
+  // distancia: el ritmo es DERIVADO (s/km = tiempo × 1000 / metros) y nunca se guarda ni se calcula al abrir. Solo la edición explícita enlaza: tiempo → ritmo; ritmo → tiempo
+  // (se escribe en su campo); distancia → el tiempo se conserva y el ritmo se actualiza. Sin distancia, la fila no se muestra. Guarda contra reentrada para no hacer bucles.
+  let enlazando = false;
+  const ritmoEl = tipo === "carrera" ? (() => {
+    const fila = document.createElement("div");
+    fila.className = "ns-ritmo"; fila.hidden = true;
+    fila.innerHTML = '<span class="ns-ritmo-et">Ritmo/km</span><span class="ns-ritmo-c"><input class="in-rm" inputmode="numeric" pattern="[0-9]*" maxlength="2" autocomplete="off" placeholder="0" aria-label="Ritmo: minutos por kilómetro"><span class="ns-ritmo-dp" aria-hidden="true">:</span><input class="in-rs" inputmode="numeric" pattern="[0-9]*" maxlength="2" autocomplete="off" placeholder="00" aria-label="Ritmo: segundos"></span><span class="ns-ritmo-u">min/km</span>';
+    b.querySelector(".ns-principal").after(fila);
+    return { fila, mm: fila.querySelector(".in-rm"), ss: fila.querySelector(".in-rs") };
+  })() : null;
+  const campoDist = () => porTiempo ? fb : fa, campoCrono = () => porTiempo ? fa : fb;
+  function sincRitmo() {   // ritmo mostrado = derivado de lo escrito/guardado (solo escribe en las casillas del ritmo)
+    if (!ritmoEl || enlazando) return;
+    const d = leerDist(campoDist().value), t = leerTiempo(campoCrono().value);
+    ritmoEl.fila.hidden = !(d > 0);
+    const r = d > 0 && t > 0 && isFinite(t) ? Math.round(t * 1000 / d) : 0, ok = r > 0 && Math.floor(r / 60) <= 99;
+    ritmoEl.mm.value = ok ? String(Math.floor(r / 60)) : ""; ritmoEl.ss.value = ok ? String(r % 60).padStart(2, "0") : "";
+  }
+  if (ritmoEl) {
+    const { mm, ss } = ritmoEl;
+    const aTiempo = () => {   // ritmo editado → tiempo = ritmo × distancia / 1000 (solo con distancia y ritmo válidos)
+      const d = leerDist(campoDist().value), r = (parseInt(mm.value, 10) || 0) * 60 + (parseInt(ss.value, 10) || 0);
+      if (!(d > 0) || !(r > 0)) return;
+      const t = Math.round(r * d / 1000);
+      if (!(t > 0)) return;
+      const campo = campoCrono();
+      enlazando = true;
+      try { campo.value = fmtTiempo(t); campo.dispatchEvent(new Event("input", { bubbles: true })); } finally { enlazando = false; }
+    };
+    mm.addEventListener("input", () => { mm.value = mm.value.replace(/\D/g, "").slice(0, 2); if (mm.value.length === 2) ss.focus(); aTiempo(); });
+    ss.addEventListener("input", () => { ss.value = normalizarRitmoSeg(ss.value); aTiempo(); });
+    ss.addEventListener("blur", () => { if (ss.value.length === 1) ss.value = "0" + ss.value; });
+    mm.addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); ss.focus(); } });
+    ss.addEventListener("keydown", e => {
+      if (e.isComposing) return;
+      if (e.key === "Enter") { e.preventDefault(); fc.focus(); }
+      else if (e.key === "Backspace" && ss.value === "") { e.preventDefault(); mm.focus(); mm.setSelectionRange(mm.value.length, mm.value.length); }
+    });
+    [mm, ss].forEach(x => x.addEventListener("paste", e => {
+      e.preventDefault();
+      const t = ((e.clipboardData && e.clipboardData.getData("text")) || "").trim(); let x2;
+      if ((x2 = t.match(/^(\d{1,2}):([0-5]\d)$/))) { mm.value = x2[1]; ss.value = x2[2]; }
+      else if (/^\d{3,4}$/.test(t) && Number(t.slice(-2)) <= 59) { mm.value = t.slice(0, -2); ss.value = t.slice(-2); }
+      else { setEstado("No se pudo pegar ese ritmo. Usa minutos y segundos como 4:30 o 430, con segundos de 00 a 59.", true); return; }
+      aTiempo();
+    }));
+  }
   if (dist) { [fa, fb, fc].forEach(x => x.addEventListener("input", pintarObjetivo)); b.querySelector(".veces").addEventListener("input", pintarObjetivo); }
   // − y +: kg (o %) y reps en fuerza; metros y segundos en carrera y natación
   b.querySelectorAll(".paso:not(.paso-veces)").forEach(p => {
@@ -4521,6 +4569,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
     })); }
   // Objetivo orientativo mientras planificas: cuenta cuántas series añades y su recuperación
   function pintarObjetivo() {
+    sincRitmo();   // v335: el ritmo se deriva siempre de lo que hay en tiempo y distancia
     if (!calc) return;
     if (tipo !== "carrera") { calc.textContent = ""; return; }
     const m = leerDist((porTiempo ? fb : fa).value);
@@ -11553,7 +11602,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v334" + (BETA ? " beta" : "");
+const VERSION_APP = "v335" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

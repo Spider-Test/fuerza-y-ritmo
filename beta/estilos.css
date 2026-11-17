@@ -2968,3 +2968,12 @@ button.ens-ok { min-width: 44px; min-height: 44px; padding: 0; background: trans
 .ctx-fijo[hidden] { display: none; }
 .ctx-ruta { flex: 1; min-width: 0; min-height: 44px; padding: 0; border: 0; background: none; color: var(--entreno, var(--fg)); font: inherit; font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: 0.04em; text-transform: uppercase; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .ctx-plegar { flex: none; min-width: 44px; min-height: 44px; padding: 0 12px; border: 0; border-radius: 8px; background: none; color: var(--accent); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+
+/* MEJ-RIT-001 (v335): Ritmo/km (min : seg) enlazado con el tiempo, en el formulario de series de carrera de Semana */
+.ns-ritmo { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.ns-ritmo[hidden] { display: none; }
+.ns-ritmo-et { font-size: 13px; font-weight: 600; color: var(--muted); }
+.ns-ritmo-c { display: inline-flex; align-items: center; gap: 6px; }
+.ns-ritmo-c input { flex: none; width: 56px; min-width: 0; min-height: 44px; padding: 6px 4px; text-align: center; font-size: 16px; font-variant-numeric: tabular-nums; }
+.ns-ritmo-dp { font-size: 20px; font-weight: 700; color: var(--fg); }
+.ns-ritmo-u { font-size: 12px; color: var(--muted); }

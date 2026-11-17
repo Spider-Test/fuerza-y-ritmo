@@ -891,10 +891,14 @@ async function api(ruta, opciones = {}, reintento = false) {
 // Columnas OPCIONALES de ejercicios, que llegan con migraciones posteriores: «medidas» (P6, v262) y «regiones» y «tecnica» (P8, v263, clasificación).
 // Si el servidor aún no las tiene (o se revierten), se detecta en la primera lectura o escritura y, en esta sesión, se sincroniza sin ellas: la
 // app sigue funcionando como antes. Se vuelve a intentar en cada carga de la app. P6 y P8 son independientes (pueden estar una sí y otra no).
+// v340: el mismo mecanismo vale para CUALQUIER tabla de TABLAS. COLUMNAS_OPCIONALES declara, por tabla, las columnas que pueden no existir aún en el
+// servidor (hoy solo las tres de ejercicios; una versión futura que añada una columna a otra tabla la declara aquí) y faltanPorTabla guarda las que
+// el servidor ha rechazado en esta carga. Se reinicia en cada carga de la app.
 let columnaMedidas = true;
-const columnasFaltan = new Set();
-const COLUMNAS_EJ_OPCIONALES = ["medidas", "regiones", "tecnica"];
-const camposDe = t => t === "ejercicios" && columnasFaltan.size ? TABLAS[t].campos.filter(c => !columnasFaltan.has(c)) : TABLAS[t].campos;
+const COLUMNAS_OPCIONALES = { ejercicios: ["medidas", "regiones", "tecnica"] };
+const faltanPorTabla = Object.fromEntries(Object.keys(TABLAS).map(t => [t, new Set()]));
+const columnasFaltan = faltanPorTabla.ejercicios;
+const camposDe = t => faltanPorTabla[t].size ? TABLAS[t].campos.filter(c => !faltanPorTabla[t].has(c)) : TABLAS[t].campos;
 // v263: la clasificación (Región y Técnica) solo se muestra cuando el servidor la soporta. «soporte-p8» recuerda, en este dispositivo, que la
 // última lectura de ejercicios con esas columnas funcionó (así se ve también sin conexión); se pone a false en cuanto el servidor las rechaza.
 let soporteClasif = leerGeneral("soporte-p8") === true;
@@ -905,22 +909,47 @@ function ponerSoporteClasif(v) {
   try { localStorage.setItem(PREFIJO + "soporte-p8", JSON.stringify(v)); } catch { /* sin almacenamiento: solo esta sesión */ }
   if (typeof aplicarClasificacionUI === "function") aplicarClasificacionUI();
 }
-async function faltaColumnaOpcional(r) {
+async function faltaColumnaOpcional(r, tabla = "ejercicios") {
   if (r.ok || r.status !== 400) return false;
   const txt = await r.clone().text().catch(() => "");
-  const col = COLUMNAS_EJ_OPCIONALES.find(c => !columnasFaltan.has(c) && new RegExp("\\b" + c + "\\b").test(txt));
+  // En ejercicios basta con que el texto nombre la columna (como siempre); en el resto de tablas, además, debe ser un error de columna inexistente
+  // («Could not find the 'x' column…», «column t.x does not exist»), para no confundirlo con otro 400 que mencione el nombre.
+  if (tabla !== "ejercicios" && !/could not find|does not exist|PGRST204|42703/i.test(txt)) return false;
+  const col = (COLUMNAS_OPCIONALES[tabla] || []).find(c => !faltanPorTabla[tabla].has(c) && new RegExp("\\b" + c + "\\b").test(txt));
   if (!col) return false;
-  columnasFaltan.add(col);
-  if (col === "medidas") columnaMedidas = false;
-  else ponerSoporteClasif(false);
+  faltanPorTabla[tabla].add(col);
+  if (tabla === "ejercicios") {
+    if (col === "medidas") columnaMedidas = false;
+    else ponerSoporteClasif(false);
+  } else {
+    // Recuerda, en esta cuenta y dispositivo, que el servidor no tenía la columna: cuando aparezca, los valores solo-locales se suben una vez
+    const m = leer("cols-ausentes-v1") || {};
+    if (!m[tabla + "." + col]) { m[tabla + "." + col] = true; escribir("cols-ausentes-v1", m); }
+  }
   return true;
+}
+// Si una columna que faltaba ya existe en el servidor (la lectura con ella ha funcionado), marca como pendientes las filas locales con un valor
+// distinto del por defecto, ANTES de mezclar (si no, el valor nulo del servidor lo borraría), para que se suban una vez. No se aplica a ejercicios.
+function columnasQueVuelven(tabla) {
+  if (tabla === "ejercicios") return;
+  const m = leer("cols-ausentes-v1");
+  if (!m) return;
+  const vuelven = (COLUMNAS_OPCIONALES[tabla] || []).filter(c => m[tabla + "." + c] && !faltanPorTabla[tabla].has(c));
+  if (!vuelven.length) return;
+  Object.values(db[tabla]).forEach(v => {
+    if (v.sucio || v.conflicto) return;
+    if (vuelven.some(c => v[c] !== undefined && v[c] !== null && JSON.stringify(v[c]) !== JSON.stringify(c in DEFECTOS ? DEFECTOS[c] : 0))) v.sucio = true;
+  });
+  guardarLocal();
+  vuelven.forEach(c => delete m[tabla + "." + c]);
+  escribir("cols-ausentes-v1", m);
 }
 // Aislamiento adicional en el cliente; la autorización sigue siendo responsabilidad de RLS.
 function filtroPropietario(tabla) {
   const uid = encodeURIComponent(sesion.user_id);
   return tabla === "ejercicios" ? "&and=(or(user_id.eq." + uid + ",compartido.eq.true))" : "&user_id=eq." + uid;
 }
-async function leerTablaCompleta(tabla, desde = "") {
+async function leerTablaCompleta(tabla, desde = "", reintentos = 0) {
   const campos = [...new Set([...camposDe(tabla), "user_id", "servidor_ts"])];
   const orden = "servidor_ts.asc," + TABLAS[tabla].clave + ".asc";
   const ruta = "/rest/v1/" + tabla + "?select=" + campos.join(",") + "&order=" + orden + filtroPropietario(tabla) + desde;
@@ -931,8 +960,9 @@ async function leerTablaCompleta(tabla, desde = "") {
   // Una página corta tampoco implica final: puede haber un límite menor en Supabase.
   for (;;) {
     const r = await api(ruta + siguiente + "&limit=" + tamano);
-    if (!r.ok && tabla === "ejercicios" && await faltaColumnaOpcional(r)) return leerTablaCompleta(tabla, desde);   // servidor sin P6 o sin P8
+    if (!r.ok && reintentos < 3 && await faltaColumnaOpcional(r, tabla)) return leerTablaCompleta(tabla, desde, reintentos + 1);   // servidor sin una columna opcional (ejercicios: P6/P8)
     if (!r.ok) return { respuesta: r, filas: [] };
+    if (!siguiente) columnasQueVuelven(tabla);
     if (tabla === "ejercicios" && !columnasFaltan.has("regiones") && !columnasFaltan.has("tecnica")) ponerSoporteClasif(true);   // v263: el servidor devolvió las columnas de P8
     const pagina = await r.json();
     if (!Array.isArray(pagina)) throw new Error("Respuesta de sincronización no válida");
@@ -1148,7 +1178,7 @@ function mezclar(tabla, f) {
   if (local && tr === tl && igual()) return false;
   const fila = {};
   camposDe(tabla).forEach(c => { fila[c] = f[c]; });
-  if (tabla === "ejercicios" && local) columnasFaltan.forEach(c => { if (local[c] !== undefined) fila[c] = local[c]; });   // sin P6/P8, se conservan en local
+  if (local) faltanPorTabla[tabla].forEach(c => { if (local[c] !== undefined) fila[c] = local[c]; });   // columna que el servidor no tiene (ejercicios sin P6/P8, etc.): se conserva en local
   fila.actualizado = new Date(tr).toISOString();
   fila.sucio = false;
   db[tabla][k] = fila;
@@ -1601,9 +1631,11 @@ async function sincronizar() {
         }
         const filas = pend.map(v => { const f = {}; camposDe(t).forEach(c => { f[c] = v[c] ?? (c in DEFECTOS ? DEFECTOS[c] : 0); }); f.user_id = t === "ejercicios" ? (v.user_id || sesion.user_id) : sesion.user_id; return f; });   // los ejercicios del catálogo conservan a su dueño
         if (t === "ejercicios") { fallosEjercicios = await subirEjercicios(filas); guardarLocal(); continue; }
-        const w = await api("/rest/v1/" + t + "?on_conflict=" + TABLAS[t].conflicto, {
+        const subir = () => api("/rest/v1/" + t + "?on_conflict=" + TABLAS[t].conflicto, {
           method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify(filas)
         });
+        let w = await subir();
+        for (let k = 0; k < 3 && !w.ok && await faltaColumnaOpcional(w, t); k++) { faltanPorTabla[t].forEach(c => filas.forEach(f => { delete f[c]; })); w = await subir(); }   // servidor sin una columna opcional: se sube sin ella
         if (!w.ok) throw await errorGuardado(t, w);
         filas.forEach(f => { const v = db[t][f[TABLAS[t].clave]]; if (v && v.actualizado === f.actualizado) v.sucio = false; });
         guardarLocal();
@@ -11664,7 +11696,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v339" + (BETA ? " beta" : "");
+const VERSION_APP = "v340" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

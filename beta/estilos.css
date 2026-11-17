@@ -2961,3 +2961,10 @@ button.ens-ok { min-width: 44px; min-height: 44px; padding: 0; background: trans
 
 /* v331: aviso tras «✓ Hecha» en la pantalla de serie: arriba, bajo la cabecera, para no cubrir ‹ ›, Hecha, descanso ni campos */
 .toast.toast-arriba, dialog .toast.toast-arriba { top: calc(env(safe-area-inset-top, 0px) + 72px); bottom: auto; max-width: calc(100vw - 24px); }
+
+/* MEJ-UI-021 (v334): fila fija con el desplegable (entreno › parte) más profundo abierto; se coloca bajo la cabecera del día */
+.ctx-sonda { position: fixed; top: var(--sticky-cabecera, 0px); left: 0; width: 0; height: 0; visibility: hidden; pointer-events: none; }
+.ctx-fijo { position: fixed; z-index: 14; box-sizing: border-box; display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 4px 0 12px; background: var(--card); border-bottom: 1px solid var(--line); }
+.ctx-fijo[hidden] { display: none; }
+.ctx-ruta { flex: 1; min-width: 0; min-height: 44px; padding: 0; border: 0; background: none; color: var(--entreno, var(--fg)); font: inherit; font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: 0.04em; text-transform: uppercase; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.ctx-plegar { flex: none; min-width: 44px; min-height: 44px; padding: 0 12px; border: 0; border-radius: 8px; background: none; color: var(--accent); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }

@@ -1909,6 +1909,58 @@ document.addEventListener("pointerdown", e => {
 window.addEventListener("blur", terminarModoOrden);
 document.addEventListener("visibilitychange", () => { if (document.hidden) terminarModoOrden(); });
 
+// ---------- MEJ-UI-021 (v334): una sola fila fija bajo la cabecera del día con el desplegable más profundo que sigue abierto y se ha desplazado fuera de la vista ----------
+// Los encabezados de entreno y parte no son sticky (en móvil «solo el día queda fijo» y en escritorio nunca lo fueron), así que esta fila la gestiona JS: efímera, sin datos,
+// sin tocar el scroll (solo lee posiciones). Muestra «Entreno › Parte», con «Plegar» (misma acción que pulsar su título) y, al tocar el nombre, vuelve a ese encabezado.
+// Al plegarlo pasa a mostrar el del padre; al salir del contenedor desaparece. Se oculta con Reordenar, arrastre, ventanas, zoom con pellizco o mientras se escribe.
+const ctxFijo = (() => {
+  const barra = document.createElement("div"), ruta = document.createElement("button"), plegar = document.createElement("button"), sonda = document.createElement("div");
+  barra.id = "ctxFijo"; barra.className = "ctx-fijo"; barra.hidden = true; barra.setAttribute("role", "group"); barra.setAttribute("aria-label", "Desplegable abierto");
+  ruta.type = "button"; ruta.className = "ctx-ruta"; plegar.type = "button"; plegar.className = "ctx-plegar"; plegar.textContent = "Plegar ▴";
+  sonda.className = "ctx-sonda"; sonda.setAttribute("aria-hidden", "true");
+  barra.append(ruta, plegar); document.body.append(barra, sonda);
+  let cab = null, pendiente = false;   // cab: encabezado representado
+  const nombre = (el, sel) => { const x = el && el.querySelector(sel); return x ? x.textContent.trim() : ""; };
+  const ocultar = () => { if (!barra.hidden) barra.hidden = true; cab = null; };
+  function actualizar() {
+    pendiente = false;
+    const vista = $("vistaSemana");
+    const foco = document.activeElement;
+    if (!vista || vista.offsetParent === null || document.querySelector("dialog[open]") || zonaReordenar || arrastreActivo || vista.querySelector(".reordenando") ||
+        (window.visualViewport && visualViewport.scale > 1.02) || (foco && foco !== document.body && vista.contains(foco) && foco.matches("input, textarea, [contenteditable]"))) return ocultar();
+    const tope = sonda.getBoundingClientRect().top;
+    const dia = [...vista.querySelectorAll(".dia:not(.plegado)")].find(d => { const r = d.getBoundingClientRect(); return r.top <= tope + 1 && r.bottom > tope + 60; });
+    if (!dia) return ocultar();
+    const dr = dia.getBoundingClientRect(), dcab = dia.querySelector(":scope > .dia-cab"), cr0 = dcab && dcab.getBoundingClientRect();
+    const cs0 = dcab && getComputedStyle(dcab), pegada = cs0 && cs0.position === "sticky" ? parseFloat(cs0.top) || 0 : null;
+    const L = pegada !== null && Math.abs(cr0.top - pegada) <= 2 ? cr0.bottom : tope;   // debajo de la cabecera del día si está fijada (en escritorio su «top» propio)
+    let mejor = null, prof = -1;
+    dia.querySelectorAll(".grupo:not(.g-plegado) > .grupo-cab, .parte-caja:not(.p-plegada) > .parte-cab").forEach(h => {
+      const r = h.getBoundingClientRect(), c = h.parentElement.getBoundingClientRect();
+      if (!(r.height > 0) || r.bottom > L + 2 || c.bottom <= L + 46) return;   // solo los que se han ido por arriba y cuyo contenedor sigue bajo la fila
+      let d = 0; for (let e = h; e && e !== dia; e = e.parentElement) d++;
+      if (d >= prof) { prof = d; mejor = h; }
+    });
+    if (!mejor) return ocultar();
+    cab = mejor;
+    const esParte = mejor.classList.contains("parte-cab"), grupo = mejor.closest(".grupo");
+    const g = nombre(grupo && grupo.querySelector(":scope > .grupo-cab"), ".gn-txt") || nombre(grupo && grupo.querySelector(":scope > .grupo-cab"), ".g-nombre"), p = esParte ? nombre(mejor, ".p-nombre") : "";
+    const texto = [g, p].filter(Boolean).join(" › ") || "Desplegable abierto";
+    if (ruta.textContent !== texto) { ruta.textContent = texto; ruta.title = texto; ruta.setAttribute("aria-label", "Ir al encabezado: " + texto); plegar.setAttribute("aria-label", "Plegar " + (p || g)); }
+    barra.style.left = dr.left + "px"; barra.style.width = dr.width + "px"; barra.style.top = L + "px";
+    if (barra.hidden) barra.hidden = false;
+  }
+  const pedir = () => { if (!pendiente) { pendiente = true; requestAnimationFrame(actualizar); } };
+  plegar.addEventListener("click", () => { const t = cab && cab.querySelector(".p-toggle, .g-toggle"); if (t) { t.click(); pedir(); setTimeout(pedir, 120); } });
+  ruta.addEventListener("click", () => { if (!cab) return; const L = barra.getBoundingClientRect().bottom; window.scrollTo({ top: window.scrollY + cab.getBoundingClientRect().top - L - 2, behavior: "auto" }); pedir(); });
+  addEventListener("scroll", pedir, { passive: true }); addEventListener("resize", pedir);
+  if (window.visualViewport) visualViewport.addEventListener("resize", pedir);
+  document.addEventListener("click", () => setTimeout(pedir, 60), true);
+  document.addEventListener("focusin", pedir); document.addEventListener("focusout", () => setTimeout(pedir, 0));
+  new MutationObserver(pedir).observe($("vistaSemana"), { subtree: true, childList: true, attributes: true, attributeFilter: ["class", "hidden"] });
+  return { pedir };
+})();
+
 // ---------- Semana ----------
 const dias = DIAS.map((_, i) => {
   const col = document.createElement("section");
@@ -11501,7 +11553,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v333" + (BETA ? " beta" : "");
+const VERSION_APP = "v334" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

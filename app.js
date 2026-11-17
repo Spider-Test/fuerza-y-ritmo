@@ -495,6 +495,27 @@ function rmReferencia(id) {
 }
 // v251: los kg de un % del RM salen SOLO del 1RM introducido en la ficha; sin él la serie guarda el % y no se inventa un peso con el estimado
 const kgDePct = (id, pct) => { const r = rmPersonal(id); return r ? redondear(r * n0(pct) / 100) : 0; };
+// v338 (MEJ-RM-001, solo cliente): el objetivo en % y la sugerencia se MUESTRAN, no se guardan ni se vuelcan en el peso realmente hecho.
+// Referencia: 1) el 1RM guardado a mano; 2) si no hay, el 1RM estimado con tus registros (siempre etiquetado «estimado»); 3) ninguna. No se guarda ninguna.
+function referenciaPct(id) {
+  const m = rmPersonal(id);
+  if (m > 0) return { v: m, est: false };
+  const e = rmReferencia(id);
+  return e > 0 ? { v: e, est: true } : null;
+}
+function textoPct(id, pct) {   // { obj, sug, kg }: redondeo de siempre (2,5 kg)
+  const p = n0(pct), r = referenciaPct(id);
+  if (!r) return { obj: "Objetivo " + num(p) + " % · falta el 1RM de este ejercicio", sug: "", kg: 0 };
+  const kg = redondear(r.v * p / 100);
+  return { obj: "Objetivo " + num(p) + " % del " + (r.est ? "1RM estimado" : "1RM") + " (" + num(r.v) + " kg)", sug: "Sugerido " + num(kg) + " kg", kg };
+}
+function textoPctForm(id, v) {   // texto bajo el campo de % de los formularios de Semana
+  if (!(v > 0)) { const r = referenciaPct(id); return !r ? "Sin 1RM en la ficha: se guarda el %, sin kg" : r.est ? "1RM estimado: " + num(r.v) + " kg" : "1RM de referencia: " + num(r.v) + " kg"; }
+  const t = textoPct(id, v);
+  return t.sug ? t.obj + " · " + t.sug : t.obj;
+}
+// Serie de fuerza con objetivo en % (de un ejercicio que se mide por peso): su peso hecho se escribe a mano, no se rellena con la sugerencia
+const objetivoPctSerie = s => tipoDe(s.ejercicio_id) === "fuerza" && n0(s.pct) > 0 && !s.ciclo_id && medidaDe(s.ejercicio_id) === "peso" ? textoPct(s.ejercicio_id, s.pct) : null;
 const distDeNombre = nombre => { const m = norm(nombre).match(/(\d+(?:[.,]\d+)?)\s*(km|m)\b/); return m ? parseFloat(m[1].replace(",", ".")) * (m[2] === "km" ? 1000 : 1) : 0; };
 const ritmoSeg = (s, tipo) => n0(s.tiempo) / (n0(s.distancia) / TIPOS[tipo].porMetros);
 const ritmo = (s, tipo) => fmtTiempo(ritmoSeg(s, tipo)) + TIPOS[tipo].sufijo;
@@ -4510,8 +4531,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
     if (!calc) return;
     if (dist) { pintarObjetivo(); return; }
     if (!enPct) { const d = usaBarra(id) ? textoDiscos(parseFloat((fa.value || "").replace(",", "."))) : ""; calc.textContent = d ? d[0].toUpperCase() + d.slice(1) : ""; return; }
-    const v = parseFloat((fa.value || "").replace(",", ".")), ref = rmPersonal(id);
-    calc.textContent = !ref ? "Sin 1RM en la ficha: se guarda el %, sin kg" : v > 0 ? "= " + num(kgDePct(id, v)) + " kg (1RM " + num(ref) + ")" : "1RM de referencia: " + num(ref) + " kg";
+    calc.textContent = textoPctForm(id, parseFloat((fa.value || "").replace(",", ".")));   // v338: objetivo · sugerido
   };
   const ponerModo = pct => {
     enPct = pct;
@@ -5372,9 +5392,8 @@ function tarjetaBloque(dia, bloqueId, series) {
   }));
   const pintarBrCalc = () => {
     if (!editando || !brPct) { brCalc.hidden = true; return; }
-    const v = parseFloat((fa.value || "").replace(",", ".")), ref = rmPersonal(editando.ejercicio_id);
     brCalc.hidden = false;
-    brCalc.textContent = !ref ? "Sin 1RM en la ficha: se guarda el %, sin kg" : v > 0 ? "= " + num(kgDePct(editando.ejercicio_id, v)) + " kg (1RM " + num(ref) + ")" : "1RM de referencia: " + num(ref) + " kg";
+    brCalc.textContent = textoPctForm(editando.ejercicio_id, parseFloat((fa.value || "").replace(",", ".")));   // v338
   };
   const ponerBrModo = pct => {
     brPct = pct;
@@ -5632,9 +5651,8 @@ function pintarTramos() {
     const pintarTc = () => {
       tm.textContent = t.p ? "%" : "kg"; tm.classList.toggle("activo", !!t.p);
       if (fza) a.placeholder = t.p ? "% 1RM" : med !== "peso" ? "kg (opcional)" : "kg";
-      const v = parseFloat(String(a.value).replace(",", ".")), ref = rmPersonal(t.ejercicio_id);
       tc.hidden = !t.p;
-      tc.textContent = !ref ? "Sin 1RM en la ficha: se guarda el %, sin kg" : v > 0 ? "= " + num(kgDePct(t.ejercicio_id, v)) + " kg (1RM " + num(ref) + ")" : "1RM de referencia: " + num(ref) + " kg";
+      tc.textContent = textoPctForm(t.ejercicio_id, parseFloat(String(a.value).replace(",", ".")));   // v338
     };
     tm.hidden = !fza || med !== "peso";
     tm.addEventListener("click", () => {
@@ -11253,7 +11271,8 @@ function pintarEntreno() {
   const primerCampo = $(ent.campos[0] === "kg" && ent.campos[1] === "reps" ? "enB" : "enA").closest(".en-campo");
   if (primerCampo.parentElement.firstElementChild !== primerCampo) primerCampo.parentElement.prepend(primerCampo);
   const etiqueta = { kg: "Peso (kg)", reps: "Repeticiones" + (s.por_lado ? " por lado" : ""), m: enKm() ? "Kilómetros" : "Metros", t: "Tiempo", s: "Tiempo" + (s.por_lado ? " por lado" : "") + " (45 = segundos)" };
-  const valor = c => c === "kg" ? (kg ? num(kg) : "") : c === "reps" ? ((s.ciclo_id === "auto" || esRango(s)) && !hecha(s) ? "" : n0(s.reps) || "")
+  const objPct = !dist && !mov && !hecha(s) ? objetivoPctSerie(s) : null;   // v338: objetivo/sugerencia aparte; el campo de peso queda vacío
+  const valor = c => c === "kg" ? (kg && !objPct ? num(kg) : "") : c === "reps" ? ((s.ciclo_id === "auto" || esRango(s)) && !hecha(s) ? "" : n0(s.reps) || "")
     : c === "m" ? distCampo(s.distancia) : c === "s" ? (n0(s.tiempo) > 0 ? (n0(s.tiempo) < 60 ? String(n0(s.tiempo)) : fmtTiempo(s.tiempo)) : "") : n0(s.tiempo) ? fmtTiempo(s.tiempo) : "";
   [["enA", "enEtA"], ["enB", "enEtB"]].forEach(([inp, et], k) => {
     const c = ent.campos[k];
@@ -11265,6 +11284,20 @@ function pintarEntreno() {
     const esMaxE = !hecha(s) && !(n0(s.reps) > 0) && !(n0(s.tiempo) > 0);
     $(inp).placeholder = c === "reps" && esRango(s) && !hecha(s) ? rangoTxt(s) + ": ¿cuántas?" : c === "reps" && (s.ciclo_id || esMaxE) ? "máx: ¿cuántas?" : c === "s" ? (esMaxE ? "máx: ¿cuántos s?" : "45") : c === "t" ? (obj && obj.tiempo ? "obj. " + fmtTiempo(obj.tiempo) : "3:40") : "";
   });
+  let cajaObj = $("enObjPct");
+  if (!cajaObj) { cajaObj = document.createElement("div"); cajaObj.id = "enObjPct"; cajaObj.className = "en-objpct"; primerCampo.parentElement.before(cajaObj); }
+  cajaObj.textContent = ""; cajaObj.hidden = !(objPct && ent.campos.includes("kg"));
+  if (!cajaObj.hidden) {
+    const o1 = document.createElement("span"); o1.textContent = objPct.obj; cajaObj.appendChild(o1);
+    if (objPct.sug) { const o2 = document.createElement("strong"); o2.textContent = objPct.sug; cajaObj.appendChild(o2); }
+    [["enA", "enEtA"], ["enB", "enEtB"]].forEach(([inp], k) => { if (ent.campos[k] === "kg") $(inp).placeholder = objPct.kg ? num(objPct.kg) : "kg"; });
+    if (objPct.kg > 0) {   // v339: «Usar sugerido» copia el sugerido al campo de peso (no guarda ni marca hecha); se puede corregir después
+      const bu = document.createElement("button"); bu.type = "button"; bu.className = "nav-btn en-usar"; bu.textContent = "Usar " + num(objPct.kg) + " kg";
+      bu.setAttribute("aria-label", "Usar el peso sugerido de " + num(objPct.kg) + " kg en el campo de peso (no confirma la serie)");
+      bu.addEventListener("click", () => { const k = ent.campos.indexOf("kg"); if (k < 0) return; const inp = $(k === 0 ? "enA" : "enB"); inp.value = num(objPct.kg); inp.dispatchEvent(new Event("input", { bubbles: true })); inp.focus(); });
+      cajaObj.appendChild(bu);
+    }
+  }
   $("enHecha").textContent = hecha(s) ? "Guardar cambios" : "✓ Hecha";
   $("enDesmarcar").hidden = !hecha(s);
   $("enAviso").textContent = "";
@@ -11445,7 +11478,9 @@ function pintarVistaSeries() {
       rIn.inputMode = "numeric"; kIn.inputMode = "decimal"; rIn.dataset.campo = "reps"; kIn.dataset.campo = "kg";
       rIn.setAttribute("aria-label", "Repeticiones, " + (s.calentamiento ? "calentamiento" : "serie " + n)); kIn.setAttribute("aria-label", "Peso en kg, " + (s.calentamiento ? "calentamiento" : "serie " + n));
       const editable = !hecho && ensPesoLibre(s);
-      rIn.value = b.reps !== undefined ? b.reps : ensRepsTxt(s); kIn.value = b.kg !== undefined ? b.kg : ensKgTxt(s);
+      const objV = !hecho ? objetivoPctSerie(s) : null;   // v338: serie con objetivo en %: el peso hecho queda vacío; el objetivo/sugerido va en su línea
+      rIn.value = b.reps !== undefined ? b.reps : ensRepsTxt(s); kIn.value = b.kg !== undefined ? b.kg : objV ? "" : ensKgTxt(s);
+      if (objV) kIn.placeholder = objV.kg ? num(objV.kg) : "–";
       if (editable) {
         rIn.placeholder = (s.ciclo_id || esRango(s)) ? "máx" : "0"; kIn.placeholder = "0";
         rIn.addEventListener("input", () => { ent.borr = ent.borr || {}; ent.borr[s.id] = { ...(ent.borr[s.id] || {}), reps: rIn.value }; });
@@ -11453,6 +11488,7 @@ function pintarVistaSeries() {
       } else { rIn.readOnly = kIn.readOnly = true; rIn.classList.add("ens-ro"); kIn.classList.add("ens-ro"); }
       if (hayKg && ensPesoLibre(s) || hecho && !s.calentamiento && !s.ciclo_id && !(n0(s.pct) > 0)) kIn.addEventListener("focus", () => { ent.ensFuente = s.id; ensActualizarAuto(); });
       f.append(rIn, kIn);
+      if (objV) f.dataset.objpct = objV.obj + (objV.sug ? " · " + objV.sug : "");
     }
     if (hecho) {   // v330: el ✓ de una fila hecha es pulsable: vuelve a pendiente
       const bt = el("button", "nav-btn ens-ok", "✓"); bt.type = "button";
@@ -11464,6 +11500,7 @@ function pintarVistaSeries() {
       bt.addEventListener("click", () => ensConfirmar(s.id)); f.appendChild(bt);
     } else f.appendChild(el("span", "ens-no", "–"));
     cuerpo.appendChild(f);
+    if (f.dataset.objpct) cuerpo.appendChild(el("p", "ens-obj", f.dataset.objpct));
   });
   cuerpo.appendChild(el("p", "ens-nota", "Escribir aquí no confirma nada: lo escrito es un borrador hasta que pulses ✓ en esa serie (hace lo mismo que «✓ Hecha» de la pantalla de la serie)." + (hayKg ? " «Autorrellenar» copia el peso de la serie elegida a las series pendientes de debajo (no toca hechas, reps ni notas)." : "")));
   const pie = el("p", "aviso ens-aviso", filas.every(hecha) ? "Todas las series de este ejercicio están hechas. Cierra esta ventana cuando quieras." : ""); if (filas.every(hecha)) pie.classList.add("ens-bien"); cuerpo.appendChild(pie);
@@ -11574,7 +11611,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v311" + (BETA ? " beta" : "");
+const VERSION_APP = "v312" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

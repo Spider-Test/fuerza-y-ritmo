@@ -11344,6 +11344,12 @@ function pintarEntreno() {
     const o1 = document.createElement("span"); o1.textContent = objPct.obj; cajaObj.appendChild(o1);
     if (objPct.sug) { const o2 = document.createElement("strong"); o2.textContent = objPct.sug; cajaObj.appendChild(o2); }
     [["enA", "enEtA"], ["enB", "enEtB"]].forEach(([inp], k) => { if (ent.campos[k] === "kg") $(inp).placeholder = objPct.kg ? num(objPct.kg) : "kg"; });
+    if (objPct.kg > 0) {   // v339: «Usar sugerido» copia el sugerido al campo de peso (no guarda ni marca hecha); se puede corregir después
+      const bu = document.createElement("button"); bu.type = "button"; bu.className = "nav-btn en-usar"; bu.textContent = "Usar " + num(objPct.kg) + " kg";
+      bu.setAttribute("aria-label", "Usar el peso sugerido de " + num(objPct.kg) + " kg en el campo de peso (no confirma la serie)");
+      bu.addEventListener("click", () => { const k = ent.campos.indexOf("kg"); if (k < 0) return; const inp = $(k === 0 ? "enA" : "enB"); inp.value = num(objPct.kg); inp.dispatchEvent(new Event("input", { bubbles: true })); inp.focus(); });
+      cajaObj.appendChild(bu);
+    }
   }
   $("enHecha").textContent = hecha(s) ? "Guardar cambios" : "✓ Hecha";
   $("enDesmarcar").hidden = !hecha(s);
@@ -11658,7 +11664,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v338" + (BETA ? " beta" : "");
+const VERSION_APP = "v339" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

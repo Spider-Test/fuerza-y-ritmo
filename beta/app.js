@@ -10960,10 +10960,10 @@ function celebrar() {
   setTimeout(() => { f.classList.remove("on"); f.textContent = ""; }, 1800);
 }
 // Avisa del récord (con celebración) o, si no lo es, de que la serie está hecha; las dos con Deshacer
-function avisarSiPR(fila, deshacer, sinAviso, arriba) {   // v330: sinAviso (solo desde «Ver todas las series») omite el aviso flotante (también el de récord, que sale en la línea de mensaje de la vista; la celebración se mantiene)
+function avisarSiPR(fila, deshacer, modo) {   // v332: modo «vista» (Ver todas las series): ningún aviso flotante (el récord sale en su línea de mensaje); modo «pantalla» (pantalla de serie): sin aviso normal, solo el de récord (arriba); sin modo: como siempre
   const pr = hecha(fila) && prsEj(fila.ejercicio_id).has(fila.id);
-  if (pr) { celebrar(); if (!sinAviso) avisoDeshacer("¡Nuevo récord! " + nombreEj(fila.ejercicio_id) + " · " + serieTexto(fila), deshacer, true, arriba); }   // desde la vista, el récord se muestra en su línea de mensaje
-  else if (deshacer && !sinAviso) avisoDeshacer("Serie hecha · " + nombreEj(fila.ejercicio_id), deshacer, false, arriba);
+  if (pr) { celebrar(); if (modo !== "vista") avisoDeshacer("¡Nuevo récord! " + nombreEj(fila.ejercicio_id) + " · " + serieTexto(fila), deshacer, true, modo === "pantalla"); }
+  else if (deshacer && !modo) avisoDeshacer("Serie hecha · " + nombreEj(fila.ejercicio_id), deshacer);
   return pr;
 }
 function marcarHecha(antes, fila) {
@@ -11215,7 +11215,7 @@ $("enHecha").addEventListener("click", () => {
   const yaHecha = hecha(s);
   cambiar("series", fila);
   pintarBloques(true);
-  avisarSiPR(fila, [["series", s]], ent.ensSilencio, true);   // v331: el aviso sale arriba, sin tapar ‹ ›, Hecha ni el descanso
+  avisarSiPR(fila, [["series", s]], ent.ensSilencio ? "vista" : "pantalla");   // v332: sin aviso «Serie hecha» (se corrige con «↺ Marcar como pendiente»); el de récord se conserva
   if (yaHecha) { pintarEntreno(); return; }
   siguientePendiente();
   if (!$("enFin").hidden) return;   // era la última: no hay descanso
@@ -11279,7 +11279,7 @@ $("enVideo").addEventListener("click", () => {
   if ($("dlgEntreno").open && e && idYoutube(e.video_url)) verVideo(e);
 });
 $("enAnt").addEventListener("click", () => { if (ent.i > 0) { ent.i--; pintarEntreno(); } });
-$("enDesmarcar").addEventListener("click", () => { const s = serieEnt(); if (!s || !hecha(s)) return; $("enFin").hidden = true; desmarcar(s); pintarEntreno(); });
+$("enDesmarcar").addEventListener("click", () => { const s = serieEnt(); if (!s || !hecha(s)) return; $("enFin").hidden = true; desmarcar(s, true); pintarEntreno(); });   // v332: sin aviso flotante
 $("enCalentSi").addEventListener("click", () => {
   const s = serieEnt();
   if (!s || !ent.calent) return;
@@ -11479,7 +11479,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v331" + (BETA ? " beta" : "");
+const VERSION_APP = "v332" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

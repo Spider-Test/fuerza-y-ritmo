@@ -10919,7 +10919,7 @@ function pintarCabDia(dia) {
 // ---------- Deshacer, deslizar y récords ----------
 let deshacerPend = null, timerAviso = null;
 const capaArriba = () => ($("dlgEnSeries").open ? $("dlgEnSeries") : $("dlgEntreno").open ? $("dlgEntreno") : document.body);   // v328: el aviso con Deshacer va en la capa más alta
-function avisoDeshacer(texto, deshacer, pr) {
+function avisoDeshacer(texto, deshacer, pr, arriba) {   // v331: «arriba» (solo tras ✓ Hecha en la pantalla de serie) lo coloca en una zona libre y lo acorta; los demás usos no cambian
   const t = $("toast");
   deshacerSug = null;
   if (t.parentNode !== capaArriba()) capaArriba().appendChild(t);
@@ -10927,9 +10927,10 @@ function avisoDeshacer(texto, deshacer, pr) {
   $("toastTxt").textContent = texto;
   $("toastBtn").hidden = !deshacerPend;
   t.classList.toggle("pr", !!pr);
+  t.classList.toggle("toast-arriba", !!arriba);
   t.hidden = false;
   clearTimeout(timerAviso);
-  timerAviso = setTimeout(() => { t.hidden = true; deshacerPend = null; }, pr ? 6000 : 5000);
+  timerAviso = setTimeout(() => { t.hidden = true; deshacerPend = null; }, arriba ? 3500 : pr ? 6000 : 5000);
 }
 $("toastBtn").addEventListener("click", () => {
   if (deshacerSug) { const f = deshacerSug; deshacerSug = null; $("toast").hidden = true; f(); return; }
@@ -10959,10 +10960,10 @@ function celebrar() {
   setTimeout(() => { f.classList.remove("on"); f.textContent = ""; }, 1800);
 }
 // Avisa del récord (con celebración) o, si no lo es, de que la serie está hecha; las dos con Deshacer
-function avisarSiPR(fila, deshacer, sinAviso) {   // v330: sinAviso (solo desde «Ver todas las series») omite el aviso flotante (también el de récord, que sale en la línea de mensaje de la vista; la celebración se mantiene)
+function avisarSiPR(fila, deshacer, sinAviso, arriba) {   // v330: sinAviso (solo desde «Ver todas las series») omite el aviso flotante (también el de récord, que sale en la línea de mensaje de la vista; la celebración se mantiene)
   const pr = hecha(fila) && prsEj(fila.ejercicio_id).has(fila.id);
-  if (pr) { celebrar(); if (!sinAviso) avisoDeshacer("¡Nuevo récord! " + nombreEj(fila.ejercicio_id) + " · " + serieTexto(fila), deshacer, true); }   // desde la vista, el récord se muestra en su línea de mensaje
-  else if (deshacer && !sinAviso) avisoDeshacer("Serie hecha · " + nombreEj(fila.ejercicio_id), deshacer);
+  if (pr) { celebrar(); if (!sinAviso) avisoDeshacer("¡Nuevo récord! " + nombreEj(fila.ejercicio_id) + " · " + serieTexto(fila), deshacer, true, arriba); }   // desde la vista, el récord se muestra en su línea de mensaje
+  else if (deshacer && !sinAviso) avisoDeshacer("Serie hecha · " + nombreEj(fila.ejercicio_id), deshacer, false, arriba);
   return pr;
 }
 function marcarHecha(antes, fila) {
@@ -11214,7 +11215,7 @@ $("enHecha").addEventListener("click", () => {
   const yaHecha = hecha(s);
   cambiar("series", fila);
   pintarBloques(true);
-  avisarSiPR(fila, [["series", s]], ent.ensSilencio);
+  avisarSiPR(fila, [["series", s]], ent.ensSilencio, true);   // v331: el aviso sale arriba, sin tapar ‹ ›, Hecha ni el descanso
   if (yaHecha) { pintarEntreno(); return; }
   siguientePendiente();
   if (!$("enFin").hidden) return;   // era la última: no hay descanso
@@ -11478,7 +11479,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v330" + (BETA ? " beta" : "");
+const VERSION_APP = "v331" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

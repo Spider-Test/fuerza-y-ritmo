@@ -2958,3 +2958,6 @@ button.ens-ok { min-width: 44px; min-height: 44px; padding: 0; background: trans
 
 /* v329: mensajes correctos de la vista de series (no en rojo) */
 .ens-aviso.ens-bien { color: var(--accent); font-weight: 600; }
+
+/* v331: aviso tras «✓ Hecha» en la pantalla de serie: arriba, bajo la cabecera, para no cubrir ‹ ›, Hecha, descanso ni campos */
+.toast.toast-arriba, dialog .toast.toast-arriba { top: calc(env(safe-area-inset-top, 0px) + 72px); bottom: auto; max-width: calc(100vw - 24px); }

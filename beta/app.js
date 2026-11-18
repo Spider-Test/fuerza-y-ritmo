@@ -546,7 +546,7 @@ function textoPctRepsForm(id, v) {
 const objetivoPctSerie = s => tipoDe(s.ejercicio_id) === "fuerza" && n0(s.pct) > 0 && !s.ciclo_id
   ? (esPctReps(s) ? textoPctReps(s.ejercicio_id, s.pct) : ["peso", "reps"].includes(medidaDe(s.ejercicio_id)) ? { ...textoPct(s.ejercicio_id, s.pct), campo: "kg" } : null) : null;
 // Opciones del botón de unidad en fuerza: en los medidos por repeticiones, «kg» · «% reps» · «% lastre»; en el resto, «kg» · «%» como siempre
-const modosPct = id => medidaDe(id) === "reps" ? ["", "reps", "1rm"] : ["", "1rm"];
+const modosPct = id => medidaDe(id) === "reps" ? (sinCarga(id) ? ["", "reps"] : ["", "reps", "1rm"]) : ["", "1rm"];   // v351: sin carga en la ficha no se ofrece «% lastre» (guardaba pct 0)
 const etiquetaModoPct = (id, m, sinKg) => m === "reps" ? "% reps" : m === "1rm" ? (medidaDe(id) === "reps" ? "% lastre" : "%") : sinKg ? "reps" : "kg";
 const marcadorModoPct = (id, m) => m === "reps" ? "% reps" : m === "1rm" ? (medidaDe(id) === "reps" ? "% lastre" : "% 1RM") : "";
 const distDeNombre = nombre => { const m = norm(nombre).match(/(\d+(?:[.,]\d+)?)\s*(km|m)\b/); return m ? parseFloat(m[1].replace(",", ".")) * (m[2] === "km" ? 1000 : 1) : 0; };
@@ -4787,7 +4787,10 @@ function bloque(dia, id, series, grupo, parte, copia) {
     pintarCalc();
   };
   // La recuperación solo se copia de una serie de este mismo día: cada entrenamiento la ajusta
+  let fbTocado = false;   // v351: ¿ha escrito el usuario en el campo de reps? (lo rellenado automáticamente con la última serie no cuenta)
+  fb.addEventListener("input", () => { fbTocado = true; });
   const rellenarCon = (s, conRec) => {
+    fbTocado = false;
     if (tipo === "fuerza") b.classList.toggle("sin-peso", !cargaVisible());
     if (dist) {
       const t = !(n0(s.distancia) > 0) && n0(s.tiempo) > 0, m = distCampo(s.distancia), ti = n0(s.tiempo) > 0 ? fmtTiempo(s.tiempo) : "";
@@ -4803,6 +4806,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
       if (n0(s.pct) > 0 && !s.ciclo_id) { ponerModo(esPctReps(s) ? "reps" : "1rm"); fa.value = num(s.pct); }
       else { ponerModo(""); const kg = pesoMostrado(s); fa.value = kg > 0 ? num(kg) : ""; }
       fb.value = t ? segTxt(s.tiempo) : n0(s.reps) || "";
+      if (!t && esPctReps(s) && modoForm !== "editar") fb.value = "";   // v351: una serie nueva que copia la última «% reps» no hereda sus reps
       if (!t && esRango(s) && !hecha(s)) { fb.value = modoForm === "editar" ? "" : rangoTxt(s); if (modoForm === "editar") setTimeout(() => { fb.placeholder = rangoTxt(s) + ": ¿cuántas?"; }, 0); }
       if (b.querySelector(".por-lado")) b.querySelector(".por-lado").checked = (modoForm === "editar" && !!s.por_lado) || ladoDe(id);   // v271
       const esMax = !(n0(s.reps) > 0) && !(n0(s.tiempo) > 0) && !(n0(s.distancia) > 0) && !s.ciclo_id;
@@ -4819,7 +4823,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
       const ops = modosPct(id), sig = ops[(ops.indexOf(modoPct) + 1) % ops.length];   // v345: siguiente opción; sin equivalencia entre % de repeticiones y kg
       if (sig === "1rm" && modoPct === "") { ponerModo("1rm"); fa.value = v > 0 && ref ? num(Math.round(v / ref * 100)) : ""; }
       else if (sig === "" && modoPct === "1rm") { const kg = v > 0 ? kgDePct(id, v) : 0; ponerModo(""); fa.value = kg ? num(kg) : ""; }
-      else { ponerModo(sig); fa.value = ""; }
+      else { ponerModo(sig); fa.value = ""; if (sig === "reps" && !fbTocado && !enTiempo() && !enMax() && !(modoForm === "editar" && editando && hecha(editando))) fb.value = ""; }   // v351: «% reps» no vuelca las reps de la última serie
       pintarCalc();
     });
     fa.addEventListener("input", pintarCalc);
@@ -5657,6 +5661,8 @@ function tarjetaBloque(dia, bloqueId, series) {
     if (antesT !== (form.dataset.isoT === "1")) fb.value = "";
     fb.focus(); guardarBor();
   }));
+  let fbTocadoR = false;   // v351: ¿ha escrito el usuario en el campo de reps de la ronda?
+  fb.addEventListener("input", () => { fbTocadoR = true; });
   let brRef = "";   // v345: "reps" = % del máximo de repeticiones (solo con brPct)
   const pintarBrCalc = () => {
     if (!editando || !brPct) { brCalc.hidden = true; return; }
@@ -5679,7 +5685,7 @@ function tarjetaBloque(dia, bloqueId, series) {
     const actual = !brPct ? "" : brRef === "reps" ? "reps" : "1rm", ops = modosPct(id), sig = ops[(ops.indexOf(actual) + 1) % ops.length];
     if (sig === "1rm" && actual === "") { ponerBrModo("1rm"); fa.value = v > 0 && ref ? num(Math.round(v / ref * 100)) : ""; }
     else if (sig === "" && actual === "1rm") { const kg = v > 0 ? kgDePct(id, v) : 0; ponerBrModo(""); fa.value = kg ? num(kg) : ""; }
-    else { ponerBrModo(sig); fa.value = ""; }
+    else { ponerBrModo(sig); fa.value = ""; if (sig === "reps" && !fbTocadoR && form.dataset.isoT !== "1" && !hecha(editando)) fb.value = ""; }   // v351: «% reps» no vuelca las reps de la ronda
     fa.focus();
   });
   fa.addEventListener("input", () => { if (/%\s*$/.test(fa.value) && !brPct && !brModo.hidden) { fa.value = fa.value.replace(/\s*%\s*$/, ""); ponerBrModo("1rm"); } pintarBrCalc(); });
@@ -5697,7 +5703,7 @@ function tarjetaBloque(dia, bloqueId, series) {
     if (enfocar && !form.hidden && fotoR !== null && valoresR() !== fotoR) { setEstado("Guarda o cancela la edición antes de abrir otra ronda"); return; }
     c.querySelector(".desmarcar").hidden = !hecha(s);
     c.querySelector(".desmarcar").onclick = () => desmarcar(s);
-    editando = s;
+    editando = s; fbTocadoR = false;
     const dist = esDistancia(tipoDe(s.ejercicio_id));
     c.querySelector(".br-que").textContent = "R" + n0(s.ronda) + " · " + nombreEj(s.ejercicio_id);
     const mov = tipoDe(s.ejercicio_id) === "movilidad";
@@ -5945,13 +5951,13 @@ function pintarTramos() {
       const v = parseFloat(String(a.value).replace(",", ".")), ref = rmPersonal(t.ejercicio_id), ops = modosPct(t.ejercicio_id), sig = ops[(ops.indexOf(modoT()) + 1) % ops.length];
       if (sig === "1rm" && !t.p) { t.p = true; a.value = v > 0 && ref ? num(Math.round(v / ref * 100)) : ""; }
       else if (sig === "" && t.p === true) { const kg = v > 0 ? kgDePct(t.ejercicio_id, v) : 0; t.p = false; a.value = kg ? num(kg) : ""; }
-      else { t.p = sig === "reps" ? "reps" : sig === "1rm"; a.value = ""; }
+      else { t.p = sig === "reps" ? "reps" : sig === "1rm"; a.value = ""; if (sig === "reps" && !t.bTocado && !b.disabled && t.m !== "t" && t.m !== "maxt") { t.b = ""; b.value = ""; } }   // v351: «% reps» no vuelca las reps de la última serie
       t.a = a.value; pintarTc();
     });
     a.value = t.a; b.value = t.b; cc.value = t.c;
     if (fza) { pintarTc(); pintarM(); t.b = b.value; }
     a.addEventListener("input", () => { if (fza && /%\s*$/.test(a.value) && !tm.hidden) { a.value = a.value.replace(/\s*%\s*$/, ""); t.p = true; } t.a = a.value; if (fza) pintarTc(); });
-    b.addEventListener("input", () => { t.b = b.value; });
+    b.addEventListener("input", () => { t.b = b.value; t.bTocado = true; });
     cc.addEventListener("input", () => { t.c = cc.value; });
     const q = fila.querySelector(".quitar");
     q.setAttribute("aria-label", "Quitar el tramo " + (k + 1));
@@ -12086,7 +12092,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v350" + (BETA ? " beta" : "");
+const VERSION_APP = "v351" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

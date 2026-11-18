@@ -2128,6 +2128,7 @@ function rellenar() {
     if (limpiar(ed.innerHTML) !== nuevo) ed.innerHTML = nuevo;
     marcarVacio(ed);
   });
+  actualizarTextosTira();   // v350: tras sincronizar (rellenar se llama al aplicar lo de otro dispositivo)
 }
 
 function mesoDe(fechaIso) {
@@ -2150,6 +2151,29 @@ function asegurarDiaElegido() {
   diaAbierto = desplazamiento === 0 ? iso(new Date()) : ids.find(id => seriesDelDia(id).length) || ids[0];
   escribir("dia-abierto-v1", { id: diaAbierto, abierto: iso(new Date()) });
 }
+// v350: texto de la tira. Primera línea no vacía de la caja del día (sin formato); se corta a ~100 caracteres solo para title/aria-label (la elipsis visible la hace el CSS según el ancho real)
+function primeraLineaDia(id) {
+  const e = db.entrenos[id]; if (!e || e.borrado) return "";
+  const t = e.html != null && e.html !== "" ? aTexto(e.html) : String(e.texto || "");
+  const l = t.split("\n").map(x => x.replace(/\s+/g, " ").trim()).find(x => x) || "";
+  return l;
+}
+function ponerTextoTira(b, txt) {
+  const corto = txt.length > 100 ? txt.slice(0, 100) + "…" : txt;
+  if (txt) b.title = corto; else b.removeAttribute("title");
+  b.setAttribute("aria-label", (b.dataset.base || "") + (txt ? ". " + corto : ""));
+}
+// Actualiza SOLO el texto de la tira (sin rehacer botones, sin tocar el foco de la caja): al escribir/borrar y tras sincronizar
+function actualizarTextosTira() {
+  const t = $("tiraDias"); if (!t || SEMANA_COMPLETA) return;
+  let alguno = false;
+  t.querySelectorAll(".td-btn").forEach(b => {
+    const txt = primeraLineaDia(b.dataset.id), r = b.querySelector(".td-rs");
+    if (r && r.textContent !== txt) { r.textContent = txt; ponerTextoTira(b, txt); }
+    if (txt) alguno = true;
+  });
+  t.classList.toggle("con-resumen", alguno);
+}
 const INICIALES_DIA = ["L", "M", "X", "J", "V", "S", "D"];
 // Tira de días: estado del punto con las series VIVAS del día (seriesDelDia, sin borradas; incluye calentamientos): verde = tiene series y TODAS hechas; gris = tiene series y alguna pendiente (previsto); nada = sin series
 function pintarTira() {
@@ -2157,9 +2181,8 @@ function pintarTira() {
   t.hidden = SEMANA_COMPLETA;
   if (SEMANA_COMPLETA) return;
   const lunes = lunesVista(), hoyIso = iso(new Date());
-  // v349: el texto bajo cada día sale de los NOMBRES de los entrenos de su tarjeta (grupo con nombre, en el orden de la tarjeta; se ignoran los «Ejercicios sueltos»): uno → su nombre; varios → «Primero +N»
-  const nombresDe = (i, id) => { const d = dias[i]; return d && d.id === id ? [...d.bloquesEl.querySelectorAll(":scope > .grupo")].map(g => g.dataset.grupo || "").filter(Boolean) : []; };
-  const dd = Array.from({ length: 7 }, (_, i) => { const f = sumarDias(lunes, i), id = iso(f), ser = seriesDelDia(id), nom = nombresDe(i, id), rs = nom.length ? nom[0] + (nom.length > 1 ? " +" + (nom.length - 1) : "") : ""; return { i, f, id, rs, nom, n: ser.length, hechas: ser.filter(hecha).length }; });
+  // v350: el texto bajo cada día es la PRIMERA LÍNEA NO VACÍA de lo que el usuario escribe en la caja de texto del día (entrenos[id].html/texto); caja vacía → nada (el aviso gris automático no cuenta; sin nombres de entrenos)
+  const dd = Array.from({ length: 7 }, (_, i) => { const f = sumarDias(lunes, i), id = iso(f), ser = seriesDelDia(id); return { i, f, id, rs: primeraLineaDia(id), n: ser.length, hechas: ser.filter(hecha).length }; });
   t.classList.toggle("con-resumen", dd.some(d => d.rs));
   t.textContent = "";
   dd.forEach(d => {
@@ -2170,9 +2193,9 @@ function pintarTira() {
     const num = document.createElement("span"); num.className = "td-num"; num.textContent = d.f.getDate();
     const pt = document.createElement("span"); pt.className = "td-punto"; pt.setAttribute("aria-hidden", "true");
     b.append(ini, num, pt);
-    if (dd.some(x => x.rs)) { const r = document.createElement("span"); r.className = "td-rs"; r.textContent = d.rs; b.appendChild(r); }
-    if (d.rs) b.title = d.nom.join(", ");
-    b.setAttribute("aria-label", NOMBRES[d.i] + " " + d.f.getDate() + (d.id === hoyIso ? ", hoy" : "") + ", " + estado + (d.nom.length ? ". " + d.nom.join(", ") : ""));
+    const r = document.createElement("span"); r.className = "td-rs"; r.textContent = d.rs; b.appendChild(r);   // siempre existe (el CSS lo oculta si ningún día tiene texto): así se actualiza en vivo sin rehacer la tira
+    b.dataset.base = NOMBRES[d.i] + " " + d.f.getDate() + (d.id === hoyIso ? ", hoy" : "") + ", " + estado;
+    ponerTextoTira(b, d.rs);
     if (d.id === hoyIso) b.setAttribute("aria-current", "date");
     b.setAttribute("aria-pressed", String(d.id === diaAbierto));
     b.addEventListener("click", () => abrirDia(d.id));
@@ -2221,6 +2244,7 @@ function editado(dia) {
   const html = limpiar(dia.ed.innerHTML);
   marcarVacio(dia.ed);
   cambiar("entrenos", { ...db.entrenos[dia.id], fecha: dia.id, html, texto: aTexto(html) });
+  actualizarTextosTira();   // v350
 }
 
 dias.forEach(dia => {
@@ -11311,17 +11335,27 @@ function abrirDia(id) {
 // entre semanas: no se muestra el vecino pegado, solo se desliza el actual y entra el nuevo); si no, vuelve a su sitio. prefers-reduced-motion: cambio instantáneo.
 const sinMovimiento = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 let animDia = null;   // { anim, saliendo }
+// v350: se mueve TODO lo que hay bajo la tira como un solo bloque: aviso del mesociclo (#mesoBanda, si se ve), resumen de semana (#resumenSem, si se ve), «Molestias y lesiones» (#molestiasSem, abierto o cerrado tal cual) y el día (#semana).
+// La tira y la cabecera de semana se quedan fijas. Mismo transform/opacity y mismas fases en todos.
+const IDS_BLOQUE_DIA = ["mesoBanda", "resumenSem", "molestiasSem", "semana"];
+const bloqueDia = () => IDS_BLOQUE_DIA.map($).filter(e => e && !e.hidden);
+function estiloBloque(transform, opacity, willChange, soloVisibles) { IDS_BLOQUE_DIA.forEach(id => { const e = $(id); if (e && !(soloVisibles && e.hidden)) { e.style.transform = transform; e.style.opacity = opacity; e.style.willChange = willChange; } }); }
+function animarBloque(frames, opts) {
+  const as = bloqueDia().map(e => e.animate(frames, opts));
+  if (!as.length) return null;
+  return { cancel() { as.forEach(a => { try { a.cancel(); } catch {} }); }, set onfinish(f) { as[0].onfinish = f; }, set oncancel(f) { as[0].oncancel = f; } };
+}
 function limpiarAnimDia() {
-  const el = $("semana");
   if (animDia && animDia.anim) { try { animDia.anim.cancel(); } catch {} }
   animDia = null; gestoDia = null;
-  el.style.transform = ""; el.style.opacity = ""; el.style.willChange = "";
+  estiloBloque("", "", "");
 }
 function entrarDia(dir) {
   const el = $("semana");
   if (sinMovimiento() || $("vistaSemana").hidden || !el.animate) return;
   const w = el.getBoundingClientRect().width || innerWidth;
-  const a = el.animate([{ transform: "translateX(" + dir * Math.min(w * 0.3, 160) + "px)", opacity: 0 }, { transform: "translateX(0)", opacity: 1 }], { duration: 220, easing: "ease-out" });
+  const a = animarBloque([{ transform: "translateX(" + dir * Math.min(w * 0.3, 160) + "px)", opacity: 0 }, { transform: "translateX(0)", opacity: 1 }], { duration: 220, easing: "ease-out" });
+  if (!a) return;
   const mio = { anim: a }; animDia = mio;
   const fin = () => { if (animDia === mio) animDia = null; };
   a.onfinish = fin; a.oncancel = fin;
@@ -11343,21 +11377,23 @@ $("tabSemana").addEventListener("click", () => { if (!semanaVisible) return; if 
 let gestoDia = null;
 // v349: el gesto empieza en cualquier punto del día (también sobre ejercicios y series), salvo desde el borde izquierdo (el «atrás» de Safari), sobre campos de escritura,
 // el editor y las asas de arrastre; no con el modo «Reordenar» activo ni mientras se arrastra. El scroll vertical sigue siendo de la página.
-$("semana").addEventListener("touchstart", e => {
-  const t = e.touches[0];
-  gestoDia = diaAbierto && !(animDia && animDia.saliendo) && !zonaReordenar && !arrastreActivo && !arrastreOrden && e.touches.length === 1 && t.clientX > 30 && !e.target.closest("input, textarea, select, .editor, .asa")
+// v350: el gesto también puede empezar en el bloque de «Molestias y lesiones» / aviso del mesociclo / resumen de semana, salvo sobre campos, botones y su cabecera (summary)
+const alIniciarGestoDia = e => {
+  const t = e.touches[0], fuera = e.currentTarget !== $("semana");
+  gestoDia = diaAbierto && !(animDia && animDia.saliendo) && !zonaReordenar && !arrastreActivo && !arrastreOrden && e.touches.length === 1 && t.clientX > 30 && !e.target.closest("input, textarea, select, .editor, .asa" + (fuera ? ", button, summary, a" : ""))
     ? { x: t.clientX, y: t.clientY, fase: 0, dx: 0, m: [[e.timeStamp, t.clientX]] } : null;
-}, { passive: true });
+};
 function volverDia(dx) {   // el gesto no se completa: el día vuelve a su sitio
   const el = $("semana");
-  el.style.transform = ""; el.style.opacity = ""; el.style.willChange = "";
+  estiloBloque("", "", "");
   if (sinMovimiento() || !el.animate || !dx) { animDia = null; return; }
-  const a = el.animate([{ transform: "translateX(" + dx + "px)" }, { transform: "translateX(0)" }], { duration: 160, easing: "ease-out" });
+  const a = animarBloque([{ transform: "translateX(" + dx + "px)" }, { transform: "translateX(0)" }], { duration: 160, easing: "ease-out" });
+  if (!a) { animDia = null; return; }
   const mio = { anim: a }; animDia = mio;
   const fin = () => { if (animDia === mio) animDia = null; };
   a.onfinish = fin; a.oncancel = fin;
 }
-$("semana").addEventListener("touchmove", e => {
+const alMoverGestoDia = e => {
   const g = gestoDia; if (!g) return;
   if (e.touches.length !== 1) { const dx = g.fase ? g.dx : 0; gestoDia = null; if (g.fase) volverDia(dx); return; }
   const t = e.touches[0], dx = t.clientX - g.x, dy = t.clientY - g.y;
@@ -11365,13 +11401,13 @@ $("semana").addEventListener("touchmove", e => {
     if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx) * 0.7) { gestoDia = null; return; }   // vertical: scroll de la página
     if (Math.abs(dx) < 12 || Math.abs(dx) < 1.5 * Math.abs(dy)) return;
     g.fase = 1;
-    if (!sinMovimiento()) { limpiarAnimDia(); gestoDia = g; $("semana").style.willChange = "transform"; }
+    if (!sinMovimiento()) { limpiarAnimDia(); gestoDia = g; bloqueDia().forEach(e => { e.style.willChange = "transform"; }); }
   }
   g.dx = dx; g.m.push([e.timeStamp, t.clientX]); if (g.m.length > 6) g.m.shift();
-  if (!sinMovimiento()) { const w = $("semana").getBoundingClientRect().width || innerWidth; $("semana").style.transform = "translateX(" + dx + "px)"; $("semana").style.opacity = String(1 - Math.min(0.4, Math.abs(dx) / w * 0.6)); }
-}, { passive: true });
-$("semana").addEventListener("touchcancel", () => { const g = gestoDia; gestoDia = null; if (g && g.fase) volverDia(g.dx); }, { passive: true });
-$("semana").addEventListener("touchend", e => {
+  if (!sinMovimiento()) { const w = $("semana").getBoundingClientRect().width || innerWidth; estiloBloque("translateX(" + dx + "px)", String(1 - Math.min(0.4, Math.abs(dx) / w * 0.6)), "transform", true); }
+};
+const alCancelarGestoDia = () => { const g = gestoDia; gestoDia = null; if (g && g.fase) volverDia(g.dx); };
+const alTerminarGestoDia = e => {
   const g = gestoDia; gestoDia = null;
   if (!g) return;
   const t = e.changedTouches[0], dx = t.clientX - g.x, dy = t.clientY - g.y;
@@ -11382,12 +11418,21 @@ $("semana").addEventListener("touchend", e => {
   if (!completa) { if (g.fase) volverDia(dx); return; }
   const destino = iso(sumarDias(deIso(diaAbierto), dx < 0 ? 1 : -1));
   if (reducido || !el.animate) { limpiarAnimDia(); abrirDia(destino); return; }
-  el.style.transform = ""; el.style.opacity = "";
-  const a = el.animate([{ transform: "translateX(" + dx + "px)", opacity: el.style.opacity || 1 }, { transform: "translateX(" + (dx < 0 ? -1 : 1) * w * 0.5 + "px)", opacity: 0 }], { duration: 180, easing: "ease-out", fill: "forwards" });
+  const op = el.style.opacity || 1;
+  estiloBloque("", "", "");
+  const a = animarBloque([{ transform: "translateX(" + dx + "px)", opacity: op }, { transform: "translateX(" + (dx < 0 ? -1 : 1) * w * 0.5 + "px)", opacity: 0 }], { duration: 180, easing: "ease-out", fill: "forwards" });
+  if (!a) { abrirDia(destino); return; }
   const mio = { anim: a, saliendo: true }; animDia = mio;
   a.onfinish = () => { if (animDia === mio) abrirDia(destino); };   // abrirDia limpia la salida y lanza la entrada desde el lado contrario
   a.oncancel = () => { if (animDia === mio) animDia = null; };
-}, { passive: true });
+};
+["semana", "molestiasSem", "mesoBanda", "resumenSem"].forEach(id => {
+  const el = $(id);
+  el.addEventListener("touchstart", alIniciarGestoDia, { passive: true });
+  el.addEventListener("touchmove", alMoverGestoDia, { passive: true });
+  el.addEventListener("touchcancel", alCancelarGestoDia, { passive: true });
+  el.addEventListener("touchend", alTerminarGestoDia, { passive: true });
+});
 window.addEventListener("resize", () => { if (animDia || gestoDia) limpiarAnimDia(); });
 window.addEventListener("orientationchange", () => { if (animDia || gestoDia) limpiarAnimDia(); });
 // Días desplegados o plegados a mano; se recuerdan unas semanas
@@ -12041,7 +12086,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v349" + (BETA ? " beta" : "");
+const VERSION_APP = "v350" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

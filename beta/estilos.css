@@ -3026,5 +3026,7 @@ button.ens-ok { min-width: 44px; min-height: 44px; padding: 0; background: trans
 .tira-dias:not(.con-resumen) .td-rs { display: none; }
 .tira-dias[hidden] { display: none; }
 /* v349: el día sigue al dedo en horizontal; el scroll vertical y el zoom con pellizco siguen siendo del navegador (y con zoom ampliado, todo del navegador) */
-#vistaSemana.solo-dia #semana { touch-action: pan-y pinch-zoom; }
-html.ampliado #vistaSemana.solo-dia #semana { touch-action: auto; }
+#vistaSemana.solo-dia #semana, #vistaSemana.solo-dia #molestiasSem, #vistaSemana.solo-dia #mesoBanda, #vistaSemana.solo-dia #resumenSem { touch-action: pan-y pinch-zoom; }
+html.ampliado #vistaSemana.solo-dia #semana, html.ampliado #vistaSemana.solo-dia #molestiasSem, html.ampliado #vistaSemana.solo-dia #mesoBanda, html.ampliado #vistaSemana.solo-dia #resumenSem { touch-action: auto; }
+/* v350: al deslizar el bloque bajo la tira, nada se sale de la pantalla (recorta solo en horizontal, sin crear contenedor de scroll: el sticky sigue igual) */
+#vistaSemana.solo-dia { overflow-x: clip; }

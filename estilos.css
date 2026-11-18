@@ -2994,3 +2994,11 @@ button.ens-ok { min-width: 44px; min-height: 44px; padding: 0; background: trans
 .lado-tag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); font-size: 11px; font-weight: 600; line-height: 1.5; white-space: nowrap; vertical-align: middle; pointer-events: none; user-select: none; }
 .tr-n .lado-tag { margin-left: 4px; }
 .eb-ej-nl { display: inline-flex; align-items: center; flex-wrap: wrap; max-width: 100%; }
+/* v344 (MEJ-LISTAS-005): «Reordenar» de las listas (conjunto): cabecera propia, listas plegadas y asa de la lista entera */
+.listas-cab { display: flex; justify-content: flex-end; margin: 0 0 6px; }
+.reordenando > .listas-cab .modo-orden { color: var(--accent); }
+.reordenando > .listas-cab .modo-orden::before { background: var(--accent-soft); border-color: var(--accent); }
+[data-zona-orden="listas"].reordenando > .lista-sec > .sec-cuerpo, [data-zona-orden="listas"].reordenando > .lista-sec .orden-barra { display: none !important; }
+[data-zona-orden="listas"].reordenando > .lista-sec > .lista-cab > .asa.asa-listas { cursor: grab; touch-action: none; opacity: 1 !important; visibility: visible !important; pointer-events: auto; }
+[data-zona-orden="listas"].reordenando > .lista-sec > .lista-cab > .asa.asa-listas:active { cursor: grabbing; }
+[data-zona-orden^="lista:"].reordenando > .lista-cab > .asa.asa-listas { visibility: hidden !important; pointer-events: none; }   /* modo Reordenar de UNA lista: el asa de la lista entera no se ve */

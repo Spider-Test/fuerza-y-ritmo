@@ -92,7 +92,7 @@ const TABLAS = {
   series: { clave: "id", conflicto: "id", campos: ["id", "fecha", "ejercicio_id", "orden", "peso", "reps", "distancia", "tiempo", "descanso", "hecha", "grupo", "meso_id", "bloque_id", "ronda", "rec_dist", "pct", "ciclo_id", "calentamiento", "desnivel_pos", "desnivel_neg", "ritmo_ajustado", "fc_media", "fc_max", "cadencia", "fc_pico", "fc_hist", "seccion", "por_lado", "nota", "letra_nueva", "max_tiempo", "max_reps", "copia", "rango_min", "rango_max", "borrado", "actualizado"] },
   entrenos: { clave: "fecha", conflicto: "user_id,fecha", campos: ["fecha", "html", "texto", "rpe", "sensacion", "extra", "actualizado"] },
   molestias: { clave: "id", conflicto: "id", campos: ["id", "zona", "descripcion", "inicio", "estado", "borrado", "actualizado"] },
-  listas: { clave: "id", conflicto: "id", campos: ["id", "nombre", "items", "siguiente", "borrado", "actualizado"], opcional: true },
+  listas: { clave: "id", conflicto: "id", campos: ["id", "nombre", "items", "siguiente", "orden", "borrado", "actualizado"], opcional: true },   // v344: «orden» (MEJ-LISTAS-005), opcional: ver COLUMNAS_OPCIONALES
   carreras: { clave: "id", conflicto: "id", campos: ["id", "nombre", "fecha", "lugar", "distancia", "tiempo", "chip", "pos_general", "total_general", "categoria", "pos_categoria", "total_categoria", "desnivel_pos", "fc_media", "notas", "enlace", "previsto", "borrado", "actualizado"] }
 };
 const DEFECTOS = { medida: "", lado: false, extra: {}, seccion: "", por_lado: false, nota: "", letra_nueva: false, max_tiempo: false, max_reps: false, rango_min: 0, rango_max: 0, fecha: null, lugar: "", categoria: "", enlace: "", fc_hist: [], tipo: "fuerza", hecha: true, grupo: "", meso_id: "", bloque_id: "", ciclo_id: "", importadas: [], cerrado: false, compartido: false, medidas: [], regiones: [], tecnica: false, items: [], dias: {}, descarga: {}, zonas: [], calentamiento: false, inicio: null, zona: "", descripcion: "", estado: "activa", nombre: "", video_url: "", notas: "", html: "", texto: "", sensacion: "", borrado: false };
@@ -895,7 +895,7 @@ async function api(ruta, opciones = {}, reintento = false) {
 // servidor (hoy solo las tres de ejercicios; una versión futura que añada una columna a otra tabla la declara aquí) y faltanPorTabla guarda las que
 // el servidor ha rechazado en esta carga. Se reinicia en cada carga de la app.
 let columnaMedidas = true;
-const COLUMNAS_OPCIONALES = { ejercicios: ["medidas", "regiones", "tecnica"] };
+const COLUMNAS_OPCIONALES = { ejercicios: ["medidas", "regiones", "tecnica"], listas: ["orden"] };   // v344: listas.orden (MEJ-LISTAS-005)
 const faltanPorTabla = Object.fromEntries(Object.keys(TABLAS).map(t => [t, new Set()]));
 const columnasFaltan = faltanPorTabla.ejercicios;
 const camposDe = t => faltanPorTabla[t].size ? TABLAS[t].campos.filter(c => !faltanPorTabla[t].has(c)) : TABLAS[t].campos;
@@ -1898,7 +1898,8 @@ function pedirNombre(titulo, valor, ayuda) {
 
 // Modo efímero de reordenación: un solo día o una sola lista, sin guardarlo ni sincronizarlo.
 let zonaReordenar = null, arrastreOrden = null, actualizandoOrden = false;
-const raizOrden = el => el?.closest?.("[data-zona-orden]") || null;
+// v344 (MEJ-LISTAS-005): el asa que mueve una lista ENTERA (clase asa-listas, dentro de la cabecera de la lista) pertenece a la zona «listas» (el conjunto), no a la zona de esa lista
+const raizOrden = el => el?.closest?.(el.classList?.contains("asa-listas") ? '[data-zona-orden="listas"]' : "[data-zona-orden]") || null;
 // MEJ-BLQ-001 (2.17): una ventana marcada con data-orden-libre (la de «Editar superserie») reordena siempre, sin el modo «Reordenar» del día, y es ella la que se desplaza
 const libreOrden = el => el?.closest?.("[data-orden-libre]") || null;
 const puedeReordenar = el => !!libreOrden(el) || (!!zonaReordenar && raizOrden(el)?.dataset.zonaOrden === zonaReordenar);
@@ -1931,7 +1932,7 @@ function actualizarModoOrden() {
     if (zonaReordenar && (!actual || zonaOrdenPlegada(actual) || !actual.querySelector(".asa") || document.querySelector("dialog[open]"))) terminarModoOrden();
     else if (arrastreOrden && !arrastreOrden.asa.isConnected) arrastreOrden.cancelar();
     zonas.forEach(z => {
-      const activo = puedeReordenar(z), barra = z.querySelector(":scope > .dia-cab > .orden-barra, :scope > .lista-cab > .orden-barra");
+      const activo = puedeReordenar(z), barra = z.querySelector(":scope > .dia-cab > .orden-barra, :scope > .lista-cab > .orden-barra, :scope > .listas-cab > .orden-barra");
       if (z.classList.contains("reordenando") !== activo) z.classList.toggle("reordenando", activo);
       if (barra) {
         const oculta = zonaOrdenPlegada(z) || !z.querySelector(".asa"), control = barra.querySelector(".modo-orden"), estado = barra.querySelector(".orden-estado");
@@ -1944,6 +1945,7 @@ function actualizarModoOrden() {
         if (control.getAttribute("aria-label") !== etiqueta) control.setAttribute("aria-label", etiqueta);
       }
       z.querySelectorAll(".asa").forEach(asa => {
+        if (asa.classList.contains("asa-listas") && z.dataset.zonaOrden !== "listas") return;   // v344: el asa de una lista entera la gobierna la zona «listas», no la zona de esa lista
         if (asa.tabIndex !== (activo ? 0 : -1)) asa.tabIndex = activo ? 0 : -1;
         if (asa.getAttribute("aria-disabled") !== String(!activo)) asa.setAttribute("aria-disabled", String(!activo));
       });
@@ -2801,11 +2803,11 @@ function moverAParte(dia, grupo, clave, espera) {
 // «+ Entreno»: otro entreno el mismo día (por ejemplo, si doblas), separado y con sus propios ejercicios
 // «+ Entreno»: vacío, desde una plantilla o desde una lista; conserva la fecha del día elegido.
 function elegirNuevoEntreno(dia) {
-  const ls = vivos("listas").filter(l => entrenosDeLista(l).length);
+  const ls = listasOrdenadas().filter(l => entrenosDeLista(l).length);
   abrirMenu("+ Entreno en el " + NOMBRES[dia.i].toLowerCase(), "", [
     { texto: "Entreno vacío (le pones nombre)…", accion: () => nuevoEntreno(dia) },
     { texto: "Desde una plantilla…", accion: () => elegirPlantilla("Añadir plantilla al " + NOMBRES[dia.i].toLowerCase() + " " + fmt(deIso(dia.id)), p => aplicarPlantilla(dia, p)) },
-    ...ls.sort((a, b) => a.nombre.localeCompare(b.nombre, "es")).map(l => ({ texto: "Desde la lista «" + l.nombre + "»…", accion: () => elegirDeLista(l, (p, k) => ponerEnDia(l, p, k, dia.id)) }))
+    ...ls.map(l => ({ texto: "Desde la lista «" + l.nombre + "»…", accion: () => elegirDeLista(l, (p, k) => ponerEnDia(l, p, k, dia.id)) }))
   ]);
 }
 async function nuevoEntreno(dia) {
@@ -6244,17 +6246,44 @@ function recorrerLista(l) {
   return out;
 }
 function guardarLista(l, cambios) { cambiar("listas", { ...l, ...cambios }); pintarListas(); }
+// v344 (MEJ-LISTAS-005): ÚNICA función de orden de las listas (pantalla Listas, selectores, menús): por «orden» y, a igualdad, alfabético (es). Con todas a 0 sale alfabético, como siempre.
+const listasOrdenadas = () => vivos("listas").sort((a, b) => (n0(a.orden) - n0(b.orden)) || a.nombre.localeCompare(b.nombre, "es") || (a.id < b.id ? -1 : 1));
+const PASO_ORDEN_LISTAS = 1024;
+// Suelta una lista entera en su sitio. Primera vez (todas a 0) o hueco agotado: se numeran todas; si no, solo cambia la lista movida (valor entre sus vecinas).
+function soltarListas(secs) {
+  const ids = secs.map(x => x.dataset.listaId), filas = ids.map(id => db.listas[id]);
+  if (filas.some(f => !f || f.borrado)) { pintarListas(); return; }
+  const viejo = listasOrdenadas().map(l => l.id);
+  if (ids.length !== viejo.length || ids.join() === viejo.join()) return;
+  const sin = (a, id) => a.filter(x => x !== id).join();
+  const mov = ids.find((id, i) => id !== viejo[i] && sin(ids, id) === sin(viejo, id));
+  if (!mov) { pintarListas(); return; }
+  const k = ids.indexOf(mov), prev = filas[k - 1], sig = filas[k + 1];
+  const cambios = new Map();   // id → orden nuevo
+  const renumerar = () => ids.forEach((id, i) => { if (n0(db.listas[id].orden) !== (i + 1) * PASO_ORDEN_LISTAS) cambios.set(id, (i + 1) * PASO_ORDEN_LISTAS); });
+  const po = prev ? n0(prev.orden) : null, qo = sig ? n0(sig.orden) : null;
+  if (filas.every(f => n0(f.orden) === 0)) renumerar();
+  else if (po === null) cambios.set(mov, qo - PASO_ORDEN_LISTAS);
+  else if (qo === null) cambios.set(mov, po + PASO_ORDEN_LISTAS);
+  else { const m = (po + qo) / 2; if (po < qo && m > po && m < qo) cambios.set(mov, m); else renumerar(); }
+  if (!cambios.size) { pintarListas(); return; }
+  const antes = [...cambios.keys()].map(id => ["listas", { ...db.listas[id], items: copiaJson(db.listas[id].items || []) }]);
+  cambios.forEach((o, id) => cambiar("listas", { ...db.listas[id], orden: o }, true));
+  persistir(); pintarListas();
+  avisoDeshacer("Lista «" + db.listas[mov].nombre + "» movida", antes);
+}
 async function nuevaLista(alCrear) {
   const n = await pedirNombre("Nueva lista de entrenamientos", "", "Por ejemplo «Fuerza 3 días», «Torso / Pierna», «Pretemporada» o «Carrera».");
   if (!n) return;
-  const l = { id: nuevoId(), nombre: n, items: [], siguiente: 0, borrado: false };
+  // v344: una lista nueva va al FINAL (orden mayor que todas las vivas; con todas a 0, la primera explícita)
+  const l = { id: nuevoId(), nombre: n, items: [], siguiente: 0, orden: Math.max(0, ...vivos("listas").map(x => n0(x.orden))) + PASO_ORDEN_LISTAS, borrado: false };
   listasAbiertas[l.id] = true; escribir("listas-abiertas-v1", listasAbiertas);
   cambiar("listas", l);
   pintarListas();
   if (alCrear) alCrear(db.listas[l.id]);
 }
 function elegirLista(titulo, alElegir) {
-  const ls = vivos("listas").sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+  const ls = listasOrdenadas();
   abrirMenu(titulo, "", ls.map(l => ({ texto: l.nombre + " · " + entrenosDeLista(l).length + " entrenamientos", accion: () => alElegir(l) }))
     .concat([{ texto: "+ Nueva lista…", accion: () => nuevaLista(alElegir) }]));
 }
@@ -6353,7 +6382,12 @@ function pintarListas() {
   const cont = $("listasCont");
   if (!cont) return;
   cont.textContent = "";
-  const ls = vivos("listas").sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+  const ls = listasOrdenadas();
+  if (ls.length > 1) {   // v344: «Reordenar» para el conjunto de listas (zona «listas»); con el modo activo las listas se ven plegadas y se arrastran enteras
+    cont.dataset.zonaOrden = "listas";
+    const cabL = document.createElement("div"); cabL.className = "listas-cab"; cont.appendChild(cabL);
+    instalarControlOrden(cont, cabL, "las listas");
+  } else { delete cont.dataset.zonaOrden; cont.classList.remove("reordenando"); }
   if (!ls.length) {
     cont.innerHTML = '<p class="vacio-lista">Aquí guardas tus entrenamientos en listas (por ejemplo «Fuerza 3 días» con Torso, Pierna y Full body), los ordenas por semanas o bloques y, cuando quieras, pones uno en un día. Crea una con «+ Nueva lista», o guarda un día desde su ⋯ → «Guardar en una lista…».</p>';
     return;
@@ -6364,9 +6398,14 @@ function pintarListas() {
     const nSem = (l.items || []).filter(esSep).length;
     const sec = document.createElement("section");
     sec.className = "cat-sec lista-sec" + (abierta ? "" : " cerrada");
-    sec.dataset.zonaOrden = "lista:" + l.id;
+    sec.dataset.zonaOrden = "lista:" + l.id; sec.dataset.listaId = l.id;
     sec.innerHTML = '<div class="lista-cab"><button type="button" class="sec-toggle"><span class="flecha-dia" aria-hidden="true">▸</span><h3></h3><span class="sec-n"></span></button><button type="button" class="menu-btn">⋯</button></div><div class="sec-cuerpo"><div class="sec-cuerpo-in"><div class="lista-ents"></div><div class="add-fila"><button type="button" class="add-ej">+ Entrenamiento</button><button type="button" class="add-ej">+ Bloque (semana, fase…)</button><button type="button" class="add-ej add-meso">+ Mesociclo</button></div></div></div>';
     instalarControlOrden(sec, sec.querySelector(".lista-cab"), l.nombre);
+    if (ls.length > 1) {   // v344: asa de la lista entera (solo activa con «Reordenar» de las listas)
+      const asaL = asaArrastre(sec, () => [...cont.querySelectorAll(":scope > .lista-sec")], soltarListas, l.nombre);
+      asaL.classList.add("asa-listas"); asaL.setAttribute("aria-label", "Mover la lista " + l.nombre + " (con «Reordenar» de las listas: arrastra, o usa las flechas arriba y abajo)");
+      sec.querySelector(".lista-cab").insertBefore(asaL, sec.querySelector(".lista-cab > .menu-btn"));
+    }
     sec.querySelector("h3").textContent = l.nombre;
     const nGr = (l.items || []).filter(esGrupoL).length;
     sec.querySelector(".sec-n").textContent = "· " + rec.length + (nGr ? " · " + nGr + (nGr === 1 ? " mesociclo" : " mesociclos") : "") + (nSem ? " · " + nSem + (nSem === 1 ? " bloque" : " bloques") : "");
@@ -9850,7 +9889,7 @@ function pintarRefIA() {
   const op = (v, t) => { const o = document.createElement("option"); o.value = v; o.textContent = t; sel.appendChild(o); };
   op("", "Nada: desde cero");
   vivos("mesociclos").sort((a, b) => (b.inicio || "").localeCompare(a.inicio || "")).forEach(m => op("m:" + m.id, "Mesociclo · " + m.nombre + (m.inicio ? " (" + fechaCorta(m.inicio) + ")" : "")));
-  vivos("listas").forEach(l => op("l:" + l.id, "Lista · " + l.nombre));
+  listasOrdenadas().forEach(l => op("l:" + l.id, "Lista · " + l.nombre));
   op("u4", "Mis últimas 4 semanas");
   op("u8", "Mis últimas 8 semanas");
   sel.value = [...sel.options].some(o => o.value === antes) ? antes : "";
@@ -10706,7 +10745,7 @@ function asaArrastre(el, hermanos, alSoltar, nombre, zonas) {
   asa.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); });
   asa.addEventListener("keydown", e => {
     if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
-    if (!puedeReordenar(el)) return;
+    if (!puedeReordenar(asa)) return;   // v344: se comprueba con el asa (antes con el elemento): igual para todas las zonas existentes y vale para la zona «listas»
     e.preventDefault();
     const h = hermanos(), i = h.indexOf(el), j = i + (e.key === "ArrowUp" ? -1 : 1);
     if (j < 0 || j >= h.length) return;
@@ -11740,7 +11779,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v313" + (BETA ? " beta" : "");
+const VERSION_APP = "v314" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

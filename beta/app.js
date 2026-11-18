@@ -7442,7 +7442,7 @@ $("detalle").addEventListener("close", () => {
     if (ent === anterior.entrenamiento && serieEnt()?.id === anterior.serie) {
       const s = serieEnt(), e = ejercicioVivo(s.ejercicio_id);
       if (e) {
-        $("enEj").textContent = nombreEj(e.id); $("enEj").appendChild(etiquetaTipo(tipoDe(e.id)));
+        nombreConEtiqueta($("enEj"), s, nombreEj(e.id)); $("enEj").appendChild(etiquetaTipo(tipoDe(e.id)));
         $("enVideo").hidden = !idYoutube(e.video_url);
         $("enVideo").setAttribute("aria-label", "Ver el vídeo de " + nombreEj(e.id));
         if (anterior.medidas !== JSON.stringify([e.tipo, e.medidas, ladoDe(e.id)])) $("enAviso").textContent = "Se conservan tus valores en curso y sus medidas. La nueva configuración se aplicará al cambiar de serie.";
@@ -11478,6 +11478,27 @@ function colaEntreno(fecha, grupo = null) {
 function sOrden(a, b) { return a.bloque_id ? n0(a.ronda) - n0(b.ronda) || n0(a.orden) - n0(b.orden) : n0(a.orden) - n0(b.orden); }
 const serieEnt = () => ent && db.series[ent.cola[ent.i]];
 // Misma ocurrencia que Semana; en superserie, solo el ejercicio activo de ese bloque.
+// v347: etiqueta de orden (A1, B2, «A3» de una superserie…) de la serie, TAL COMO está en Semana: se lee de la propia tarjeta del día (la calcula pintarDia con las letras
+// nuevas, las partes y el orden vigentes; así las dos pantallas no pueden discrepar). Un ejercicio que no está en una parte con nombre no la lleva: cadena vacía.
+function etiquetaOrdenDe(s) {
+  const cont = ent && ent.dia && ent.dia.bloquesEl; if (!s || !cont) return "";
+  const sel = '[data-clave="' + CSS.escape(claveSerie(s)) + '"]';
+  for (const g of cont.querySelectorAll(":scope > .grupo")) {
+    if ((g.dataset.grupo || "") !== (s.grupo || "")) continue;
+    for (const el of g.querySelectorAll(sel)) {
+      if ((el.dataset.parte || "") !== (s.seccion || "")) continue;
+      const e = el.querySelector(":scope > .bloque-cab .etq-orden");
+      return e ? e.textContent : "";
+    }
+  }
+  return "";
+}
+function nombreConEtiqueta(cont, s, nombre) {   // «A2 · Nombre» (etiqueta discreta, como en Semana) o solo el nombre
+  cont.textContent = "";
+  const t = etiquetaOrdenDe(s);
+  if (t) { const e = document.createElement("span"); e.className = "etq-orden etq-ent"; e.textContent = t; e.setAttribute("aria-label", "Orden " + t); cont.appendChild(e); }
+  cont.appendChild(document.createTextNode(nombre));
+}
 function ocurrenciaNotaEntreno(s) {
   const lista = seriesDeItem(s.fecha, s.grupo || "", claveSerie(s));
   return s.bloque_id ? lista.filter(x => x.ejercicio_id === s.ejercicio_id) : lista;
@@ -11546,7 +11567,7 @@ function pintarEntreno() {
   $("enProg").textContent = "Serie " + (ent.i + 1) + " de " + lista.length + " · " + hechas + (hechas === 1 ? " hecha" : " hechas");
   $("enBarra").style.width = (hechas / lista.length * 100).toFixed(1) + "%";
   $("enGrupo").textContent = (s.grupo || NOMBRES[ent.dia.i] + " " + fmt(deIso(ent.dia.id))) + (s.seccion ? " · " + s.seccion : "");
-  $("enEj").textContent = nombreEj(s.ejercicio_id);
+  nombreConEtiqueta($("enEj"), s, nombreEj(s.ejercicio_id));   // v347: etiqueta de orden como en Semana
   $("enEj").appendChild(etiquetaTipo(tipo));
   const videoEj = ejercicioVivo(s.ejercicio_id);
   $("enVideo").hidden = !idYoutube(videoEj?.video_url);
@@ -11779,7 +11800,7 @@ function pintarVistaSeries() {
   const bloque = !!base.bloque_id;
   const rondasB = bloque ? [...new Set(filas.map(x => n0(x.ronda)))].sort((a, b) => a - b) : [], ejsB = bloque ? filas.filter(x => n0(x.ronda) === rondasB[0]).map(x => x.ejercicio_id).filter((x, i, a) => a.indexOf(x) === i) : [];
   const nombre = bloque ? ejsB.map(nombreEj).join(" + ") : nombreEj(base.ejercicio_id);   // v346
-  cuerpo.appendChild(el("p", "ens-ej", nombre));
+  { const pe = el("p", "ens-ej"); nombreConEtiqueta(pe, base, nombre); cuerpo.appendChild(pe); }   // v347: etiqueta de orden (en superserie, la de la superserie)
   cuerpo.appendChild(el("p", "ens-sub", (bloque ? "Superserie · " + rondasB.length + (rondasB.length === 1 ? " ronda" : " rondas") + " · " + ejsB.length + (ejsB.length === 1 ? " ejercicio" : " ejercicios") + " · " : "") + (base.grupo || "Entreno") + (base.seccion ? " · " + base.seccion : "")));
   const hayKg = filas.some(ensPesoLibre);
   const cab = el("div", "ens-fila ens-cab");
@@ -11826,12 +11847,12 @@ function pintarVistaSeries() {
       if (objV) f.dataset.objpct = objV.obj + (objV.sug ? " · " + objV.sug : "");
     }
     if (hecho) {   // v330: el ✓ de una fila hecha es pulsable: vuelve a pendiente
-      const bt = el("button", "nav-btn ens-ok", "✓"); bt.type = "button";
+      const bt = el("button", "nav-btn ens-ok", "✓"); bt.type = "button"; bt.setAttribute("aria-pressed", "true");
       bt.setAttribute("aria-label", "Hecha: " + (s.calentamiento ? "calentamiento" : bloque ? "ronda " + n0(s.ronda) + ", " + nombreEj(s.ejercicio_id) : "serie " + n) + ". Pulsa para marcarla como pendiente"); bt.title = "Marcar como pendiente";
       bt.addEventListener("click", () => ensDesmarcar(s.id)); f.appendChild(bt);
     }
     else {   // v346: ✓ en TODA serie pendiente; hace lo mismo que «✓ Hecha» de la pantalla de la serie (si falta un dato, el mismo mensaje en línea)
-      const bt = el("button", "nav-btn ens-hecha", "✓"); bt.type = "button"; bt.setAttribute("aria-label", "Marcar hecha " + (s.calentamiento ? "el calentamiento" : bloque ? "la ronda " + n0(s.ronda) + ", " + nombreEj(s.ejercicio_id) : "la serie " + n));
+      const bt = el("button", "nav-btn ens-hecha", ""); bt.type = "button"; bt.setAttribute("aria-pressed", "false"); bt.setAttribute("aria-label", "Marcar hecha " + (s.calentamiento ? "el calentamiento" : bloque ? "la ronda " + n0(s.ronda) + ", " + nombreEj(s.ejercicio_id) : "la serie " + n));
       bt.addEventListener("click", () => ensConfirmar(s.id)); f.appendChild(bt);
     }
     cuerpo.appendChild(f);
@@ -11946,7 +11967,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v346" + (BETA ? " beta" : "");
+const VERSION_APP = "v347" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

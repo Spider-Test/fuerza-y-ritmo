@@ -5027,6 +5027,11 @@ function bloque(dia, id, series, grupo, parte, copia) {
   };
   // Días pasados: se apunta como hecho; hoy y días futuros: quedan pendientes para marcarlas una a una
   const nuevaHecha = dia.id < iso(new Date());
+  // v352: serie PREVISTA en «% reps» con el campo de reps vacío y con máximo de repeticiones (manual o estimado): se guardan las reps sugeridas (foto del momento; no se recalcula nunca).
+  const sugReps = v => (!v || dist || mov || v.pct_ref !== "reps" || !(n0(v.pct) > 0) || n0(v.reps) > 0 || v.max_reps || v.max_tiempo || v.ciclo_id || fb.value.trim()) ? 0 : (textoPctReps(id, v.pct).reps || 0);
+  let sugUsada = 0;
+  const conSug = (f, v) => { const n = f.hecha ? 0 : sugReps(v); if (n > 0) { sugUsada = n; return { ...f, reps: n }; } return f; };
+  const avisoSug = () => { const n = sugUsada; sugUsada = 0; if (n > 0) setTimeout(() => avisoDeshacer("Repeticiones previstas: " + n + " (sugeridas)", null, false, true), 0); };   // aviso discreto (arriba, sin Deshacer, ~3,5 s); el estado de abajo lo pisan los guardados siguientes
   b.querySelector("form").addEventListener("submit", e => {
     e.preventDefault();
     if (!e.submitter?.matches(".anadir")) return;
@@ -5041,8 +5046,10 @@ function bloque(dia, id, series, grupo, parte, copia) {
       // Si era «al máximo», sigue siéndolo aunque ahora tenga lo que salió
       if (editando.max_tiempo && n0(fila.tiempo) > 0) fila.max_tiempo = true;
       if ((editando.max_reps || esMaxSinDato(editando) && !editando.max_tiempo) && n0(fila.reps) > 0) fila.max_reps = true;
-      cambiar("series", fila);
-      terminar(fila);
+      const filaS = conSug(fila, v);
+      cambiar("series", filaS);
+      terminar(filaS);
+      avisoSug();
       if (fila.hecha) avisarSiPR(fila);
       return;
     }
@@ -5056,15 +5063,16 @@ function bloque(dia, id, series, grupo, parte, copia) {
       const n = modoForm === "una" ? 1 : Math.min(50, Math.max(1, parseInt(vecesEl.value, 10) || 1));
       if (!series.length) {
         // Delante del ejercicio que tenga detrás (el «orden» de la primera serie lo coloca colocarPrimeraSerie)
-        for (let k = 0; k < n; k++) cambiar("series", nueva(k, valoresFila(k, v)), true);
+        for (let k = 0; k < n; k++) cambiar("series", conSug(nueva(k, valoresFila(k, v)), v), true);
       } else {
         const ultimo = Math.max(...series.map(x => n0(x.orden)));
-        cambiar("series", { ...nueva(0), orden: ultimo + 0.5 }, true);
+        cambiar("series", conSug({ ...nueva(0), orden: ultimo + 0.5 }, v), true);
       }
       colocarPrimeraSerie(dia.id, idK, grupo, !series.length);
       persistir();
       quitarEspera(dia.id, idK);
       terminar();
+      avisoSug();
       return;
     }
     // Editar el ejercicio entero: valores de las pendientes, número de series y, si se pide, otro ejercicio
@@ -5073,10 +5081,10 @@ function bloque(dia, id, series, grupo, parte, copia) {
     const aplicar = borrarHechas => {
       const deshacer = series.map(x => ["series", { ...x }]);
       const nuevas = [];
-      pend.forEach(x => cambiar("series", { ...x, ...valoresFila(efect.indexOf(x), v), ...(sinCarga(id) && !cargaGuardada(x) ? (pctRefDe(v) ? { peso: x.peso } : { peso: x.peso, pct: esPctReps(x) ? v.pct : x.pct, pct_ref: esPctReps(x) ? pctRefDe(v) : pctRefDe(x) }) : {}), hecha: false }, true));   // v345: el % de repeticiones viaja con su referencia   // v271: sin carga, cada pendiente conserva su peso
+      pend.forEach(x => cambiar("series", { ...x, ...valoresFila(efect.indexOf(x), v), ...(sugReps(v) > 0 ? (sugUsada = sugReps(v), { reps: sugReps(v) }) : {}), ...(sinCarga(id) && !cargaGuardada(x) ? (pctRefDe(v) ? { peso: x.peso } : { peso: x.peso, pct: esPctReps(x) ? v.pct : x.pct, pct_ref: esPctReps(x) ? pctRefDe(v) : pctRefDe(x) }) : {}), hecha: false }, true));   // v345: el % de repeticiones viaja con su referencia   // v271: sin carga, cada pendiente conserva su peso
       if (objetivo > efect.length) {
         const ultimo = Math.max(...series.map(x => n0(x.orden)));
-        for (let k = 0; k < objetivo - efect.length; k++) { const f = { ...nueva(k, valoresFila(efect.length + k, v)), orden: ultimo + (k + 1) / 100, hecha: false }; nuevas.push(f); cambiar("series", f, true); }
+        for (let k = 0; k < objetivo - efect.length; k++) { const f = conSug({ ...nueva(k, valoresFila(efect.length + k, v)), orden: ultimo + (k + 1) / 100, hecha: false }, v); nuevas.push(f); cambiar("series", f, true); }
       } else if (objetivo < efect.length) {
         let sobran = efect.length - objetivo;
         const quitar = pend.slice().reverse().concat(borrarHechas ? hechas.slice().reverse() : []);
@@ -5089,7 +5097,8 @@ function bloque(dia, id, series, grupo, parte, copia) {
       }
       persistir();
       terminar();
-      avisoDeshacer(destino !== id ? "Cambiado a " + nombreEj(destino) : "Series actualizadas · " + nombreEj(id),
+      const sugN = sugUsada; sugUsada = 0;
+      avisoDeshacer((destino !== id ? "Cambiado a " + nombreEj(destino) : "Series actualizadas · " + nombreEj(id)) + (sugN > 0 ? " · reps previstas " + sugN + " (sugeridas)" : ""),
         deshacer.concat(nuevas.map(f => ["series", { ...f, borrado: true }])));
     };
     const faltan = efect.length - objetivo - pend.length;
@@ -5812,6 +5821,7 @@ function tarjetaBloque(dia, bloqueId, series) {
     if (!e.submitter?.matches(".anadir") || !editando) return;
     const rec = leerRecuperacion(fc.value);
     if (!rec) { fc.focus(); return; }
+    let sugRonda = 0;
     const fila = { ...editando, descanso: rec.descanso, rec_dist: rec.rec_dist, hecha: dia.id <= iso(new Date()) };
     if (esDistancia(tipoDe(fila.ejercicio_id))) {
       fila.distancia = leerDist(fa.value);
@@ -5845,7 +5855,7 @@ function tarjetaBloque(dia, bloqueId, series) {
         fila.tiempo = 0; fila.reps = g ? g.min : txt.trim() ? parseInt(txt, 10) : 0;
         if (g) { fila.rango_min = g.min; fila.rango_max = g.max; fila.hecha = false; }   // escribir una ventana es planificar
         else if (m !== "reps") { fila.rango_min = 0; fila.rango_max = 0; }
-        if (m === "reps" && !(fila.reps > 0) && fila.pct_ref === "reps") fila.hecha = false;   // v345: % de repeticiones sin reps apuntadas: planificada (la sugerencia no se guarda)
+        if (m === "reps" && !(fila.reps > 0) && fila.pct_ref === "reps") { fila.hecha = false; if (!txt.trim()) { const sg = textoPctReps(fila.ejercicio_id, fila.pct).reps || 0; if (sg > 0) { fila.reps = sg; sugRonda = sg; } } }   // v345: % de repeticiones sin reps apuntadas: planificada · v352: con máximo de repeticiones y el campo vacío se guardan las sugeridas (foto del momento)
         else if (m === "reps" && !(fila.reps > 0)) { fb.focus(); return; }
         if (isNaN(fila.reps)) { fb.focus(); return; }
         if (m === "maxr") fila.max_reps = true;
@@ -5858,6 +5868,7 @@ function tarjetaBloque(dia, bloqueId, series) {
     delete borradores[claveBor];
     cambiar("series", fila);
     terminar(fila);
+    if (sugRonda > 0) { const n = sugRonda; setTimeout(() => avisoDeshacer("Repeticiones previstas: " + n + " (sugeridas)", null, false, true), 0); }
     if (fila.hecha) avisarSiPR(fila);
   });
   const bor = borradores[claveBor], sBor = bor && series.find(x => x.id === bor.sid);
@@ -6013,6 +6024,7 @@ $("blqVacio").addEventListener("click", () => {
   setEstado("Superserie vacía ×" + rondas + " creado: arrastra ejercicios encima con ≡");
 });
 $("blqCrear").addEventListener("click", () => {
+  let sugCreador = 0;
   const rondas = parseInt($("blqRondas").value, 10), aviso = $("blqAviso");
   if (!tramos.length) { aviso.textContent = "Añade al menos un tramo."; return; }
   if (!(rondas >= 1 && rondas <= 50)) { aviso.textContent = "Las rondas deben estar entre 1 y 50."; return; }
@@ -6047,7 +6059,7 @@ $("blqCrear").addEventListener("click", () => {
         v.reps = esMx ? 0 : g ? g.min : parseInt(t.b, 10);
         if (g) { v.rango_min = g.min; v.rango_max = g.max; }
         if (esMx) v.max_reps = true;
-        if (!(v.reps > 0) && !esMx && v.pct_ref === "reps") v.reps = 0;   // v345: % de repeticiones: las reps se apuntan al hacerla
+        if (!(v.reps > 0) && !esMx && v.pct_ref === "reps") { v.reps = !g && !String(t.b).trim() ? (textoPctReps(t.ejercicio_id, v.pct).reps || 0) : 0; if (v.reps > 0) sugCreador = v.reps; }   // v345: % de repeticiones: las reps se apuntan al hacerla · v352: con máximo de repeticiones y el campo vacío se guardan las sugeridas (foto del momento)
         else if (!(v.reps > 0) && !esMx) { aviso.textContent = "Pon las repeticiones del tramo " + (k + 1) + " (o «máx»)."; return; }
       }
     }
@@ -6057,6 +6069,7 @@ $("blqCrear").addEventListener("click", () => {
   persistir();
   $("dlgBloque").close();
   pintarDia(diaBloque);
+  if (sugCreador > 0) { const n = sugCreador; setTimeout(() => avisoDeshacer("Repeticiones previstas: " + n + " (sugeridas)", null, false, true), 0); }
 });
 
 // ---------- Elegir o crear ejercicio ----------
@@ -12092,7 +12105,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v351" + (BETA ? " beta" : "");
+const VERSION_APP = "v352" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

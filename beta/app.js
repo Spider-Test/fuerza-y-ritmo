@@ -78,7 +78,7 @@ const escribir = (k, v) => {
 };
 // Datos de cada día que no son series (ejercicios añadidos aún sin series, entrenos y partes vacíos, su descripción,
 // su letra y su posición): se guardan en el día (tabla entrenos, columna extra) para verlos igual en todos los dispositivos
-const CLAVES_EXTRA = new Set(["resumen-dia-v1", "orden-grupos-v1", "orden-partes-v1", "pos-partes-v1","bloques-vacios-v1", "bloques-v1", "sesiones-v1", "espera-grupo-v1", "partes-v1", "espera-parte-v1", "espera-nota-v1", "espera-letra-v1", "espera-antes-v1", "nombres-hist-v1"]);
+const CLAVES_EXTRA = new Set(["orden-grupos-v1", "orden-partes-v1", "pos-partes-v1","bloques-vacios-v1", "bloques-v1", "sesiones-v1", "espera-grupo-v1", "partes-v1", "espera-parte-v1", "espera-nota-v1", "espera-letra-v1", "espera-antes-v1", "nombres-hist-v1"]);
 if (BETA) { document.documentElement.classList.add("beta"); document.title = "Fuerza y Ritmo β"; document.querySelector('meta[name="apple-mobile-web-app-title"]').content = "Fuerza y Ritmo β"; }
 
 // Cada tabla se sincroniza por cuenta; los cambios locales en conflicto se conservan.
@@ -1222,15 +1222,12 @@ function mezclar(tabla, f) {
   return true;
 }
 // ---- Extra de cada día: construirlo desde lo guardado en el dispositivo y aplicarlo cuando llega del servidor ----
-// v348: «rs» = resumen del día que escribe el usuario (máx. 10 caracteres; se ve en la tira de días). Texto suelto por fecha; en el extra del día solo viaja si no está vacío.
-let resumenDia = leer("resumen-dia-v1") || {};
-const PROPIEDADES_EXTRA = new Set(["e", "s", "g", "p", "pa", "n", "l", "a", "bv", "og", "op", "pp", "hn", "rs"]);
+const PROPIEDADES_EXTRA = new Set(["e", "s", "g", "p", "pa", "n", "l", "a", "bv", "og", "op", "pp", "hn"]);   // v349: «rs» (resumen manual de v348) ya no se usa: queda como propiedad desconocida y se conserva (v249)
 function extraDe(f) {
   const pre = f + "|";
   const sub = o => { const r = {}; Object.keys(o || {}).filter(k => k.startsWith(pre)).sort().forEach(k => { r[k.slice(pre.length)] = o[k]; }); return r; };
   const e = { e: enEspera[f] || [], s: sesionesVacias[f] || [], g: sub(esperaGrupo), p: sub(partesVacias), pa: sub(esperaParte), n: sub(esperaNota), l: sub(esperaLetra), a: sub(esperaAntes), bv: sub(bloquesVacios), og: ordenGrupos[f] || [], op: sub(ordenPartes), hn: sub(nombresHist), pp: sub(posPartes) };
-  if (resumenDia[f]) e.rs = resumenDia[f];   // v348
-  Object.keys(e).forEach(k => { if (typeof e[k] === "string" ? !e[k] : Array.isArray(e[k]) ? !e[k].length : !Object.keys(e[k]).length) delete e[k]; });
+  Object.keys(e).forEach(k => { if (Array.isArray(e[k]) ? !e[k].length : !Object.keys(e[k]).length) delete e[k]; });
   // v249: lo que esta versión no conoce (p. ej. propiedades de una versión posterior) se conserva tal cual al volver a serializar el día;
   // las propiedades CONOCIDAS se reconstruyen siempre desde el estado local, así que borrarlas a propósito sigue funcionando
   const previo = (db.entrenos[f] || {}).extra;
@@ -1248,8 +1245,6 @@ function aplicarExtra(f, e) {
   if ((e.og || []).length) ordenGrupos[f] = e.og.slice(); else delete ordenGrupos[f];
   poner(ordenPartes, e.op);
   poner(posPartes, e.pp);   // v250
-  if (typeof e.rs === "string" && e.rs) resumenDia[f] = e.rs; else delete resumenDia[f];   // v348: lo que llega del servidor manda; vacío = sin resumen
-  escribir("resumen-dia-v1", resumenDia);
   // v273: «hn» (nombre del entreno de las completadas conservadas por «Vaciar día») se FUSIONA con lo local en vez de reemplazarlo: si el servidor trae un extra sin
   // «hn» (p. ej. lo reescribió una versión que no lo conocía con datos antiguos), no se pierde el nombre guardado aquí y volcarExtra() lo vuelve a subir. Una entrada
   // sobrante es inofensiva: el nombre que vale es el `grupo` de la serie si lo tiene, y «Vaciar día» limpia las del día.
@@ -1269,7 +1264,7 @@ function volcarExtra() {
     clearTimeout(timerExtra);
     if (!sesion || sesion.user_id !== cuentaLocal) return;
     const fechas = new Set([...Object.keys(enEspera), ...Object.keys(sesionesVacias), ...Object.keys(ordenGrupos)]);
-    [ordenPartes, posPartes, esperaGrupo, partesVacias, esperaParte, esperaNota, esperaLetra, esperaAntes, bloquesVacios, nombresHist, resumenDia].forEach(o => Object.keys(o || {}).forEach(k => fechas.add(k.split("|")[0])));
+    [ordenPartes, posPartes, esperaGrupo, partesVacias, esperaParte, esperaNota, esperaLetra, esperaAntes, bloquesVacios, nombresHist].forEach(o => Object.keys(o || {}).forEach(k => fechas.add(k.split("|")[0])));
     Object.values(db.entrenos).forEach(x => { if (x.extra && Object.keys(x.extra).length) fechas.add(x.fecha); });
     let hay = false;
     // Guardado interno y automático: no es un paso que deshacer (si no, Ctrl+Z se «gastaba» en él y se perdía el rehacer)
@@ -2162,7 +2157,9 @@ function pintarTira() {
   t.hidden = SEMANA_COMPLETA;
   if (SEMANA_COMPLETA) return;
   const lunes = lunesVista(), hoyIso = iso(new Date());
-  const dd = Array.from({ length: 7 }, (_, i) => { const f = sumarDias(lunes, i), id = iso(f), ser = seriesDelDia(id), rs = (resumenDia[id] || "").trim(); return { i, f, id, rs, n: ser.length, hechas: ser.filter(hecha).length }; });
+  // v349: el texto bajo cada día sale de los NOMBRES de los entrenos de su tarjeta (grupo con nombre, en el orden de la tarjeta; se ignoran los «Ejercicios sueltos»): uno → su nombre; varios → «Primero +N»
+  const nombresDe = (i, id) => { const d = dias[i]; return d && d.id === id ? [...d.bloquesEl.querySelectorAll(":scope > .grupo")].map(g => g.dataset.grupo || "").filter(Boolean) : []; };
+  const dd = Array.from({ length: 7 }, (_, i) => { const f = sumarDias(lunes, i), id = iso(f), ser = seriesDelDia(id), nom = nombresDe(i, id), rs = nom.length ? nom[0] + (nom.length > 1 ? " +" + (nom.length - 1) : "") : ""; return { i, f, id, rs, nom, n: ser.length, hechas: ser.filter(hecha).length }; });
   t.classList.toggle("con-resumen", dd.some(d => d.rs));
   t.textContent = "";
   dd.forEach(d => {
@@ -2174,7 +2171,8 @@ function pintarTira() {
     const pt = document.createElement("span"); pt.className = "td-punto"; pt.setAttribute("aria-hidden", "true");
     b.append(ini, num, pt);
     if (dd.some(x => x.rs)) { const r = document.createElement("span"); r.className = "td-rs"; r.textContent = d.rs; b.appendChild(r); }
-    b.setAttribute("aria-label", NOMBRES[d.i] + " " + d.f.getDate() + (d.id === hoyIso ? ", hoy" : "") + ", " + estado + (d.rs ? ". " + d.rs : ""));
+    if (d.rs) b.title = d.nom.join(", ");
+    b.setAttribute("aria-label", NOMBRES[d.i] + " " + d.f.getDate() + (d.id === hoyIso ? ", hoy" : "") + ", " + estado + (d.nom.length ? ". " + d.nom.join(", ") : ""));
     if (d.id === hoyIso) b.setAttribute("aria-current", "date");
     b.setAttribute("aria-pressed", String(d.id === diaAbierto));
     b.addEventListener("click", () => abrirDia(d.id));
@@ -2657,31 +2655,10 @@ function vaciarDiaCompleto(dia) {
   };
   clearTimeout(timerAviso); timerAviso = setTimeout(() => { $("toast").hidden = true; deshacerSug = null; }, 15000);
 }
-// v348: Resumen del día (máx. 10 caracteres, opcional, solo lo escribe el usuario). Vacío = quitar. Cancelar no cambia nada (pedirNombre no distingue «vacío» de «cancelar»).
-function pedirResumen(titulo, valor, ayuda) {
-  return new Promise(resolver => {
-    const d = $("dlgNombre");
-    $("nomTit").textContent = titulo; $("nomAyuda").textContent = ayuda || ""; $("nomInput").value = valor || "";
-    d.returnValue = "";
-    d.onclose = () => resolver(d.returnValue === "ok" ? $("nomInput").value.trim() : null);
-    d.showModal(); $("nomInput").select();
-  });
-}
-async function editarResumenDia(dia) {
-  const actual = resumenDia[dia.id] || "";
-  const t = await pedirResumen("Resumen del día", actual, "Hasta 10 caracteres, por ejemplo «Pierna» o «Descanso». Se ve bajo el día en la tira. Vacío = quitarlo.");
-  if (t === null || t === actual) return;
-  let nuevo = Array.from(t).slice(0, 10).join("");
-  if (nuevo) resumenDia[dia.id] = nuevo; else delete resumenDia[dia.id];
-  escribir("resumen-dia-v1", resumenDia);
-  pintarTira();
-  if (t.length > nuevo.length) setEstado("Resumen recortado a 10 caracteres.");
-}
 function menuDia(dia) {
   const series = seriesDelDia(dia.id), html = db.entrenos[dia.id]?.html || "";
   const titulo = NOMBRES[dia.i] + " " + fmt(deIso(dia.id));
   abrirMenu(titulo, "", [
-    !SEMANA_COMPLETA && { texto: resumenDia[dia.id] ? "Resumen del día: «" + resumenDia[dia.id] + "» · cambiar…" : "Resumen del día…", accion: () => editarResumenDia(dia) },
     gruposDelDia(dia.id).length > 0 && { texto: "Cambiar nombre de un entrenamiento…", accion: () => {
       const gs = gruposDelDia(dia.id);
       if (gs.length === 1) cambiarNombreEntreno(dia,gs[0]);
@@ -3822,7 +3799,10 @@ function pintarDia(dia) {
   const ancla = anclaVista();
   pintarDiaSinAncla(dia);
   if (ancla) recolocar(ancla);
+  programarTira();   // v349: los nombres de los entrenos de la tarjeta (y los puntos) siguen a lo que se pinta
 }
+let tiraPend = false;
+function programarTira() { if (tiraPend) return; tiraPend = true; queueMicrotask(() => { tiraPend = false; pintarTira(); }); }
 // «＋ Añadir»: los botones de añadir (ejercicio, bloque, parte, entreno) se pliegan en uno solo y se despliegan al
 // tocarlo; se vuelven a plegar al elegir o al tocar fuera. Donde aún no hay nada salen ya desplegados
 function plegarAdd(fila, abierta) {
@@ -4883,7 +4863,6 @@ function bloque(dia, id, series, grupo, parte, copia) {
     if (dist && li.querySelector(".sv").children.length > 1) li.classList.add("fila-dist");
     li.querySelector(".sv").setAttribute("aria-label", (planificada ? "Completar" : "Editar") + " serie " + numero + ": " + serieTexto(s));
     li.querySelector(".sv").addEventListener("click", () => {
-      if (li.dataset.deslizado) return;
       if (otraEdicionPendiente() && editando?.id !== s.id) { setEstado("Guarda o cancela la edición antes de abrir otra serie"); return; }
       if (!formEl.hidden && editando?.id === s.id) return;
       abrirSerie(s, li); guardarBor();
@@ -4891,8 +4870,6 @@ function bloque(dia, id, series, grupo, parte, copia) {
     li.querySelector(".borrar").setAttribute("aria-label", "Borrar serie " + numero);
     if (prs.has(s.id)) { const p = document.createElement("span"); p.className = "pr"; p.textContent = "PR"; p.title = "Récord personal"; li.querySelector(".sv").after(p); }
     li.querySelector(".borrar").addEventListener("click", () => borrarSerie(s));
-    // Deslizar: a la derecha la marca hecha; a la izquierda la borra (con Deshacer)
-    deslizable(li, planificada ? (s.ciclo_id !== "auto" && !(tipo === "fuerza" && pideDato(s)) ? () => marcarHecha(s, { ...s, hecha: true, peso: pesoMostrado(s) }) : null) : () => desmarcar(s), () => borrarSerie(s));
     li.dataset.sid = s.id;
     mantenerPulsado(li, () => { if (!selSeries) empezarSelSeries(dia, s.id); });   // mantener pulsada una serie: elegir varias para agruparlas
     if (series.length > 1) li.appendChild(asaArrastre(li, () => [...ol.querySelectorAll(":scope > li[data-sid]")], n => reordenar(n.map(x => [db.series[x.dataset.sid]]), "Serie movida"), "Serie " + (s.calentamiento ? "de calentamiento" : numero)));
@@ -5752,7 +5729,6 @@ function tarjetaBloque(dia, bloqueId, series) {
         m.addEventListener("click", () => tipoDe(s.ejercicio_id) === "fuerza" && pideDato(s) ? editar(s, li) : marcarHecha(s, { ...s, hecha: true, peso: pesoMostrado(s) }));
         li.querySelector(".n").replaceWith(m);
       } else li.querySelector(".n").replaceWith(botonHecha(s, "✓", "ronda " + r + ", " + nombreEj(s.ejercicio_id)));
-      deslizable(li, !hecha(s) ? (tipoDe(s.ejercicio_id) === "fuerza" && pideDato(s) ? null : () => marcarHecha(s, { ...s, hecha: true, peso: pesoMostrado(s) })) : () => desmarcar(s), null);
       // El nombre del tramo solo si aporta algo: «Series 1000 m · 1000 m» se queda en «1000 m»
       const nomTramo = !distDeNombre(nombreEj(s.ejercicio_id)) ? nombreEj(s.ejercicio_id) + " · " : "";
       li.querySelector(".sv-p").textContent = nomTramo + serieTexto(s);
@@ -5761,7 +5737,7 @@ function tarjetaBloque(dia, bloqueId, series) {
       if (esDistancia(tipoDe(s.ejercicio_id)) && li.querySelector(".sv").children.length > 1) li.classList.add("fila-dist-bloque");
       li.dataset.rondaSerie = s.id;
       li.querySelector(".sv").setAttribute("aria-label", "Apuntar ronda " + r + ", " + nombreEj(s.ejercicio_id) + ": " + serieTexto(s));
-      li.querySelector(".sv").addEventListener("click", () => { if (!li.dataset.deslizado) editar(s, li); });
+      li.querySelector(".sv").addEventListener("click", () => editar(s, li));
       const notaT = !notaComun && r === rondas[0] ? notasT[primera.findIndex(x => x.ejercicio_id === s.ejercicio_id)] : "";
       if (notaT) { const d = document.createElement("span"); d.className = "nota-tramo"; d.textContent = notaT; li.querySelector(".sv").appendChild(d); }
       const ejV = db.ejercicios[s.ejercicio_id];
@@ -8733,8 +8709,11 @@ $("misCompartidos").addEventListener("click", () => abrirMisCompartidos());
 // ---------- Navegación ----------
 function irA(n) {
   if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  const previo = diaAbierto;
+  limpiarAnimDia();
   desplazamiento = n;
   pintarSemana();
+  if (!SEMANA_COMPLETA && previo && diaAbierto && previo !== diaAbierto) entrarDia(diaAbierto > previo ? 1 : -1);   // v349
 }
 $("antBtn").addEventListener("click", () => irA(desplazamiento - 1));
 $("sigBtn").addEventListener("click", () => irA(desplazamiento + 1));
@@ -11317,11 +11296,35 @@ function asaArrastreDia(el, caja, hermanos, alSoltar, nombre, zonas) {
 function abrirDia(id) {
   if (!id) return;
   if (zonaReordenar && zonaReordenar !== "dia:" + id) terminarModoOrden();
+  const previo = diaAbierto, visible = !$("vistaSemana").hidden;
+  limpiarAnimDia();   // v349: cualquier cambio de día corta una animación o un gesto en curso
   diaAbierto = id;
   escribir("dia-abierto-v1", { id, abierto: iso(new Date()) });
   desplazamiento = Math.round((lunesDe(deIso(id)) - lunesDe(new Date())) / 6048e5);
   if ($("vistaSemana").hidden) verPestana("semana"); else pintarSemana();
   scrollTo(0, 0);
+  if (visible && previo && previo !== id) entrarDia(id > previo ? 1 : -1);   // el día posterior entra desde la derecha; el anterior, desde la izquierda
+}
+// ---------- v349: animación del cambio de día ----------
+// Solo transform/opacity sobre #semana (el contenedor del día visible; los 7 días siguen pintados en el DOM). Entrada: el día nuevo entra desde el lado que toca (~220 ms).
+// Gesto: el día actual SIGUE AL DEDO; al soltar, si pasa ≈35 % del ancho (o hay velocidad), sale por ese lado (~180 ms) y el nuevo día entra desde el lado contrario (también
+// entre semanas: no se muestra el vecino pegado, solo se desliza el actual y entra el nuevo); si no, vuelve a su sitio. prefers-reduced-motion: cambio instantáneo.
+const sinMovimiento = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+let animDia = null;   // { anim, saliendo }
+function limpiarAnimDia() {
+  const el = $("semana");
+  if (animDia && animDia.anim) { try { animDia.anim.cancel(); } catch {} }
+  animDia = null; gestoDia = null;
+  el.style.transform = ""; el.style.opacity = ""; el.style.willChange = "";
+}
+function entrarDia(dir) {
+  const el = $("semana");
+  if (sinMovimiento() || $("vistaSemana").hidden || !el.animate) return;
+  const w = el.getBoundingClientRect().width || innerWidth;
+  const a = el.animate([{ transform: "translateX(" + dir * Math.min(w * 0.3, 160) + "px)", opacity: 0 }, { transform: "translateX(0)", opacity: 1 }], { duration: 220, easing: "ease-out" });
+  const mio = { anim: a }; animDia = mio;
+  const fin = () => { if (animDia === mio) animDia = null; };
+  a.onfinish = fin; a.oncancel = fin;
 }
 function cerrarDia() {
   terminarModoOrden();
@@ -11338,16 +11341,55 @@ $("tabSemana").addEventListener("pointerdown", () => { semanaVisible = !$("vista
 $("tabSemana").addEventListener("click", () => { if (!semanaVisible) return; if (SEMANA_COMPLETA) { if (diaAbierto) cerrarDia(); } else abrirDia(iso(new Date())); });   // v348: tocar «Semana» estando en ella lleva a hoy
 // Deslizar en horizontal sobre el día pasa al anterior o al siguiente (no desde el borde, que es el «atrás» de Safari)
 let gestoDia = null;
+// v349: el gesto empieza en cualquier punto del día (también sobre ejercicios y series), salvo desde el borde izquierdo (el «atrás» de Safari), sobre campos de escritura,
+// el editor y las asas de arrastre; no con el modo «Reordenar» activo ni mientras se arrastra. El scroll vertical sigue siendo de la página.
 $("semana").addEventListener("touchstart", e => {
   const t = e.touches[0];
-  gestoDia = diaAbierto && e.touches.length === 1 && t.clientX > 30 && !e.target.closest(".series li, input, textarea, select, .editor, .asa") ? { x: t.clientX, y: t.clientY } : null;
+  gestoDia = diaAbierto && !(animDia && animDia.saliendo) && !zonaReordenar && !arrastreActivo && !arrastreOrden && e.touches.length === 1 && t.clientX > 30 && !e.target.closest("input, textarea, select, .editor, .asa")
+    ? { x: t.clientX, y: t.clientY, fase: 0, dx: 0, m: [[e.timeStamp, t.clientX]] } : null;
 }, { passive: true });
+function volverDia(dx) {   // el gesto no se completa: el día vuelve a su sitio
+  const el = $("semana");
+  el.style.transform = ""; el.style.opacity = ""; el.style.willChange = "";
+  if (sinMovimiento() || !el.animate || !dx) { animDia = null; return; }
+  const a = el.animate([{ transform: "translateX(" + dx + "px)" }, { transform: "translateX(0)" }], { duration: 160, easing: "ease-out" });
+  const mio = { anim: a }; animDia = mio;
+  const fin = () => { if (animDia === mio) animDia = null; };
+  a.onfinish = fin; a.oncancel = fin;
+}
+$("semana").addEventListener("touchmove", e => {
+  const g = gestoDia; if (!g) return;
+  if (e.touches.length !== 1) { const dx = g.fase ? g.dx : 0; gestoDia = null; if (g.fase) volverDia(dx); return; }
+  const t = e.touches[0], dx = t.clientX - g.x, dy = t.clientY - g.y;
+  if (!g.fase) {
+    if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx) * 0.7) { gestoDia = null; return; }   // vertical: scroll de la página
+    if (Math.abs(dx) < 12 || Math.abs(dx) < 1.5 * Math.abs(dy)) return;
+    g.fase = 1;
+    if (!sinMovimiento()) { limpiarAnimDia(); gestoDia = g; $("semana").style.willChange = "transform"; }
+  }
+  g.dx = dx; g.m.push([e.timeStamp, t.clientX]); if (g.m.length > 6) g.m.shift();
+  if (!sinMovimiento()) { const w = $("semana").getBoundingClientRect().width || innerWidth; $("semana").style.transform = "translateX(" + dx + "px)"; $("semana").style.opacity = String(1 - Math.min(0.4, Math.abs(dx) / w * 0.6)); }
+}, { passive: true });
+$("semana").addEventListener("touchcancel", () => { const g = gestoDia; gestoDia = null; if (g && g.fase) volverDia(g.dx); }, { passive: true });
 $("semana").addEventListener("touchend", e => {
-  if (!gestoDia) return;
-  const t = e.changedTouches[0], dx = t.clientX - gestoDia.x, dy = t.clientY - gestoDia.y;
-  gestoDia = null;
-  if (Math.abs(dx) > 70 && Math.abs(dx) > 2 * Math.abs(dy)) abrirDia(iso(sumarDias(deIso(diaAbierto), dx < 0 ? 1 : -1)));
+  const g = gestoDia; gestoDia = null;
+  if (!g) return;
+  const t = e.changedTouches[0], dx = t.clientX - g.x, dy = t.clientY - g.y;
+  const el = $("semana"), w = el.getBoundingClientRect().width || innerWidth;
+  const m = g.m.filter(x => x[0] >= e.timeStamp - 100), v = m.length > 1 ? (m[m.length - 1][1] - m[0][1]) / Math.max(1, m[m.length - 1][0] - m[0][0]) : 0;   // px/ms, solo con los últimos 100 ms (una pausa antes de soltar cancela el «flick»)
+  const reducido = sinMovimiento();
+  const completa = reducido ? Math.abs(dx) > 70 && Math.abs(dx) > 2 * Math.abs(dy) : g.fase === 1 && (Math.abs(dx) > w * 0.35 || (Math.abs(v) > 0.45 && Math.abs(dx) > 40));
+  if (!completa) { if (g.fase) volverDia(dx); return; }
+  const destino = iso(sumarDias(deIso(diaAbierto), dx < 0 ? 1 : -1));
+  if (reducido || !el.animate) { limpiarAnimDia(); abrirDia(destino); return; }
+  el.style.transform = ""; el.style.opacity = "";
+  const a = el.animate([{ transform: "translateX(" + dx + "px)", opacity: el.style.opacity || 1 }, { transform: "translateX(" + (dx < 0 ? -1 : 1) * w * 0.5 + "px)", opacity: 0 }], { duration: 180, easing: "ease-out", fill: "forwards" });
+  const mio = { anim: a, saliendo: true }; animDia = mio;
+  a.onfinish = () => { if (animDia === mio) abrirDia(destino); };   // abrirDia limpia la salida y lanza la entrada desde el lado contrario
+  a.oncancel = () => { if (animDia === mio) animDia = null; };
 }, { passive: true });
+window.addEventListener("resize", () => { if (animDia || gestoDia) limpiarAnimDia(); });
+window.addEventListener("orientationchange", () => { if (animDia || gestoDia) limpiarAnimDia(); });
 // Días desplegados o plegados a mano; se recuerdan unas semanas
 let desplegados = {}; // todos los días empiezan plegados en cada apertura
 const desplegado = id => desplegados[id] ?? false;
@@ -11482,40 +11524,6 @@ function borrarSerie(s) {
   pintarBloques(true);
   avisoDeshacer("Serie borrada · " + nombreEj(s.ejercicio_id), [["series", s]]);
 }
-// Deslizar con el dedo (no con ratón); el desplazamiento vertical sigue siendo de la página
-function deslizable(li, derecha, izquierda) {
-  if (!derecha && !izquierda) return;
-  li.classList.add("desliza");
-  let x0 = null, y0 = 0, dx = 0, activo = false, pid = null;
-  li.addEventListener("pointerdown", e => { if (e.pointerType === "mouse") return; x0 = e.clientX; y0 = e.clientY; dx = 0; activo = false; pid = e.pointerId; });
-  li.addEventListener("pointermove", e => {
-    if (x0 === null || e.pointerId !== pid) return;
-    const mx = e.clientX - x0, my = e.clientY - y0;
-    if (!activo) {
-      if (Math.abs(my) > 10) { x0 = null; return; }
-      if (Math.abs(mx) < 12) return;
-      activo = true;
-      try { li.setPointerCapture(pid); } catch {}
-    }
-    dx = (mx > 0 && !derecha) || (mx < 0 && !izquierda) ? mx / 4 : mx;
-    li.style.transform = "translateX(" + dx + "px)";
-    li.dataset.dir = dx > 0 ? "der" : "izq";
-    li.classList.toggle("listo", Math.abs(dx) > 80);
-  });
-  const fin = () => {
-    if (x0 === null) return;
-    const d = dx, fue = activo;
-    x0 = null; activo = false;
-    li.style.transform = ""; li.classList.remove("listo"); delete li.dataset.dir;
-    if (!fue) return;
-    li.dataset.deslizado = "1";
-    setTimeout(() => { delete li.dataset.deslizado; }, 350);
-    if (d > 80 && derecha) derecha(); else if (d < -80 && izquierda) izquierda();
-  };
-  li.addEventListener("pointerup", fin);
-  li.addEventListener("pointercancel", fin);
-}
-
 // ---------- Modo entreno: una serie cada vez, en grande, con el descanso integrado ----------
 let ent = null, bloqueoPantalla = null;
 // Mismo orden que en pantalla: por sesión y, dentro, ejercicio a ejercicio o bloque ronda a ronda
@@ -12033,7 +12041,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v348" + (BETA ? " beta" : "");
+const VERSION_APP = "v349" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

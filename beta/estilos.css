@@ -520,13 +520,6 @@ body { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 104px); }
 .paso button.mas { border-radius: 0 8px 8px 0; border-left: 0; }
 .paso button:active { background: var(--accent-soft); }
 
-/* Deslizar series */
-.series li.desliza { touch-action: pan-y pinch-zoom; position: relative; border-radius: 8px; }
-.series li[data-dir="der"] { background: var(--accent-soft); }
-.series li[data-dir="izq"] { background: var(--error-soft); }
-.series li.listo[data-dir="der"] { box-shadow: inset 4px 0 0 var(--accent); }
-.series li.listo[data-dir="izq"] { box-shadow: inset -4px 0 0 var(--error); }
-
 /* Aviso con Deshacer y celebración de récords */
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 78px); z-index: 30; display: flex; align-items: center; gap: 10px;
   max-width: calc(100vw - 24px); width: max-content; padding: 6px 6px 6px 16px; border-radius: 14px; background: var(--toast-bg); color: var(--toast-fg); font-size: 15px; font-weight: 600; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25); }
@@ -935,7 +928,7 @@ body.seleccionando { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 150
 html, body, button, a, input, select, textarea, label, summary, .tarjeta { touch-action: manipulation; }
 /* Con zoom, el doble toque nativo vuelve al tamaño normal (y no pulsa lo de debajo) */
 html.ampliado, html.ampliado body, html.ampliado button, html.ampliado a, html.ampliado input, html.ampliado select, html.ampliado textarea,
-html.ampliado label, html.ampliado summary, html.ampliado .tarjeta, html.ampliado .series li.desliza { touch-action: auto; }
+html.ampliado label, html.ampliado summary, html.ampliado .tarjeta { touch-action: auto; }
 
 /* Ejercicio con series: limpio como un bloque; «+ Serie» abre el formulario */
 .bloque-cab .g-prog { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
@@ -3032,3 +3025,6 @@ button.ens-ok { min-width: 44px; min-height: 44px; padding: 0; background: trans
 .td-rs { display: block; max-width: 100%; padding: 0 1px; box-sizing: border-box; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; line-height: 1.2; color: var(--muted); min-height: 13px; }
 .tira-dias:not(.con-resumen) .td-rs { display: none; }
 .tira-dias[hidden] { display: none; }
+/* v349: el día sigue al dedo en horizontal; el scroll vertical y el zoom con pellizco siguen siendo del navegador (y con zoom ampliado, todo del navegador) */
+#vistaSemana.solo-dia #semana { touch-action: pan-y pinch-zoom; }
+html.ampliado #vistaSemana.solo-dia #semana { touch-action: auto; }

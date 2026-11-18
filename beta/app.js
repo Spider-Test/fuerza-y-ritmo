@@ -11758,7 +11758,12 @@ function ensKgReps(s) {
 // Peso libre en kg: ni calentamiento, ni peso de ciclo/Bilbo, ni porcentaje del RM
 const ensPesoLibre = s => ensKgReps(s) && !s.calentamiento && !s.ciclo_id && !(n0(s.pct) > 0);
 // v329: la vista queda ligada a la ocurrencia con la que se abrió (ent.ensRef); no cambia de ejercicio aunque la acción «Hecha» avance a otra serie
-const ensFilas = () => { const r = ent && ent.ensRef; return r ? ocurrenciaNotaEntreno(r).filter(x => !x.borrado).sort(sOrden) : []; };
+// v346: en una SUPERSERIE la vista muestra TODOS sus ejercicios, por ronda y, dentro de la ronda, en el orden de la superserie (el resto de vistas, como antes)
+const ensFilas = () => {
+  const r = ent && ent.ensRef; if (!r) return [];
+  if (r.bloque_id) return seriesDeItem(r.fecha, r.grupo || "", claveSerie(r)).filter(x => !x.borrado && x.bloque_id === r.bloque_id).sort((a, b) => n0(a.ronda) - n0(b.ronda) || a.orden - b.orden);
+  return ocurrenciaNotaEntreno(r).filter(x => !x.borrado).sort(sOrden);
+};
 function ensAplicarBorradorActiva() {
   const s = serieEnt(), b = s && ent.borr && ent.borr[s.id];
   if (!b || hecha(s) || !ensPesoLibre(s)) return;
@@ -11771,12 +11776,15 @@ function pintarVistaSeries() {
   const activa = serieEnt(), act = activa && filas.some(x => x.id === activa.id) ? activa : filas.find(x => !hecha(x)) || null;   // resaltada: la activa si es de esta ocurrencia; si no, la primera pendiente
   const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt !== undefined) x.textContent = txt; return x; };
   cuerpo.textContent = "";
-  const nombre = nombreEj(base.ejercicio_id), bloque = !!base.bloque_id;
+  const bloque = !!base.bloque_id;
+  const rondasB = bloque ? [...new Set(filas.map(x => n0(x.ronda)))].sort((a, b) => a - b) : [], ejsB = bloque ? filas.filter(x => n0(x.ronda) === rondasB[0]).map(x => x.ejercicio_id).filter((x, i, a) => a.indexOf(x) === i) : [];
+  const nombre = bloque ? ejsB.map(nombreEj).join(" + ") : nombreEj(base.ejercicio_id);   // v346
   cuerpo.appendChild(el("p", "ens-ej", nombre));
-  cuerpo.appendChild(el("p", "ens-sub", (bloque ? "Superserie · " + filas.length + (filas.length === 1 ? " ronda" : " rondas") + " · " : "") + (base.grupo || "Entreno") + (base.seccion ? " · " + base.seccion : "")));
+  cuerpo.appendChild(el("p", "ens-sub", (bloque ? "Superserie · " + rondasB.length + (rondasB.length === 1 ? " ronda" : " rondas") + " · " + ejsB.length + (ejsB.length === 1 ? " ejercicio" : " ejercicios") + " · " : "") + (base.grupo || "Entreno") + (base.seccion ? " · " + base.seccion : "")));
   const hayKg = filas.some(ensPesoLibre);
   const cab = el("div", "ens-fila ens-cab");
-  cab.append(el("span", "", bloque ? "Ronda" : "Serie"), el("span", "", "Reps"));
+  cab.append(el("span", "", bloque ? "Ejercicio" : "Serie"), el("span", "", "Reps"));
+  if (bloque) cab.classList.add("ens-b");
   const kgCab = el("span", "ens-kgcab"); kgCab.appendChild(el("span", "", "Kg"));
   let auto = null;
   if (hayKg) {
@@ -11785,13 +11793,14 @@ function pintarVistaSeries() {
     kgCab.appendChild(auto);
   }
   cab.append(kgCab, el("span", "", "Hecha")); cuerpo.appendChild(cab);
-  let n = 0;
+  let n = 0, rondaPintada = null;
   filas.forEach(s => {
     n += s.calentamiento ? 0 : 1;
-    const f = el("div", "ens-fila"); f.dataset.sid = s.id;
+    if (bloque && n0(s.ronda) !== rondaPintada) { rondaPintada = n0(s.ronda); cuerpo.appendChild(el("h4", "ens-ronda", "Ronda " + rondaPintada)); }   // v346: un encabezado por ronda
+    const f = el("div", "ens-fila" + (bloque ? " ens-b" : "")); f.dataset.sid = s.id;
     if (act && s.id === act.id) f.classList.add("ens-activa");
     const kgRep = ensKgReps(s), hecho = hecha(s), b = (ent.borr && ent.borr[s.id]) || {};
-    f.appendChild(el("span", "ens-n", s.calentamiento ? "Cal." : bloque ? "R" + n0(s.ronda || n) : String(n)));
+    f.appendChild(el("span", "ens-n", s.calentamiento ? "Cal." : bloque ? nombreEj(s.ejercicio_id) : String(n)));
     if (!kgRep) {   // otras medidas: solo lectura (se editan en la pantalla de la serie)
       const t = el("span", "ens-texto", serieTexto(s)); f.appendChild(t); t.style.gridColumn = "2 / 4";
       const oT = !hecho ? objetivoPctSerie(s) : null;   // v345: también aquí (p. ej. % del máximo de repeticiones en un ejercicio sin carga)
@@ -11800,7 +11809,8 @@ function pintarVistaSeries() {
       const rIn = document.createElement("input"), kIn = document.createElement("input");
       [rIn, kIn].forEach(i => { i.autocomplete = "off"; });
       rIn.inputMode = "numeric"; kIn.inputMode = "decimal"; rIn.dataset.campo = "reps"; kIn.dataset.campo = "kg";
-      rIn.setAttribute("aria-label", "Repeticiones, " + (s.calentamiento ? "calentamiento" : "serie " + n)); kIn.setAttribute("aria-label", "Peso en kg, " + (s.calentamiento ? "calentamiento" : "serie " + n));
+      const etqF = s.calentamiento ? "calentamiento" : bloque ? "ronda " + n0(s.ronda) + ", " + nombreEj(s.ejercicio_id) : "serie " + n;
+      rIn.setAttribute("aria-label", "Repeticiones, " + etqF); kIn.setAttribute("aria-label", "Peso en kg, " + etqF);
       const editable = !hecho && ensPesoLibre(s);
       const objV = !hecho ? objetivoPctSerie(s) : null;   // v338: serie con objetivo en %: el peso hecho queda vacío; el objetivo/sugerido va en su línea
       rIn.value = b.reps !== undefined ? b.reps : ensRepsTxt(s); kIn.value = b.kg !== undefined ? b.kg : objV && objV.campo === "kg" ? "" : ensKgTxt(s);
@@ -11817,18 +11827,18 @@ function pintarVistaSeries() {
     }
     if (hecho) {   // v330: el ✓ de una fila hecha es pulsable: vuelve a pendiente
       const bt = el("button", "nav-btn ens-ok", "✓"); bt.type = "button";
-      bt.setAttribute("aria-label", "Hecha: " + (s.calentamiento ? "calentamiento" : (bloque ? "ronda " : "serie ") + n) + ". Pulsa para marcarla como pendiente"); bt.title = "Marcar como pendiente";
+      bt.setAttribute("aria-label", "Hecha: " + (s.calentamiento ? "calentamiento" : bloque ? "ronda " + n0(s.ronda) + ", " + nombreEj(s.ejercicio_id) : "serie " + n) + ". Pulsa para marcarla como pendiente"); bt.title = "Marcar como pendiente";
       bt.addEventListener("click", () => ensDesmarcar(s.id)); f.appendChild(bt);
     }
-    else if (kgRep && ensPesoLibre(s)) {
-      const bt = el("button", "nav-btn ens-hecha", "✓"); bt.type = "button"; bt.setAttribute("aria-label", "Marcar hecha la " + (bloque ? "ronda " : "serie ") + n);
+    else {   // v346: ✓ en TODA serie pendiente; hace lo mismo que «✓ Hecha» de la pantalla de la serie (si falta un dato, el mismo mensaje en línea)
+      const bt = el("button", "nav-btn ens-hecha", "✓"); bt.type = "button"; bt.setAttribute("aria-label", "Marcar hecha " + (s.calentamiento ? "el calentamiento" : bloque ? "la ronda " + n0(s.ronda) + ", " + nombreEj(s.ejercicio_id) : "la serie " + n));
       bt.addEventListener("click", () => ensConfirmar(s.id)); f.appendChild(bt);
-    } else f.appendChild(el("span", "ens-no", "–"));
+    }
     cuerpo.appendChild(f);
     if (f.dataset.objpct) cuerpo.appendChild(el("p", "ens-obj", f.dataset.objpct));
   });
   cuerpo.appendChild(el("p", "ens-nota", "Escribir aquí no confirma nada: lo escrito es un borrador hasta que pulses ✓ en esa serie (hace lo mismo que «✓ Hecha» de la pantalla de la serie)." + (hayKg ? " «Autorrellenar» copia el peso de la serie elegida a las series pendientes de debajo (no toca hechas, reps ni notas)." : "")));
-  const pie = el("p", "aviso ens-aviso", filas.every(hecha) ? "Todas las series de este ejercicio están hechas. Cierra esta ventana cuando quieras." : ""); if (filas.every(hecha)) pie.classList.add("ens-bien"); cuerpo.appendChild(pie);
+  const pie = el("p", "aviso ens-aviso", filas.every(hecha) ? (bloque ? "Todas las series de esta superserie están hechas. Cierra esta ventana cuando quieras." : "Todas las series de este ejercicio están hechas. Cierra esta ventana cuando quieras.") : ""); if (filas.every(hecha)) pie.classList.add("ens-bien"); cuerpo.appendChild(pie);
   $("dlgEnSeries").scrollTop = desp;
   ensActualizarAuto();
 }
@@ -11846,7 +11856,7 @@ function ensAviso(t, bien, deshacer) {   // v330: el aviso va en línea (con «D
 }
 function ensEtiqueta(filas, id) {
   const fi = filas.findIndex(x => x.id === id), bloque = !!(ent.ensRef && ent.ensRef.bloque_id);
-  return (bloque ? "Ronda " : "Serie ") + (bloque ? n0(filas[fi].ronda) : filas.slice(0, fi + 1).filter(x => !x.calentamiento).length);
+  return bloque ? "Ronda " + n0(filas[fi].ronda) + " · " + nombreEj(filas[fi].ejercicio_id) : "Serie " + filas.slice(0, fi + 1).filter(x => !x.calentamiento).length;
 }
 // Volver a pendiente desde la vista: la misma acción que «↺ Marcar como pendiente» (sin aviso flotante); la serie pasa a ser la activa
 function ensDesmarcar(id) {
@@ -11865,8 +11875,8 @@ function ensAutorrellenar() {
   const campo = document.querySelector('#ensCuerpo .ens-fila[data-sid="' + filas[i].id + '"] input[data-campo="kg"]');
   const kg = parseFloat((campo ? campo.value.trim() : "").replace(",", "."));
   if (!(kg > 0)) { ensAviso("Escribe antes el peso de esa serie."); return; }
-  const destinos = filas.slice(i + 1).filter(x => !hecha(x) && ensPesoLibre(x));
-  if (!destinos.length) { ensAviso("No hay series pendientes debajo de esa serie."); return; }
+  const destinos = filas.slice(i + 1).filter(x => !hecha(x) && ensPesoLibre(x) && x.ejercicio_id === filas[i].ejercicio_id);   // v346: en superserie, solo el MISMO ejercicio en las rondas de debajo
+  if (!destinos.length) { ensAviso(filas[i].bloque_id ? "No hay rondas pendientes de este ejercicio debajo." : "No hay series pendientes debajo de esa serie."); return; }
   const antes = destinos.map(x => ["series", { ...x }]), act = serieEnt();
   destinos.forEach(x => { cambiar("series", { ...x, peso: kg }, true); if (ent.borr && ent.borr[x.id]) delete ent.borr[x.id].kg; });
   persistir();
@@ -11897,7 +11907,7 @@ function ensConfirmar(id) {
   const fin = !$("enFin").hidden, desc = !$("enDescanso").hidden;
   pintarVistaSeries();
   const pr = hecha(db.series[id]) && prsEj(db.series[id].ejercicio_id).has(id);
-  ensAviso(ensEtiqueta(filas, id) + " hecha" + (pr ? " · ¡Nuevo récord!" : "") + (fin ? " · entreno completado" : desc ? " · descanso en marcha" : "") + (filas.length && filas.every(hecha) ? ". Todas las series de este ejercicio están hechas." : ""), true);
+  ensAviso(ensEtiqueta(filas, id) + " hecha" + (pr ? " · ¡Nuevo récord!" : "") + (fin ? " · entreno completado" : desc ? " · descanso en marcha" : "") + (filas.length && filas.every(hecha) ? (filas[0].bloque_id ? ". Todas las series de esta superserie están hechas." : ". Todas las series de este ejercicio están hechas.") : ""), true);
 }
 $("enSeries").addEventListener("click", () => {
   const s = serieEnt();
@@ -11936,7 +11946,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v345" + (BETA ? " beta" : "");
+const VERSION_APP = "v346" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

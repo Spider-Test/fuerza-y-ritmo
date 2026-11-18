@@ -3004,3 +3004,6 @@ button.ens-ok { min-width: 44px; min-height: 44px; padding: 0; background: trans
 [data-zona-orden="listas"].reordenando > .lista-sec > .lista-cab > .asa.asa-listas { cursor: grab; touch-action: none; opacity: 1 !important; visibility: visible !important; pointer-events: auto; }
 [data-zona-orden="listas"].reordenando > .lista-sec > .lista-cab > .asa.asa-listas:active { cursor: grabbing; }
 [data-zona-orden^="lista:"].reordenando > .lista-cab > .asa.asa-listas { visibility: hidden !important; pointer-events: none; }   /* modo Reordenar de UNA lista: el asa de la lista entera no se ve */
+/* v345 (MEJ-RM-001, 2.ª referencia): en los medidos por repeticiones, el botón de unidad se ve aunque la ficha no admita carga; con «% reps» se ve también el campo del % */
+.bloque.sin-peso.modo-reps .fila-fuerza .modo { display: inline-block; }
+.bloque.sin-peso.pct-reps .fila-fuerza .paso:has(.in-a) { display: flex; }

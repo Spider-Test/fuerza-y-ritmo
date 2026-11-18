@@ -27,7 +27,7 @@
   window.addEventListener("pageshow", actualizar);
 })();
 </script>
-<link rel="stylesheet" href="estilos.css?v=v344">
+<link rel="stylesheet" href="estilos.css?v=v345">
 </head>
 <body>
 
@@ -354,8 +354,10 @@
       <div class="lado-aplicar" id="detLadoAviso" hidden><p class="menu-det" id="detLadoTxt"></p><button type="button" class="nav-btn" id="detLadoAplicar">Aplicar la configuración de la ficha</button></div>
     </section>
     <section id="detRmSec">
-      <h3>1RM de referencia</h3>
+      <h3 id="detRmTit">1RM de referencia</h3>
+      <p class="menu-det" id="detRmEtq" hidden>1RM de lastre (kg)</p>
       <div class="fila rm-fila"><input id="detRm" inputmode="decimal" placeholder="kg" aria-label="1RM de referencia en kg"><span id="detRmEst" class="menu-det"></span></div>
+      <div id="detRefRepsBloque" hidden><p class="menu-det">Máx. repeticiones</p><div class="fila rm-fila"><input id="detRefReps" inputmode="numeric" placeholder="reps" aria-label="Máximo de repeticiones de referencia"><span id="detRefRepsEst" class="menu-det"></span></div></div>
       <label class="permiso"><input type="checkbox" id="detBarra"> Se hace con barra: mostrar los discos por lado</label>
     </section>
     <section id="detBilboSec">
@@ -1083,6 +1085,6 @@
 <div class="toast" id="toast" role="status" hidden><span id="toastTxt"></span><button type="button" id="toastBtn">Deshacer</button></div>
 <div class="fiesta" id="fiesta" aria-hidden="true"></div>
 
-<script src="app.js?v=v344"></script>
+<script src="app.js?v=v345"></script>
 </body>
 </html>

@@ -85,17 +85,17 @@ if (BETA) { document.documentElement.classList.add("beta"); document.title = "Fu
 // El orden importa al subir: primero ejercicios y plantillas, después las series que los usan.
 const TABLAS = {
   ejercicios: { clave: "id", conflicto: "id", campos: ["id", "user_id", "nombre", "tipo", "video_url", "notas", "rm", "compartido", "zonas", "medidas", "regiones", "tecnica", "borrado", "actualizado"] },
-  personales: { clave: "ejercicio_id", conflicto: "user_id,ejercicio_id", campos: ["ejercicio_id", "rm", "medida", "lado", "actualizado"] },
+  personales: { clave: "ejercicio_id", conflicto: "user_id,ejercicio_id", campos: ["ejercicio_id", "rm", "medida", "lado", "ref_reps", "actualizado"] },   // v345: ref_reps (MEJ-RM-001), opcional
   ciclos: { clave: "id", conflicto: "id", campos: ["id", "ejercicio_id", "numero", "rm_inicio", "peso_inicial", "incremento", "reps_reset", "importadas", "cerrado", "borrado", "actualizado"] },
   plantillas: { clave: "id", conflicto: "id", campos: ["id", "nombre", "items", "borrado", "actualizado"] },
   mesociclos: { clave: "id", conflicto: "id", campos: ["id", "nombre", "inicio", "semanas", "dias", "progresion", "descarga", "notas", "borrado", "actualizado"] },
-  series: { clave: "id", conflicto: "id", campos: ["id", "fecha", "ejercicio_id", "orden", "peso", "reps", "distancia", "tiempo", "descanso", "hecha", "grupo", "meso_id", "bloque_id", "ronda", "rec_dist", "pct", "ciclo_id", "calentamiento", "desnivel_pos", "desnivel_neg", "ritmo_ajustado", "fc_media", "fc_max", "cadencia", "fc_pico", "fc_hist", "seccion", "por_lado", "nota", "letra_nueva", "max_tiempo", "max_reps", "copia", "rango_min", "rango_max", "borrado", "actualizado"] },
+  series: { clave: "id", conflicto: "id", campos: ["id", "fecha", "ejercicio_id", "orden", "peso", "reps", "distancia", "tiempo", "descanso", "hecha", "grupo", "meso_id", "bloque_id", "ronda", "rec_dist", "pct", "pct_ref", "ciclo_id", "calentamiento", "desnivel_pos", "desnivel_neg", "ritmo_ajustado", "fc_media", "fc_max", "cadencia", "fc_pico", "fc_hist", "seccion", "por_lado", "nota", "letra_nueva", "max_tiempo", "max_reps", "copia", "rango_min", "rango_max", "borrado", "actualizado"] },
   entrenos: { clave: "fecha", conflicto: "user_id,fecha", campos: ["fecha", "html", "texto", "rpe", "sensacion", "extra", "actualizado"] },
   molestias: { clave: "id", conflicto: "id", campos: ["id", "zona", "descripcion", "inicio", "estado", "borrado", "actualizado"] },
   listas: { clave: "id", conflicto: "id", campos: ["id", "nombre", "items", "siguiente", "orden", "borrado", "actualizado"], opcional: true },   // v344: «orden» (MEJ-LISTAS-005), opcional: ver COLUMNAS_OPCIONALES
   carreras: { clave: "id", conflicto: "id", campos: ["id", "nombre", "fecha", "lugar", "distancia", "tiempo", "chip", "pos_general", "total_general", "categoria", "pos_categoria", "total_categoria", "desnivel_pos", "fc_media", "notas", "enlace", "previsto", "borrado", "actualizado"] }
 };
-const DEFECTOS = { medida: "", lado: false, extra: {}, seccion: "", por_lado: false, nota: "", letra_nueva: false, max_tiempo: false, max_reps: false, rango_min: 0, rango_max: 0, fecha: null, lugar: "", categoria: "", enlace: "", fc_hist: [], tipo: "fuerza", hecha: true, grupo: "", meso_id: "", bloque_id: "", ciclo_id: "", importadas: [], cerrado: false, compartido: false, medidas: [], regiones: [], tecnica: false, items: [], dias: {}, descarga: {}, zonas: [], calentamiento: false, inicio: null, zona: "", descripcion: "", estado: "activa", nombre: "", video_url: "", notas: "", html: "", texto: "", sensacion: "", borrado: false };
+const DEFECTOS = { pct_ref: "", ref_reps: 0, medida: "", lado: false, extra: {}, seccion: "", por_lado: false, nota: "", letra_nueva: false, max_tiempo: false, max_reps: false, rango_min: 0, rango_max: 0, fecha: null, lugar: "", categoria: "", enlace: "", fc_hist: [], tipo: "fuerza", hecha: true, grupo: "", meso_id: "", bloque_id: "", ciclo_id: "", importadas: [], cerrado: false, compartido: false, medidas: [], regiones: [], tecnica: false, items: [], dias: {}, descarga: {}, zonas: [], calentamiento: false, inicio: null, zona: "", descripcion: "", estado: "activa", nombre: "", video_url: "", notas: "", html: "", texto: "", sensacion: "", borrado: false };
 let sesion = leer("sesion-v1");                 // {access_token, refresh_token, expires_at, user_id, email}
 let perfil = leer("perfil-v1");                 // {aprobado, es_admin, email}
 let usuarios = perfil?.es_admin && perfil?.aprobado ? (leer("usuarios-v1") || []) : [];        // solo para el administrador (se guarda para no verla vacía al abrir)
@@ -363,7 +363,7 @@ const admite = (id, m) => medidasDe(id).includes(m);
 // INC-KG-001: las medidas efectivas de la ficha deciden si una serie nueva admite carga.
 // La medida de progreso no decide los campos; carga/%/ciclo guardados siguen accesibles al editar.
 const sinCarga = id => tipoDe(id) === "fuerza" && !admite(id, "carga");
-const cargaGuardada = s => !!s && (n0(s.peso) > 0 || n0(s.pct) > 0 || !!s.ciclo_id);
+const cargaGuardada = s => !!s && (n0(s.peso) > 0 || (n0(s.pct) > 0 && s.pct_ref !== "reps") || !!s.ciclo_id);   // v345: un % del máximo de repeticiones no es una carga
 // Fuerza con distancia (granjero: carga + distancia, con el tiempo opcional): el récord se compara solo con la misma carga y distancia
 const conDistFuerza = s => n0(s.distancia) > 0 && !esDistancia(tipoDe(s.ejercicio_id));
 // ---------- v263: clasificación de ejercicios (Región y Técnica) ----------
@@ -506,16 +506,47 @@ function referenciaPct(id) {
 function textoPct(id, pct) {   // { obj, sug, kg }: redondeo de siempre (2,5 kg)
   const p = n0(pct), r = referenciaPct(id);
   if (!r) return { obj: "Objetivo " + num(p) + " % · falta el 1RM de este ejercicio", sug: "", kg: 0 };
-  const kg = redondear(r.v * p / 100);
-  return { obj: "Objetivo " + num(p) + " % del " + (r.est ? "1RM estimado" : "1RM") + " (" + num(r.v) + " kg)", sug: "Sugerido " + num(kg) + " kg", kg };
+  const kg = redondear(r.v * p / 100), lastre = medidaDe(id) === "reps";   // v345: en los medidos por repeticiones, el 1RM es el del LASTRE
+  return { obj: "Objetivo " + num(p) + " % del " + (lastre ? (r.est ? "1RM de lastre estimado" : "1RM de lastre") : (r.est ? "1RM estimado" : "1RM")) + " (" + num(r.v) + " kg)", sug: "Sugerido " + num(kg) + " kg", kg };
 }
 function textoPctForm(id, v) {   // texto bajo el campo de % de los formularios de Semana
   if (!(v > 0)) { const r = referenciaPct(id); return !r ? "Sin 1RM en la ficha: se guarda el %, sin kg" : r.est ? "1RM estimado: " + num(r.v) + " kg" : "1RM de referencia: " + num(r.v) + " kg"; }
   const t = textoPct(id, v);
   return t.sug ? t.obj + " · " + t.sug : t.obj;
 }
-// Serie de fuerza con objetivo en % (de un ejercicio que se mide por peso): su peso hecho se escribe a mano, no se rellena con la sugerencia
-const objetivoPctSerie = s => tipoDe(s.ejercicio_id) === "fuerza" && n0(s.pct) > 0 && !s.ciclo_id && medidaDe(s.ejercicio_id) === "peso" ? textoPct(s.ejercicio_id, s.pct) : null;
+// v345 (MEJ-RM-001, 2.ª referencia): en los ejercicios medidos por «Repeticiones máximas» una serie puede llevar su % referido al MÁXIMO DE REPETICIONES
+// (series.pct_ref = "reps") o, como siempre, al 1RM de lastre (pct_ref = ""). pct_ref viaja SIEMPRE con pct; un % de repeticiones nunca se convierte en kg.
+const esPctReps = s => !!s && s.pct_ref === "reps" && n0(s.pct) > 0;
+const pctRefDe = v => v && v.pct_ref === "reps" && n0(v.pct) > 0 ? "reps" : "";   // normaliza al copiar: sin % no hay referencia
+const refRepsPersonal = id => Math.max(0, Math.round(n0((db.personales[id] || {}).ref_reps)));
+// Máximo de repeticiones ESTIMADO con tus registros (nunca se guarda): series de fuerza hechas, no de calentamiento, sin lastre (peso 0) ni Bilbo,
+// con repeticiones enteras > 0, sin «máx tiempo» ni tiempo como medida principal y que no sean por condición (distancia o medidas propias de la ficha).
+const cuentaRepsMax = s => hecha(s) && !s.calentamiento && !s.ciclo_id && !(n0(s.peso) > 0) && Number.isInteger(n0(s.reps)) && n0(s.reps) > 0 && !s.max_tiempo && !porCondicion(s);
+function repsMaxEstimadas(id) { const p = seriesDe(id).filter(cuentaRepsMax); return p.length ? Math.max.apply(null, p.map(x => n0(x.reps))) : 0; }
+function referenciaReps(id) {
+  const m = refRepsPersonal(id);
+  if (m > 0) return { v: m, est: false };
+  const e = repsMaxEstimadas(id);
+  return e > 0 ? { v: e, est: true } : null;
+}
+function textoPctReps(id, pct) {   // { obj, sug, reps }: repeticiones al entero más cercano
+  const p = n0(pct), r = referenciaReps(id);
+  if (!r) return { obj: "Objetivo " + num(p) + " % · falta el máximo de repeticiones de este ejercicio", sug: "", reps: 0, campo: "reps" };
+  const reps = Math.round(r.v * p / 100);
+  return { obj: "Objetivo " + num(p) + " % del máximo de repeticiones" + (r.est ? " estimado" : "") + " (" + r.v + ")", sug: reps > 0 ? "Sugerido " + reps + " reps" : "", reps, campo: "reps" };
+}
+function textoPctRepsForm(id, v) {
+  if (!(v > 0)) { const r = referenciaReps(id); return !r ? "Sin máximo de repeticiones en la ficha ni registros: se guarda el %" : r.est ? "Máximo de repeticiones estimado: " + r.v : "Máximo de repeticiones de referencia: " + r.v; }
+  const t = textoPctReps(id, v);
+  return t.sug ? t.obj + " · " + t.sug : t.obj;
+}
+// Serie de fuerza con objetivo en % (de un ejercicio que se mide por peso o, v345, por repeticiones máximas): lo hecho se escribe a mano, no se rellena con la sugerencia
+const objetivoPctSerie = s => tipoDe(s.ejercicio_id) === "fuerza" && n0(s.pct) > 0 && !s.ciclo_id
+  ? (esPctReps(s) ? textoPctReps(s.ejercicio_id, s.pct) : ["peso", "reps"].includes(medidaDe(s.ejercicio_id)) ? { ...textoPct(s.ejercicio_id, s.pct), campo: "kg" } : null) : null;
+// Opciones del botón de unidad en fuerza: en los medidos por repeticiones, «kg» · «% reps» · «% lastre»; en el resto, «kg» · «%» como siempre
+const modosPct = id => medidaDe(id) === "reps" ? ["", "reps", "1rm"] : ["", "1rm"];
+const etiquetaModoPct = (id, m, sinKg) => m === "reps" ? "% reps" : m === "1rm" ? (medidaDe(id) === "reps" ? "% lastre" : "%") : sinKg ? "reps" : "kg";
+const marcadorModoPct = (id, m) => m === "reps" ? "% reps" : m === "1rm" ? (medidaDe(id) === "reps" ? "% lastre" : "% 1RM") : "";
 const distDeNombre = nombre => { const m = norm(nombre).match(/(\d+(?:[.,]\d+)?)\s*(km|m)\b/); return m ? parseFloat(m[1].replace(",", ".")) * (m[2] === "km" ? 1000 : 1) : 0; };
 const ritmoSeg = (s, tipo) => n0(s.tiempo) / (n0(s.distancia) / TIPOS[tipo].porMetros);
 const ritmo = (s, tipo) => fmtTiempo(ritmoSeg(s, tipo)) + TIPOS[tipo].sufijo;
@@ -621,7 +652,7 @@ const textoPulso = s => [n0(s.fc_media) > 0 ? "♥ " + n0(s.fc_media) + (n0(s.fc
 const textoDesnivel = s => n0(s.desnivel_pos) + n0(s.desnivel_neg) > 0 ? "+" + Math.round(n0(s.desnivel_pos)) + " m / −" + Math.round(n0(s.desnivel_neg)) + " m" + (conDesnivel(s) ? " · con desnivel" : "") : "";
 // Bilbo planificado: el peso sale del ciclo activo; %RM planificado: los kg salen del 1RM de referencia
 const pesoMostrado = s => !hecha(s) && s.ciclo_id === "auto" ? pesoBilbo(s.ejercicio_id)
-  : !hecha(s) && n0(s.pct) > 0 ? kgDePct(s.ejercicio_id, s.pct) : n0(s.peso);   // v251: sin 1RM en la ficha, sin kg
+  : !hecha(s) && n0(s.pct) > 0 && !esPctReps(s) ? kgDePct(s.ejercicio_id, s.pct) : n0(s.peso);   // v251: sin 1RM en la ficha, sin kg · v345: un % de repeticiones nunca da kg
 function serieTexto(s) {
   const tipo = tipoDe(s.ejercicio_id);
   if (esDistancia(tipo)) {
@@ -641,6 +672,8 @@ function serieTexto(s) {
   const kgTxt = kg > 0 ? " · " + num(kg) + " kg" : "";
   // v262: fuerza con distancia (pasos de granjero): «30 m · 45 s (24 kg)»; sin tiempo apuntado, «30 m (24 kg)»
   if (n0(s.distancia) > 0) return fmtDist(s.distancia) + [n0(s.tiempo) > 0 ? fmtSegs(s.tiempo) : "", n0(s.reps) > 0 ? n0(s.reps) + " reps" : ""].filter(Boolean).map(x => " · " + x).join("") + lado + peso;
+  // v345: % del máximo de repeticiones: «90 % máx. reps» planificada; «9 reps (90 % máx. reps)» hecha
+  if (esPctReps(s)) return (hecha(s) && n0(s.reps) > 0 ? n0(s.reps) + " reps" + lado + " (" + num(s.pct) + " % máx. reps" + kgTxt + ")" : num(s.pct) + " % máx. reps" + lado + (kg > 0 ? " (" + num(kg) + " kg)" : ""));
   if (s.max_tiempo) return "máx tiempo" + lado + (n0(s.tiempo) > 0 ? " (" + fmtSegs(s.tiempo) + kgTxt + ")" : peso);
   if (s.max_reps || (!s.ciclo_id && !(n0(s.reps) > 0) && !(n0(s.tiempo) > 0))) return "máx reps" + lado + (n0(s.reps) > 0 ? " (" + n0(s.reps) + kgTxt + ")" : peso);
   if (n0(s.tiempo) > 0 && !(n0(s.reps) > 0)) return fmtSegs(s.tiempo) + lado + peso;   // por tiempo: bici, plancha, isométricos…
@@ -895,7 +928,7 @@ async function api(ruta, opciones = {}, reintento = false) {
 // servidor (hoy solo las tres de ejercicios; una versión futura que añada una columna a otra tabla la declara aquí) y faltanPorTabla guarda las que
 // el servidor ha rechazado en esta carga. Se reinicia en cada carga de la app.
 let columnaMedidas = true;
-const COLUMNAS_OPCIONALES = { ejercicios: ["medidas", "regiones", "tecnica"], listas: ["orden"] };   // v344: listas.orden (MEJ-LISTAS-005)
+const COLUMNAS_OPCIONALES = { ejercicios: ["medidas", "regiones", "tecnica"], listas: ["orden"], personales: ["ref_reps"], series: ["pct_ref"] };   // v345: personales.ref_reps y series.pct_ref (MEJ-RM-001)   // v344: listas.orden (MEJ-LISTAS-005)
 const faltanPorTabla = Object.fromEntries(Object.keys(TABLAS).map(t => [t, new Set()]));
 const columnasFaltan = faltanPorTabla.ejercicios;
 const camposDe = t => faltanPorTabla[t].size ? TABLAS[t].campos.filter(c => !faltanPorTabla[t].has(c)) : TABLAS[t].campos;
@@ -2180,7 +2213,7 @@ document.addEventListener("selectionchange", () => {
 const seriesDelDia = fecha => (indiceSeries().porFecha[fecha] || []).slice();
 // Convierte series en una lista de ejercicios con sus series (para copiar o guardar como plantilla)
 // Los bloques se guardan como tramos con una serie por ronda: { bloque: true, tramos: [{ ejercicio_id, series: [ronda 1, ronda 2…] }] }
-const valores = (s, conOrigen) => ({ ...(conOrigen ? { _h: hecha(s) } : {}), peso: n0(s.peso), reps: s.ciclo_id ? 0 : n0(s.reps), distancia: n0(s.distancia), tiempo: n0(s.tiempo), descanso: n0(s.descanso), rec_dist: n0(s.rec_dist), pct: n0(s.pct), bilbo: !!s.ciclo_id, calentamiento: !!s.calentamiento, por_lado: !!s.por_lado, nota: s.nota || "", letra_nueva: !!s.letra_nueva, max_tiempo: !!s.max_tiempo, max_reps: !!s.max_reps, rango_min: n0(s.rango_min), rango_max: n0(s.rango_max) });
+const valores = (s, conOrigen) => ({ ...(conOrigen ? { _h: hecha(s) } : {}), peso: n0(s.peso), reps: s.ciclo_id ? 0 : n0(s.reps), distancia: n0(s.distancia), tiempo: n0(s.tiempo), descanso: n0(s.descanso), rec_dist: n0(s.rec_dist), pct: n0(s.pct), ...(pctRefDe(s) ? { pct_ref: "reps" } : {}), bilbo: !!s.ciclo_id, calentamiento: !!s.calentamiento, por_lado: !!s.por_lado, nota: s.nota || "", letra_nueva: !!s.letra_nueva, max_tiempo: !!s.max_tiempo, max_reps: !!s.max_reps, rango_min: n0(s.rango_min), rango_max: n0(s.rango_max) });
 function itemsDe(series, conOrigen) {   // conOrigen: añade _h (hecha o planificada) a cada serie; solo para compartir, donde se elimina antes de enviar
   const items = [], bloques = {};
   series.forEach(s => {
@@ -2208,7 +2241,7 @@ function pegarItems(fecha, items, grupo, mesoId, masKg, ordenInicial) {
   const nueva = (ejercicio_id, v, extra) => cambiar("series", Object.assign({
     id: nuevoId(), fecha, ejercicio_id, orden: orden++,
     peso: n0(v.peso) > 0 ? Math.max(0, n0(v.peso) + n0(masKg)) : 0, reps: n0(v.reps), distancia: n0(v.distancia), tiempo: n0(v.tiempo),
-    descanso: n0(v.descanso), rec_dist: n0(v.rec_dist), pct: n0(v.pct), ciclo_id: v.bilbo ? "auto" : "", calentamiento: !!v.calentamiento, por_lado: !!v.por_lado, nota: v.nota || "", letra_nueva: !!v.letra_nueva, max_tiempo: !!v.max_tiempo, max_reps: !!v.max_reps, rango_min: n0(v.rango_min), rango_max: n0(v.rango_max), hecha: false, meso_id: mesoId || "", bloque_id: "", ronda: 0, borrado: false
+    descanso: n0(v.descanso), rec_dist: n0(v.rec_dist), pct: n0(v.pct), pct_ref: pctRefDe(v), ciclo_id: v.bilbo ? "auto" : "", calentamiento: !!v.calentamiento, por_lado: !!v.por_lado, nota: v.nota || "", letra_nueva: !!v.letra_nueva, max_tiempo: !!v.max_tiempo, max_reps: !!v.max_reps, rango_min: n0(v.rango_min), rango_max: n0(v.rango_max), hecha: false, meso_id: mesoId || "", bloque_id: "", ronda: 0, borrado: false
   }, extra), true);
   items.forEach(it => {
     const g = grupo !== undefined ? grupo : (it.grupo || "");
@@ -2328,7 +2361,7 @@ function aplicarCalentamiento(dia, grupo, p) {
   const creadas = []; let k = 0;
   const nueva = (ejercicio_id, v, extra) => {
     const fila = Object.assign({ id: nuevoId(), fecha: f, ejercicio_id, orden: base + k++, peso: n0(v.peso), reps: n0(v.reps), distancia: n0(v.distancia), tiempo: n0(v.tiempo),
-      descanso: n0(v.descanso), rec_dist: n0(v.rec_dist), pct: n0(v.pct), ciclo_id: v.bilbo ? "auto" : "", calentamiento: true, por_lado: !!v.por_lado, nota: v.nota || "", letra_nueva: false,
+      descanso: n0(v.descanso), rec_dist: n0(v.rec_dist), pct: n0(v.pct), pct_ref: pctRefDe(v), ciclo_id: v.bilbo ? "auto" : "", calentamiento: true, por_lado: !!v.por_lado, nota: v.nota || "", letra_nueva: false,
       max_tiempo: !!v.max_tiempo, max_reps: !!v.max_reps, rango_min: n0(v.rango_min), rango_max: n0(v.rango_max), hecha: false, meso_id: "", grupo, seccion: parte, bloque_id: "", ronda: 0, copia: 0, borrado: false }, extra);
     creadas.push(fila); cambiar("series", fila, true);
   };
@@ -4431,7 +4464,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
     const row = extrasEl.children[k - 1];
     if (!row) return v;
     const out = { ...v }, r = row.querySelector(".r-reps").value.trim(), kg = row.querySelector(".r-kg").value.trim();
-    if (kg !== "" && !row.querySelector(".r-kg").hidden) { const x = parseFloat(kg.replace(",", ".")); if (x >= 0) { out.pct = enPct ? x : 0; out.peso = enPct ? kgDePct(id, x) : x; } }
+    if (kg !== "" && !row.querySelector(".r-kg").hidden) { const x = parseFloat(kg.replace(",", ".")); if (x >= 0) { out.pct = enPct ? x : 0; out.pct_ref = enPct && modoPct === "reps" ? "reps" : ""; out.peso = modoPct === "reps" ? 0 : enPct ? kgDePct(id, x) : x; } }
     if (!enMax() && r !== "") {
       if (enTiempo()) { const t = leerSegs(r); if (t > 0) out.tiempo = t; }
       else if (leerRango(r)) { const g = leerRango(r); out.reps = g.min; out.rango_min = g.min; out.rango_max = g.max; }
@@ -4442,7 +4475,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
   // La edición solo se confirma con su botón. La foto distingue un cambio pendiente al abrir otra serie.
   let foto = null;
   const fdEl = () => b.querySelector(".in-d");
-  const valoresForm = () => [fa.value, fb.value, fc.value, (fdEl() || {}).value || "", vecesEl.value, otroEj.value, enPct, porTiempo, ...[...formEl.querySelectorAll("input[type=checkbox]")].map(x => x.checked), ...[...formEl.querySelectorAll(".filas-extra input")].map(x => x.value)].join("|");
+  const valoresForm = () => [fa.value, fb.value, fc.value, (fdEl() || {}).value || "", vecesEl.value, otroEj.value, modoPct, porTiempo, ...[...formEl.querySelectorAll("input[type=checkbox]")].map(x => x.checked), ...[...formEl.querySelectorAll(".filas-extra input")].map(x => x.value)].join("|");
   function tomarFoto() { foto = valoresForm(); }
   const otraEdicionPendiente = () => !formEl.hidden && foto !== null && valoresForm() !== foto;
 
@@ -4552,7 +4585,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
     guardarBor();
   });
   const modo = b.querySelector(".modo"), calc = b.querySelector(".calc"), opBilbo = b.querySelector(".bilbo-op"), chkBilbo = b.querySelector(".es-bilbo");
-  let enPct = false;
+  let enPct = false, modoPct = "";   // v345: modoPct = "" (kg) · "1rm" (% del 1RM / de lastre) · "reps" (% del máximo de repeticiones)
   // Carrera y natación: por metros (con tiempo opcional) o por tiempo (con metros opcionales)
   const modoDist = b.querySelector(".modo-dist");
   let porTiempo = false;
@@ -4657,15 +4690,30 @@ function bloque(dia, id, series, grupo, parte, copia) {
     if (!calc) return;
     if (dist) { pintarObjetivo(); return; }
     if (!enPct) { const d = usaBarra(id) ? textoDiscos(parseFloat((fa.value || "").replace(",", "."))) : ""; calc.textContent = d ? d[0].toUpperCase() + d.slice(1) : ""; return; }
-    calc.textContent = textoPctForm(id, parseFloat((fa.value || "").replace(",", ".")));   // v338: objetivo · sugerido
+    const vPct = parseFloat((fa.value || "").replace(",", "."));
+    if (modoPct === "reps") {   // v345: objetivo en repeticiones; la sugerencia va de marcador en el campo de reps y no se guarda sola
+      calc.textContent = textoPctRepsForm(id, vPct);
+      const tr = vPct > 0 ? textoPctReps(id, vPct) : null;
+      fb.placeholder = tr && tr.reps > 0 ? String(tr.reps) : "reps (opcional)";
+      return;
+    }
+    calc.textContent = textoPctForm(id, vPct);   // v338: objetivo · sugerido
   };
-  const ponerModo = pct => {
-    enPct = pct;
+  // v345: el botón de unidad elige entre las opciones de modosPct (en los medidos por repeticiones: «kg», «% reps», «% lastre»). Acepta los booleanos de antes.
+  const ponerModo = m => {
+    const antes = modoPct;
+    modoPct = m === true ? "1rm" : m === false || !m ? "" : m;
+    enPct = !!modoPct;
+    if (antes === "reps" && modoPct !== "reps" && !enTiempo() && !enMax()) fb.placeholder = "reps";
     if (!modo) return;
-    modo.textContent = pct ? "%" : "kg";
-    modo.classList.toggle("activo", pct);
-    fa.placeholder = pct ? "% 1RM" : "peso";
-    fa.setAttribute("aria-label", pct ? "Porcentaje del 1RM" : "Peso en kg");
+    const reps = medidaDe(id) === "reps";
+    b.classList.toggle("pct-reps", modoPct === "reps");   // con el % de repeticiones el campo del % se ve aunque la ficha no admita carga
+    b.classList.toggle("modo-reps", reps && tipo === "fuerza");
+    modo.textContent = etiquetaModoPct(id, modoPct, b.classList.contains("sin-peso"));
+    modo.classList.toggle("activo", enPct);
+    modo.setAttribute("aria-label", reps ? "Unidad: kg, % del máximo de repeticiones o % del 1RM de lastre" : "Cambiar entre kg y % del 1RM");
+    fa.placeholder = enPct ? marcadorModoPct(id, modoPct) : "peso";
+    fa.setAttribute("aria-label", modoPct === "reps" ? "Porcentaje del máximo de repeticiones" : modoPct === "1rm" ? (reps ? "Porcentaje del 1RM de lastre" : "Porcentaje del 1RM") : "Peso en kg");
     pintarCalc();
   };
   // La recuperación solo se copia de una serie de este mismo día: cada entrenamiento la ajusta
@@ -4682,8 +4730,8 @@ function bloque(dia, id, series, grupo, parte, copia) {
       const t = ((n0(s.tiempo) > 0 || !!s.max_tiempo) && !(n0(s.reps) > 0)) || (!(n0(s.reps) > 0) && !admite(id, "reps") && admite(id, "tiempo"));
       ponerPorT(t);
       if (fdEl()) fdEl().value = distCampo(s.distancia);   // v262
-      if (n0(s.pct) > 0 && !s.ciclo_id) { ponerModo(true); fa.value = num(s.pct); }
-      else { ponerModo(false); const kg = pesoMostrado(s); fa.value = kg > 0 ? num(kg) : ""; }
+      if (n0(s.pct) > 0 && !s.ciclo_id) { ponerModo(esPctReps(s) ? "reps" : "1rm"); fa.value = num(s.pct); }
+      else { ponerModo(""); const kg = pesoMostrado(s); fa.value = kg > 0 ? num(kg) : ""; }
       fb.value = t ? segTxt(s.tiempo) : n0(s.reps) || "";
       if (!t && esRango(s) && !hecha(s)) { fb.value = modoForm === "editar" ? "" : rangoTxt(s); if (modoForm === "editar") setTimeout(() => { fb.placeholder = rangoTxt(s) + ": ¿cuántas?"; }, 0); }
       if (b.querySelector(".por-lado")) b.querySelector(".por-lado").checked = (modoForm === "editar" && !!s.por_lado) || ladoDe(id);   // v271
@@ -4698,11 +4746,14 @@ function bloque(dia, id, series, grupo, parte, copia) {
   if (modo) {
     modo.addEventListener("click", () => {
       const v = parseFloat((fa.value || "").replace(",", ".")), ref = rmPersonal(id);
-      if (!enPct) { ponerModo(true); fa.value = v > 0 && ref ? num(Math.round(v / ref * 100)) : ""; }
-      else { const kg = v > 0 ? kgDePct(id, v) : 0; ponerModo(false); fa.value = kg ? num(kg) : ""; }
+      const ops = modosPct(id), sig = ops[(ops.indexOf(modoPct) + 1) % ops.length];   // v345: siguiente opción; sin equivalencia entre % de repeticiones y kg
+      if (sig === "1rm" && modoPct === "") { ponerModo("1rm"); fa.value = v > 0 && ref ? num(Math.round(v / ref * 100)) : ""; }
+      else if (sig === "" && modoPct === "1rm") { const kg = v > 0 ? kgDePct(id, v) : 0; ponerModo(""); fa.value = kg ? num(kg) : ""; }
+      else { ponerModo(sig); fa.value = ""; }
       pintarCalc();
     });
     fa.addEventListener("input", pintarCalc);
+    ponerModo(modoPct);   // v345: etiqueta inicial según el ejercicio (en los medidos por repeticiones sin carga: «reps») y botón visible
   }
   // Bilbo: si el ejercicio tiene un ciclo activo, se puede marcar la serie como Bilbo con el peso que toca
   const ciclo = dist ? null : cicloActivo(id);
@@ -4711,7 +4762,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
     opBilbo.hidden = false;
     opBilbo.querySelector("span").textContent = "Serie Bilbo · sesión " + (ses.length + 1) + " · " + num(pesoBilbo(id)) + " kg";
     chkBilbo.addEventListener("change", () => {
-      if (chkBilbo.checked) { ponerModo(false); fa.value = num(pesoBilbo(id)); fb.value = ""; fb.placeholder = "reps máx"; fb.focus(); }
+      if (chkBilbo.checked) { ponerModo(""); fa.value = num(pesoBilbo(id)); fb.value = ""; fb.placeholder = "reps máx"; fb.focus(); }
       else fb.placeholder = "reps";
     });
     if (u && u.reps > 0 && u.reps <= n0(ciclo.reps_reset)) {
@@ -4814,7 +4865,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
   const guardarBor = () => {
     if (formEl.hidden) return;
     borradores[claveBor] = { a: fa.value, b: fb.value, c: fc.value, d: (fdEl() || {}).value || "", v: vecesEl.value, modo: modoForm, sid: editando?.id, foto,
-      t: enTiempo(), max: enMax(), pct: enPct, porTiempo, checks: [...formEl.querySelectorAll("input[type=checkbox]")].map(x => x.checked),
+      t: enTiempo(), max: enMax(), pct: modoPct, porTiempo, checks: [...formEl.querySelectorAll("input[type=checkbox]")].map(x => x.checked),
       filas: extrasEl ? [...extrasEl.children].map(row => ({ r: row.querySelector(".r-reps").value, kg: row.querySelector(".r-kg").value, auto: row.hasAttribute("data-auto"), hecha: !!row.dataset.hecha })) : [],
       otro: otroEj.value, cambiar: !cambiarEl.hidden };
   };
@@ -4824,7 +4875,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
       const s = series.find(x => x.id === bor.sid); abrirSerie(s, ol.querySelector('li[data-sid="' + CSS.escape(s.id) + '"]'), false);
     } else if (bor.modo === "grupo") abrirGrupo(false);
     else { abrirForm(); ponerModoForm("una"); }
-    ponerPorT(!!bor.t); ponerMax(!!bor.max); ponerModo(!!bor.pct); ponerPorTiempo(!!bor.porTiempo);
+    ponerPorT(!!bor.t); ponerMax(!!bor.max); ponerModo(typeof bor.pct === "string" ? bor.pct : !!bor.pct); ponerPorTiempo(!!bor.porTiempo);
     fa.value = bor.a; fb.value = bor.b; fc.value = bor.c; vecesEl.value = bor.v;
     if (fdEl()) fdEl().value = bor.d;
     [...formEl.querySelectorAll("input[type=checkbox]")].forEach((x, k) => { x.checked = bor.checks[k]; });
@@ -4853,7 +4904,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
   const leerValores = () => {
     const rec = leerRecuperacion(fc.value);
     if (!rec) { fc.focus(); return null; }
-    const v = { peso: 0, reps: 0, pct: 0, ciclo_id: "", por_lado: false, max_tiempo: false, distancia: 0, tiempo: 0, descanso: rec.descanso, rec_dist: rec.rec_dist };
+    const v = { peso: 0, reps: 0, pct: 0, pct_ref: "", ciclo_id: "", por_lado: false, max_tiempo: false, distancia: 0, tiempo: 0, descanso: rec.descanso, rec_dist: rec.rec_dist };
     if (dist) {
       const metros = porTiempo ? fb : fa, crono = porTiempo ? fa : fb;
       v.distancia = leerDist(metros.value);
@@ -4869,8 +4920,10 @@ function bloque(dia, id, series, grupo, parte, copia) {
     } else {
       const x = parseFloat((fa.value.trim() || "0").replace(",", "."));
       v.pct = enPct ? x : 0;
-      v.peso = enPct ? kgDePct(id, x) : x;
-      if (!cargaVisible()) { const e0 = modoForm === "editar" && editando ? editando : null; v.peso = e0 ? n0(e0.peso) : 0; v.pct = e0 ? n0(e0.pct) : 0; }   // v271: el kg oculto no se guarda
+      v.pct_ref = enPct && modoPct === "reps" ? "reps" : "";   // v345: la referencia viaja siempre con el %
+      v.peso = modoPct === "reps" ? 0 : enPct ? kgDePct(id, x) : x;   // un % de repeticiones nunca calcula kg
+      if (modoPct === "reps" && !cargaVisible()) { const e0 = modoForm === "editar" && editando ? editando : null; v.peso = e0 ? n0(e0.peso) : 0; }
+      else if (!cargaVisible()) { const e0 = modoForm === "editar" && editando ? editando : null; v.peso = e0 ? n0(e0.peso) : 0; v.pct = e0 ? n0(e0.pct) : 0; v.pct_ref = e0 ? pctRefDe(e0) : ""; }   // v271: el kg oculto no se guarda
       v.ciclo_id = chkBilbo && chkBilbo.checked && ciclo ? ciclo.id : "";
       v.por_lado = !!(b.querySelector(".por-lado") || {}).checked || ladoDe(id);
       v.rango_min = 0; v.rango_max = 0;
@@ -4892,6 +4945,8 @@ function bloque(dia, id, series, grupo, parte, copia) {
       } else if (leerRango(fb.value)) {
         const g = leerRango(fb.value);
         v.reps = g.min; v.rango_min = g.min; v.rango_max = g.max;   // ventana: queda pendiente hasta apuntar las que salieron
+      } else if (modoPct === "reps" && !fb.value.trim()) {
+        v.reps = 0;   // v345: % del máximo de repeticiones planificado: las reps se apuntan al hacerla (la sugerencia no se guarda)
       } else {
         v.reps = parseInt(fb.value, 10);
         if (!(v.reps > 0)) { fb.focus(); return null; }
@@ -4925,7 +4980,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
     const letraNueva = series.length ? series.some(x => x.letra_nueva) : !!esperaLetra[dia.id + "|" + idK];
     if (esperaLetra[dia.id + "|" + idK]) { delete esperaLetra[dia.id + "|" + idK]; escribir("espera-letra-v1", esperaLetra); }
     if (esperaNota[dia.id + "|" + idK]) { delete esperaNota[dia.id + "|" + idK]; escribir("espera-nota-v1", esperaNota); }
-    const nueva = (k, vk) => ({ id: nuevoId(), fecha: dia.id, ejercicio_id: id, orden: (!series.length && esperaOrden[dia.id + "|" + idK] || Date.now()) + k, grupo, seccion: parte || "", meso_id: "", bloque_id: "", ronda: 0, copia: copia > 1 ? copia : 0, borrado: false, calentamiento: false, nota: notaNueva, letra_nueva: letraNueva, ...(vk || v), ...(sinCarga(id) ? { peso: 0, pct: 0 } : {}), hecha: nuevaHecha });
+    const nueva = (k, vk) => ({ id: nuevoId(), fecha: dia.id, ejercicio_id: id, orden: (!series.length && esperaOrden[dia.id + "|" + idK] || Date.now()) + k, grupo, seccion: parte || "", meso_id: "", bloque_id: "", ronda: 0, copia: copia > 1 ? copia : 0, borrado: false, calentamiento: false, nota: notaNueva, letra_nueva: letraNueva, ...(vk || v), ...(sinCarga(id) ? { peso: 0, ...(pctRefDe(vk || v) ? {} : { pct: 0, pct_ref: "" }) } : {}), hecha: nuevaHecha && !(pctRefDe(vk || v) && !(n0((vk || v).reps) > 0)) });   // v345: el % de repeticiones no es carga; sin reps apuntadas queda pendiente
     if (modoForm === "una" || !series.length) {
       const n = modoForm === "una" ? 1 : Math.min(50, Math.max(1, parseInt(vecesEl.value, 10) || 1));
       if (!series.length) {
@@ -4947,7 +5002,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
     const aplicar = borrarHechas => {
       const deshacer = series.map(x => ["series", { ...x }]);
       const nuevas = [];
-      pend.forEach(x => cambiar("series", { ...x, ...valoresFila(efect.indexOf(x), v), ...(sinCarga(id) && !cargaGuardada(x) ? { peso: x.peso, pct: x.pct } : {}), hecha: false }, true));   // v271: sin carga, cada pendiente conserva su peso
+      pend.forEach(x => cambiar("series", { ...x, ...valoresFila(efect.indexOf(x), v), ...(sinCarga(id) && !cargaGuardada(x) ? (pctRefDe(v) ? { peso: x.peso } : { peso: x.peso, pct: esPctReps(x) ? v.pct : x.pct, pct_ref: esPctReps(x) ? pctRefDe(v) : pctRefDe(x) }) : {}), hecha: false }, true));   // v345: el % de repeticiones viaja con su referencia   // v271: sin carga, cada pendiente conserva su peso
       if (objetivo > efect.length) {
         const ultimo = Math.max(...series.map(x => n0(x.orden)));
         for (let k = 0; k < objetivo - efect.length; k++) { const f = { ...nueva(k, valoresFila(efect.length + k, v)), orden: ultimo + (k + 1) / 100, hecha: false }; nuevas.push(f); cambiar("series", f, true); }
@@ -5066,7 +5121,7 @@ function meterEnBloque(dia, seriesBloque, ejercicioId, sueltas) {
       return;
     }
     const v = venidas.length ? venidas[venidas.length - 1] : base;   // faltan series para esta ronda: planificada, con los valores de la última
-    const fila = { id: nuevoId(), fecha: dia.id, ejercicio_id: ejercicioId, meso_id: b0.meso_id || "", peso: sinCarga(ejercicioId) ? 0 : n0(v.peso), reps: n0(v.reps), distancia: n0(v.distancia), tiempo: n0(v.tiempo), pct: sinCarga(ejercicioId) ? 0 : n0(v.pct), por_lado: esDistancia(tipoDe(ejercicioId)) ? !!v.por_lado : ladoDe(ejercicioId),   // v342: «por lado» de la ficha
+    const fila = { id: nuevoId(), fecha: dia.id, ejercicio_id: ejercicioId, meso_id: b0.meso_id || "", peso: sinCarga(ejercicioId) ? 0 : n0(v.peso), reps: n0(v.reps), distancia: n0(v.distancia), tiempo: n0(v.tiempo), pct: sinCarga(ejercicioId) && !pctRefDe(v) ? 0 : n0(v.pct), pct_ref: sinCarga(ejercicioId) && !pctRefDe(v) ? "" : pctRefDe(v), por_lado: esDistancia(tipoDe(ejercicioId)) ? !!v.por_lado : ladoDe(ejercicioId),   // v342: «por lado» de la ficha
       descanso: n0(v.descanso), rec_dist: n0(v.rec_dist), max_reps: !!v.max_reps, max_tiempo: !!v.max_tiempo, rango_min: n0(v.rango_min), rango_max: n0(v.rango_max),
       ciclo_id: "", calentamiento: false, nota: v.nota || "", hecha: false, borrado: false, ...comun };
     nuevas.push(fila);
@@ -5102,7 +5157,7 @@ function ebCamposValores(id, filas) {
   return ["peso", "reps", "tiempo", "distancia"].filter(k => medidas.has(k === "peso" ? "carga" : k) || filas.some(s => n0(s[k]) > 0 || k === "peso" && n0(s.pct) > 0 || k === "reps" && (s.max_reps || esRango(s)) || k === "tiempo" && s.max_tiempo));
 }
 function ebTextoValor(s, k, id) {
-  if (k === "peso") return n0(s.pct) > 0 ? num(n0(s.pct)) + "%" : num(n0(s.peso));
+  if (k === "peso") return n0(s.pct) > 0 ? num(n0(s.pct)) + (esPctReps(s) ? "% reps" : "%") : num(n0(s.peso));   // v345: «90% reps» = % del máximo de repeticiones
   if (k === "reps") return s.max_reps ? "máx" : esRango(s) ? rangoTxt(s) : String(n0(s.reps));
   if (k === "tiempo") return s.max_tiempo ? "máx" : esDistancia(tipoDe(id)) ? fmtTiempo(n0(s.tiempo)) : String(n0(s.tiempo));
   return String(n0(s.distancia));
@@ -5156,10 +5211,11 @@ function ebTrasFicha() {
 function ebLeerCampo(k, texto, id) {
   const t = texto.trim().toLowerCase(), numero = /^\d+(?:[.,]\d+)?$/;
   if (k === "peso") {
-    const pct = t.endsWith("%"), v = pct ? t.slice(0, -1).trim() : t.replace(/\s*kg$/, "").trim();
+    const pr = /%\s*reps$/.test(t) && medidaDe(id) === "reps", t2 = pr ? t.replace(/\s*reps$/, "") : t;   // v345: «90% reps» solo en los medidos por repeticiones
+    const pct = t2.endsWith("%"), v = pct ? t2.slice(0, -1).trim() : t2.replace(/\s*kg$/, "").trim();
     if (!numero.test(v)) return null;
     const n = Number(v.replace(",", "."));
-    return Number.isFinite(n) && n >= 0 && (!pct || n > 0) ? { peso: pct ? 0 : n, pct: pct ? n : 0 } : null;
+    return Number.isFinite(n) && n >= 0 && (!pct || n > 0) ? { peso: pct ? 0 : n, pct: pct ? n : 0, pct_ref: pct && pr ? "reps" : "" } : null;
   }
   if (k === "reps") {
     if (/^m[aá]x(?:imas?)?$/.test(t)) return { reps: 0, max_reps: true, rango_min: 0, rango_max: 0 };
@@ -5189,7 +5245,7 @@ function ebParcheValores(id, d, nuevo) {
   if (nuevo || Object.keys(v).length) {
     for (const s of filas) {
       const f = { ...s, ...v }, soloCarga = d.campos.every(k => k === "peso");
-      if (!(n0(f.reps) > 0 || n0(f.tiempo) > 0 || n0(f.distancia) > 0 || f.max_reps || f.max_tiempo || n0(f.rango_max) > 0 || soloCarga && (n0(f.peso) > 0 || n0(f.pct) > 0))) return { error: nombreEj(id) + ": indica repeticiones, tiempo o distancia." };
+      if (!(n0(f.reps) > 0 || n0(f.tiempo) > 0 || n0(f.distancia) > 0 || f.max_reps || f.max_tiempo || n0(f.rango_max) > 0 || soloCarga && (n0(f.peso) > 0 || n0(f.pct) > 0) || esPctReps(f))) return { error: nombreEj(id) + ": indica repeticiones, tiempo o distancia." };
     }
   }
   return { valores: v };
@@ -5216,7 +5272,7 @@ function ebAnadirNuevo(id) { const n = ebNuevoEjercicio(id); ebE.nuevos.push(n);
 function ebNuevoEjercicio(id) {
   const hist = seriesDe(id), ult = hist[hist.length - 1];
   const v = ult ? valores(ult) : { reps: admite(id, "reps") ? 10 : 0 };
-  const base = { ...v, peso: sinCarga(id) ? 0 : n0(v.peso), pct: sinCarga(id) ? 0 : n0(v.pct) };
+  const base = { ...v, peso: sinCarga(id) ? 0 : n0(v.peso), pct: sinCarga(id) && !pctRefDe(v) ? 0 : n0(v.pct), pct_ref: sinCarga(id) && !pctRefDe(v) ? "" : pctRefDe(v) };   // v345
   const edicion = ebBorradorValores(id, [base]); edicion.base = base;
   return { id, edicion };
 }
@@ -5405,7 +5461,7 @@ function guardarEditorBloque() {
   e.nuevos.forEach(nuevo => {
     const id = nuevo.id, v = { ...nuevo.edicion.base, ...ebParcheValores(id, nuevo.edicion, true).valores };
     rondasAct().forEach(r => {
-      const f = { id: nuevoId(), fecha: dia.id, ejercicio_id: id, meso_id: b0.meso_id || "", peso: n0(v.peso), reps: n0(v.reps), distancia: n0(v.distancia), tiempo: n0(v.tiempo), pct: n0(v.pct), por_lado: esDistancia(tipoDe(id)) ? !!v.por_lado : ladoDe(id),   // v342: «por lado» lo manda la ficha, con su valor actual al guardar
+      const f = { id: nuevoId(), fecha: dia.id, ejercicio_id: id, meso_id: b0.meso_id || "", peso: n0(v.peso), reps: n0(v.reps), distancia: n0(v.distancia), tiempo: n0(v.tiempo), pct: n0(v.pct), pct_ref: pctRefDe(v), por_lado: esDistancia(tipoDe(id)) ? !!v.por_lado : ladoDe(id),   // v342: «por lado» lo manda la ficha, con su valor actual al guardar
         descanso: n0(v.descanso), rec_dist: n0(v.rec_dist), max_reps: !!v.max_reps, max_tiempo: !!v.max_tiempo, rango_min: n0(v.rango_min), rango_max: n0(v.rango_max),
         ciclo_id: "", calentamiento: false, nota: v.nota || "", hecha: false, borrado: false, grupo: b0.grupo || "", seccion: b0.seccion || "", bloque_id: e.bloqueId, ronda: r, orden: orden++, letra_nueva: !!b0.letra_nueva, copia: 0 };
       trab.set(f.id, f); rangoNuevo.set(f.id, nuevo); nNuevas++;
@@ -5534,34 +5590,40 @@ function tarjetaBloque(dia, bloqueId, series) {
     if (antesT !== (form.dataset.isoT === "1")) fb.value = "";
     fb.focus(); guardarBor();
   }));
+  let brRef = "";   // v345: "reps" = % del máximo de repeticiones (solo con brPct)
   const pintarBrCalc = () => {
     if (!editando || !brPct) { brCalc.hidden = true; return; }
     brCalc.hidden = false;
-    brCalc.textContent = textoPctForm(editando.ejercicio_id, parseFloat((fa.value || "").replace(",", ".")));   // v338
+    const vb = parseFloat((fa.value || "").replace(",", "."));
+    if (brRef === "reps") { brCalc.textContent = textoPctRepsForm(editando.ejercicio_id, vb); const tr = vb > 0 ? textoPctReps(editando.ejercicio_id, vb) : null; if (form.dataset.isoT !== "1") fb.placeholder = tr && tr.reps > 0 ? String(tr.reps) : "reps (opcional)"; return; }
+    brCalc.textContent = textoPctForm(editando.ejercicio_id, vb);   // v338
   };
-  const ponerBrModo = pct => {
-    brPct = pct;
-    brModo.textContent = pct ? "%" : "kg";
-    brModo.classList.toggle("activo", pct);
-    fa.placeholder = pct ? "% 1RM" : "kg";
-    fa.setAttribute("aria-label", pct ? "Porcentaje del 1RM" : "Peso en kg");
+  const ponerBrModo = pct => {   // acepta true/false (como antes) o "", "1rm", "reps"
+    const m = pct === true ? "1rm" : !pct ? "" : pct, id = editando ? editando.ejercicio_id : null, reps = id && medidaDe(id) === "reps";
+    brPct = !!m; brRef = m === "reps" ? "reps" : "";
+    brModo.textContent = id ? etiquetaModoPct(id, m, false) : m ? "%" : "kg";
+    brModo.classList.toggle("activo", brPct);
+    fa.placeholder = brPct ? (id ? marcadorModoPct(id, m) : "% 1RM") : "kg";
+    fa.setAttribute("aria-label", m === "reps" ? "Porcentaje del máximo de repeticiones" : brPct ? (reps ? "Porcentaje del 1RM de lastre" : "Porcentaje del 1RM") : "Peso en kg");
     pintarBrCalc();
   };
   brModo.addEventListener("click", () => {
     const id = editando.ejercicio_id, v = parseFloat((fa.value || "").replace(",", ".")), ref = rmPersonal(id);
-    if (!brPct) { ponerBrModo(true); fa.value = v > 0 && ref ? num(Math.round(v / ref * 100)) : ""; }
-    else { const kg = v > 0 ? kgDePct(id, v) : 0; ponerBrModo(false); fa.value = kg ? num(kg) : ""; }
+    const actual = !brPct ? "" : brRef === "reps" ? "reps" : "1rm", ops = modosPct(id), sig = ops[(ops.indexOf(actual) + 1) % ops.length];
+    if (sig === "1rm" && actual === "") { ponerBrModo("1rm"); fa.value = v > 0 && ref ? num(Math.round(v / ref * 100)) : ""; }
+    else if (sig === "" && actual === "1rm") { const kg = v > 0 ? kgDePct(id, v) : 0; ponerBrModo(""); fa.value = kg ? num(kg) : ""; }
+    else { ponerBrModo(sig); fa.value = ""; }
     fa.focus();
   });
-  fa.addEventListener("input", () => { if (/%\s*$/.test(fa.value) && !brPct && !brModo.hidden) { fa.value = fa.value.replace(/\s*%\s*$/, ""); ponerBrModo(true); } pintarBrCalc(); });
+  fa.addEventListener("input", () => { if (/%\s*$/.test(fa.value) && !brPct && !brModo.hidden) { fa.value = fa.value.replace(/\s*%\s*$/, ""); ponerBrModo("1rm"); } pintarBrCalc(); });
   const prs = {};
   primera.forEach(s => { if (!prs[s.ejercicio_id]) prs[s.ejercicio_id] = prsEj(s.ejercicio_id); });
   const claveBor = dia.id + "|ronda|" + bloqueId;
-  const valoresR = () => [fa.value, fb.value, fc.value, brPct, brTodas.querySelector("input").checked, brM].join("|");
+  const valoresR = () => [fa.value, fb.value, fc.value, brPct, brRef, brTodas.querySelector("input").checked, brM].join("|");
   let fotoR = null;
   const guardarBor = () => {
     if (form.hidden || !editando) return;
-    borradores[claveBor] = { sid: editando.id, a: fa.value, b: fb.value, c: fc.value, pct: brPct, m: brM, todas: brTodas.querySelector("input").checked, foto: fotoR };
+    borradores[claveBor] = { sid: editando.id, a: fa.value, b: fb.value, c: fc.value, pct: !brPct ? "" : brRef === "reps" ? "reps" : "1rm", m: brM, todas: brTodas.querySelector("input").checked, foto: fotoR };
   };
   const editar = (s, li, enfocar = true) => {
     if (enfocar && !form.hidden && editando?.id === s.id) return;
@@ -5587,8 +5649,8 @@ function tarjetaBloque(dia, bloqueId, series) {
     fc.value = recTexto(s);
     const fuerza = !dist && !mov;
     form.classList.toggle("br-fuerza", fuerza);
-    brModo.hidden = !fuerza || medidaDe(s.ejercicio_id) !== "peso" && !(n0(s.peso) > 0) && !(n0(s.pct) > 0);
-    if (fuerza) ponerBrModo(n0(s.pct) > 0 && !s.ciclo_id); else { brPct = false; brCalc.hidden = true; }
+    brModo.hidden = !fuerza || !["peso", "reps"].includes(medidaDe(s.ejercicio_id)) && !(n0(s.peso) > 0) && !(n0(s.pct) > 0);   // v345: también en los medidos por repeticiones
+    if (fuerza) ponerBrModo(n0(s.pct) > 0 && !s.ciclo_id ? (esPctReps(s) ? "reps" : "1rm") : ""); else { brPct = false; brRef = ""; brCalc.hidden = true; }
     if (fuerza && medidaDe(s.ejercicio_id) !== "peso" && !fa.value) fa.placeholder = "kg (opcional)";
     // Igual en las demás rondas pendientes de este ejercicio
     const otras = series.filter(x => x.ejercicio_id === s.ejercicio_id && x.id !== s.id && !hecha(x));
@@ -5693,7 +5755,8 @@ function tarjetaBloque(dia, bloqueId, series) {
       const x = parseFloat((fa.value.trim().replace(/%\s*$/, "") || "0").replace(",", "."));
       if (!(x >= 0)) { fa.focus(); return; }
       fila.pct = brPct ? x : 0;
-      fila.peso = brPct ? kgDePct(fila.ejercicio_id, x) : x;
+      fila.pct_ref = brPct && brRef === "reps" ? "reps" : "";   // v345: la referencia viaja con el %
+      fila.peso = brRef === "reps" && brPct ? 0 : brPct ? kgDePct(fila.ejercicio_id, x) : x;
       if (brPct && !(x > 0)) { fa.focus(); return; }   // v251: en % sin 1RM se guarda el % (sin kg)
       if (fila.ciclo_id && !brPct) fila.ciclo_id = "";
       fila.max_tiempo = false; fila.max_reps = false;
@@ -5710,13 +5773,14 @@ function tarjetaBloque(dia, bloqueId, series) {
         fila.tiempo = 0; fila.reps = g ? g.min : txt.trim() ? parseInt(txt, 10) : 0;
         if (g) { fila.rango_min = g.min; fila.rango_max = g.max; fila.hecha = false; }   // escribir una ventana es planificar
         else if (m !== "reps") { fila.rango_min = 0; fila.rango_max = 0; }
-        if (m === "reps" && !(fila.reps > 0)) { fb.focus(); return; }
+        if (m === "reps" && !(fila.reps > 0) && fila.pct_ref === "reps") fila.hecha = false;   // v345: % de repeticiones sin reps apuntadas: planificada (la sugerencia no se guarda)
+        else if (m === "reps" && !(fila.reps > 0)) { fb.focus(); return; }
         if (isNaN(fila.reps)) { fb.focus(); return; }
         if (m === "maxr") fila.max_reps = true;
       }
     }
     if (!brTodas.hidden && brTodas.querySelector("input").checked) {
-      const copia = { peso: fila.peso, pct: fila.pct, reps: fila.reps, tiempo: fila.tiempo, distancia: fila.distancia, max_tiempo: !!fila.max_tiempo, max_reps: !!fila.max_reps, rango_min: n0(fila.rango_min), rango_max: n0(fila.rango_max), por_lado: !!fila.por_lado, descanso: fila.descanso, rec_dist: fila.rec_dist, ciclo_id: fila.ciclo_id || "" };
+      const copia = { peso: fila.peso, pct: fila.pct, pct_ref: pctRefDe(fila), reps: fila.reps, tiempo: fila.tiempo, distancia: fila.distancia, max_tiempo: !!fila.max_tiempo, max_reps: !!fila.max_reps, rango_min: n0(fila.rango_min), rango_max: n0(fila.rango_max), por_lado: !!fila.por_lado, descanso: fila.descanso, rec_dist: fila.rec_dist, ciclo_id: fila.ciclo_id || "" };
       series.filter(x => x.ejercicio_id === fila.ejercicio_id && x.id !== fila.id && !hecha(x)).forEach(x => cambiar("series", { ...x, ...copia }, true));
     }
     delete borradores[claveBor];
@@ -5727,7 +5791,7 @@ function tarjetaBloque(dia, bloqueId, series) {
   const bor = borradores[claveBor], sBor = bor && series.find(x => x.id === bor.sid);
   if (sBor) {
     editar(sBor, c.querySelector('li[data-ronda-serie="' + CSS.escape(sBor.id) + '"]'), false);
-    ponerBrM(bor.m, true); ponerBrModo(bor.pct);
+    ponerBrM(bor.m, true); ponerBrModo(typeof bor.pct === "string" ? bor.pct : !!bor.pct);
     fa.value = bor.a; fb.value = bor.b; fc.value = bor.c;
     brTodas.querySelector("input").checked = bor.todas; fotoR = bor.foto; pintarBrCalc();
   } else if (bor) delete borradores[claveBor];
@@ -5799,17 +5863,23 @@ function pintarTramos() {
     }
     // kg o % del 1RM, como en los ejercicios
     const tm = fila.querySelector(".tr-modo"), tc = fila.querySelector(".tr-calc");
+    // v345: t.p = false (kg) · true (% del 1RM / de lastre) · "reps" (% del máximo de repeticiones, solo en los medidos por repeticiones)
+    const modoT = () => t.p === "reps" ? "reps" : t.p ? "1rm" : "";
     const pintarTc = () => {
-      tm.textContent = t.p ? "%" : "kg"; tm.classList.toggle("activo", !!t.p);
-      if (fza) a.placeholder = t.p ? "% 1RM" : med !== "peso" ? "kg (opcional)" : "kg";
+      tm.textContent = etiquetaModoPct(t.ejercicio_id, modoT(), false); tm.classList.toggle("activo", !!t.p);
+      if (fza) a.placeholder = t.p ? marcadorModoPct(t.ejercicio_id, modoT()) : med !== "peso" ? "kg (opcional)" : "kg";
       tc.hidden = !t.p;
-      tc.textContent = textoPctForm(t.ejercicio_id, parseFloat(String(a.value).replace(",", ".")));   // v338
+      const vt = parseFloat(String(a.value).replace(",", "."));
+      if (t.p === "reps") { tc.textContent = textoPctRepsForm(t.ejercicio_id, vt); const tr = vt > 0 ? textoPctReps(t.ejercicio_id, vt) : null; if (!b.disabled && t.m !== "t" && t.m !== "maxt") b.placeholder = tr && tr.reps > 0 ? String(tr.reps) : "reps (opcional)"; }
+      else { tc.textContent = textoPctForm(t.ejercicio_id, vt); if (fza && !b.disabled && t.m !== "t" && t.m !== "maxt") b.placeholder = "reps"; }   // v338
     };
-    tm.hidden = !fza || med !== "peso";
+    tm.hidden = !fza || !["peso", "reps"].includes(med);
+    tm.setAttribute("aria-label", med === "reps" ? "Unidad: kg, % del máximo de repeticiones o % del 1RM de lastre" : "Cambiar entre kg y % del 1RM");
     tm.addEventListener("click", () => {
-      const v = parseFloat(String(a.value).replace(",", ".")), ref = rmPersonal(t.ejercicio_id);
-      if (!t.p) { t.p = true; a.value = v > 0 && ref ? num(Math.round(v / ref * 100)) : ""; }
-      else { const kg = v > 0 ? kgDePct(t.ejercicio_id, v) : 0; t.p = false; a.value = kg ? num(kg) : ""; }
+      const v = parseFloat(String(a.value).replace(",", ".")), ref = rmPersonal(t.ejercicio_id), ops = modosPct(t.ejercicio_id), sig = ops[(ops.indexOf(modoT()) + 1) % ops.length];
+      if (sig === "1rm" && !t.p) { t.p = true; a.value = v > 0 && ref ? num(Math.round(v / ref * 100)) : ""; }
+      else if (sig === "" && t.p === true) { const kg = v > 0 ? kgDePct(t.ejercicio_id, v) : 0; t.p = false; a.value = kg ? num(kg) : ""; }
+      else { t.p = sig === "reps" ? "reps" : sig === "1rm"; a.value = ""; }
       t.a = a.value; pintarTc();
     });
     a.value = t.a; b.value = t.b; cc.value = t.c;
@@ -5892,7 +5962,8 @@ $("blqCrear").addEventListener("click", () => {
     } else {
       const conPct = t.p || /%\s*$/.test(String(t.a));
       v.peso = parseFloat((String(t.a).trim().replace(/\s*%\s*$/, "") || "0").replace(",", "."));
-      if (conPct && v.peso > 0) { v.pct = v.peso; v.peso = kgDePct(t.ejercicio_id, v.pct); }   // v251: sin 1RM en la ficha se guarda el % (sin kg)
+      if (conPct && v.peso > 0 && t.p === "reps") { v.pct = v.peso; v.pct_ref = "reps"; v.peso = 0; }   // v345: % del máximo de repeticiones: nunca kg
+      else if (conPct && v.peso > 0) { v.pct = v.peso; v.peso = kgDePct(t.ejercicio_id, v.pct); }   // v251: sin 1RM en la ficha se guarda el % (sin kg)
       v.por_lado = ladoDe(t.ejercicio_id);   // v342: lo manda solo la ficha (valor actual al crear)
       if (!(v.peso >= 0)) { aviso.textContent = "Revisa el peso del tramo " + (k + 1) + "."; return; }
       const esMx = t.m === "maxr" || t.m === "maxt" || /^\s*(m[aá]x|amrap|fallo)/i.test(t.b);
@@ -5904,7 +5975,8 @@ $("blqCrear").addEventListener("click", () => {
         v.reps = esMx ? 0 : g ? g.min : parseInt(t.b, 10);
         if (g) { v.rango_min = g.min; v.rango_max = g.max; }
         if (esMx) v.max_reps = true;
-        if (!(v.reps > 0) && !esMx) { aviso.textContent = "Pon las repeticiones del tramo " + (k + 1) + " (o «máx»)."; return; }
+        if (!(v.reps > 0) && !esMx && v.pct_ref === "reps") v.reps = 0;   // v345: % de repeticiones: las reps se apuntan al hacerla
+        else if (!(v.reps > 0) && !esMx) { aviso.textContent = "Pon las repeticiones del tramo " + (k + 1) + " (o «máx»)."; return; }
       }
     }
     lista.push({ ejercicio_id: t.ejercicio_id, series: Array.from({ length: rondas }, () => ({ ...v })) });
@@ -6874,8 +6946,20 @@ function refrescarDetalle() {
   const propiasD = tipo === "fuerza" ? medidasPropias(e.id) : [];
   if (propiasD.length) $("detMedidaInfo").textContent = "Con las medidas elegidas arriba, las marcas se comparan por condición: misma carga y, si hay distancia, la misma distancia (menos tiempo es mejor); por tiempo o por repeticiones, más es mejor.";
   const fuerza = tipo === "fuerza" && medida === "peso" && !(propiasD.length && !propiasD.includes("reps"));
-  $("detRmSec").hidden = !fuerza;
+  // v345 (MEJ-RM-001): en los medidos por «Repeticiones máximas» la sección muestra dos referencias: 1RM de lastre (kg) y Máx. repeticiones
+  const conRefReps = tipo === "fuerza" && medida === "reps" && !(propiasD.length && !propiasD.includes("reps"));
+  $("detRmSec").hidden = !fuerza && !conRefReps;
   $("detBilboSec").hidden = !fuerza;
+  $("detRmTit").textContent = conRefReps ? "Referencias" : "1RM de referencia";
+  $("detRmEtq").hidden = !conRefReps; $("detRefRepsBloque").hidden = !conRefReps; $("detBarra").closest("label").hidden = conRefReps;
+  $("detRm").setAttribute("aria-label", conRefReps ? "1RM de lastre en kg" : "1RM de referencia en kg");
+  if (conRefReps) {
+    if (document.activeElement !== $("detRm")) $("detRm").value = rmPersonal(e.id) > 0 ? num(rmPersonal(e.id)) : "";
+    const pl = st.lista.filter(cuentaRm), er = repsMaxEstimadas(e.id);
+    $("detRmEst").textContent = pl.length ? "Lastre estimado con tus series: " + num(Math.round(Math.max.apply(null, pl.map(rm)))) + " kg (estimado)" : "Para las series en % de lastre.";
+    if (document.activeElement !== $("detRefReps")) $("detRefReps").value = refRepsPersonal(e.id) > 0 ? String(refRepsPersonal(e.id)) : "";
+    $("detRefRepsEst").textContent = er > 0 ? "Estimado con tus series sin lastre: " + er + " reps (estimado)" : "Para las series en % de repeticiones.";
+  }
   if (fuerza) {
     if (document.activeElement !== $("detRm")) $("detRm").value = rmPersonal(e.id) > 0 ? num(rmPersonal(e.id)) : "";
     const p = st.lista.filter(cuentaRm);
@@ -7136,6 +7220,12 @@ $("detMedida").addEventListener("click", ev => {
   indiceSeries().prs[detalleId] = null;
   refrescarDetalle(); pintarBloques(true);
 });
+$("detRefReps").addEventListener("change", () => {   // v345: máximo de repeticiones de referencia (entero ≥ 0; vacío o 0 = sin referencia, se usa la estimada)
+  const v = Math.round(parseFloat(($("detRefReps").value || "0").replace(",", ".")));
+  const p = db.personales[detalleId] || { ejercicio_id: detalleId, rm: 0 };
+  cambiar("personales", { ...p, ejercicio_id: detalleId, rm: n0(p.rm), ref_reps: v > 0 ? v : 0 });
+  refrescarDetalle();
+});
 $("detRm").addEventListener("change", () => {
   const v = parseFloat(($("detRm").value || "0").replace(",", "."));
   cambiar("personales", { ...(db.personales[detalleId] || {}), ejercicio_id: detalleId, rm: v > 0 ? v : 0 });
@@ -7173,13 +7263,13 @@ function ofrecerRetiradaCarga(id, contexto) {
   const filas = pendientesCarga(id, contexto);
   if (!filas.length) return;
   const antes = filas.map(s => ({ ...s }));
-  const sello = s => JSON.stringify([s.id, s.fecha, s.grupo || "", s.ejercicio_id, !!s.borrado, hecha(s), s.peso || 0, s.pct || 0, s.ciclo_id || "", s.seccion || "", s.bloque_id || "", s.copia || 0]);
+  const sello = s => JSON.stringify([s.id, s.fecha, s.grupo || "", s.ejercicio_id, !!s.borrado, hecha(s), s.peso || 0, s.pct || 0, s.pct_ref || "", s.ciclo_id || "", s.seccion || "", s.bloque_id || "", s.copia || 0]);
   abrirMenu("Peso previsto de este entrenamiento", "La ficha ya no incluye Carga. Cambiarla no elimina valores guardados. Entrenamiento: «" + (contexto.grupo || "Ejercicios sueltos") + "». Fecha: " + fechaLargaPlant(contexto.fecha) + ". " + filas.length + (filas.length === 1 ? " serie pendiente afectada." : " series pendientes afectadas.") + " Se quitarán kg, % y la referencia al ciclo solo de estas pendientes; el historial de ciclos, las completadas y otras copias/días se conservan. Al confirmar volverás al entrenamiento y podrás Deshacer.", [
     { texto: "Quitar el peso previsto solo en este entrenamiento y día", accion: () => {
       const actuales = pendientesCarga(id, contexto);
       if (admite(id, "carga") || actuales.length !== antes.length || actuales.some((s, i) => sello(s) !== sello(antes[i]))) { setEstado("Las series cambiaron. Reabre la acción para revisar el contexto y el recuento."); return; }
       const deshacer = actuales.map(s => ["series", { ...s }]);
-      actuales.forEach(s => cambiar("series", { ...s, peso: 0, pct: 0, ciclo_id: "" }, true));
+      actuales.forEach(s => cambiar("series", { ...s, peso: 0, pct: 0, pct_ref: "", ciclo_id: "" }, true));
       persistir();
       if ($("detalle").open) $("detalle").close();
       pintarTodo();
@@ -9162,13 +9252,13 @@ function exportarJSON() {
   descargarArchivo("fuerza-y-ritmo-copia-" + iso(new Date()) + ".json", JSON.stringify({ app: "Fuerza y Ritmo", version: 1, exportado: new Date().toISOString(), email: (sesion && sesion.email) || "", datos, conflictos: leer("conflictos-copia-v1") || [], correccionesFechas: leer("fechas-series-copias-v1") || [] }), "application/json");
 }
 function exportarSeries() {
-  const filas = [["Fecha", "Día", "Sesión", "Ejercicio", "Tipo", "Estado", "Peso (kg)", "% 1RM", "Reps", "Distancia (m)", "Tiempo", "Ritmo", "Descanso", "Recuperación (m)", "Superserie", "Esfuerzo del día (RPE)", "Sensaciones del día"]];
+  const filas = [["Fecha", "Día", "Sesión", "Ejercicio", "Tipo", "Estado", "Peso (kg)", "% 1RM", "Reps", "Distancia (m)", "Tiempo", "Ritmo", "Descanso", "Recuperación (m)", "Superserie", "Esfuerzo del día (RPE)", "Sensaciones del día", "Referencia del %"]];   // v345: la columna «% 1RM» lleva el %; esta dice de qué
   seriesVivas().sort(ordenSerie).forEach(s => {
     const tipo = tipoDe(s.ejercicio_id), e = db.entrenos[s.fecha] || {};
     filas.push([s.fecha, diaSemana(s.fecha), nombreEntrenoHist(s), nombreEj(s.ejercicio_id), TIPOS[tipo].nombre, (s.calentamiento ? "Calentamiento · " : "") + (hecha(s) ? "Hecha" : "Planificada"),
       decimal(pesoMostrado(s)), decimal(n0(s.pct)), n0(s.reps) || "", decimal(n0(s.distancia)), n0(s.tiempo) ? fmtTiempo(s.tiempo) : "",
       esDistancia(tipo) && conMarca(s) ? ritmo(s, tipo) : "", n0(s.descanso) ? fmtTiempo(s.descanso) : "", decimal(n0(s.rec_dist)),
-      s.bloque_id ? "Ronda " + n0(s.ronda) : "", n0(e.rpe) || "", e.sensacion || ""]);
+      s.bloque_id ? "Ronda " + n0(s.ronda) : "", n0(e.rpe) || "", e.sensacion || "", esPctReps(s) ? "% máx. reps" : n0(s.pct) > 0 ? "% 1RM" : ""]);
   });
   descargarArchivo("entreno-series-" + iso(new Date()) + ".csv", csv(filas), "text/csv");
 }
@@ -11493,7 +11583,7 @@ function pintarEntreno() {
   if (primerCampo.parentElement.firstElementChild !== primerCampo) primerCampo.parentElement.prepend(primerCampo);
   const etiqueta = { kg: "Peso (kg)", reps: "Repeticiones" + (s.por_lado ? " por lado" : ""), m: enKm() ? "Kilómetros" : "Metros", t: "Tiempo", s: "Tiempo" + (s.por_lado ? " por lado" : "") + " (45 = segundos)" };
   const objPct = !dist && !mov && !hecha(s) ? objetivoPctSerie(s) : null;   // v338: objetivo/sugerencia aparte; el campo de peso queda vacío
-  const valor = c => c === "kg" ? (kg && !objPct ? num(kg) : "") : c === "reps" ? ((s.ciclo_id === "auto" || esRango(s)) && !hecha(s) ? "" : n0(s.reps) || "")
+  const valor = c => c === "kg" ? (kg && !(objPct && objPct.campo === "kg") ? num(kg) : "") : c === "reps" ? ((s.ciclo_id === "auto" || esRango(s)) && !hecha(s) ? "" : n0(s.reps) || "")
     : c === "m" ? distCampo(s.distancia) : c === "s" ? (n0(s.tiempo) > 0 ? (n0(s.tiempo) < 60 ? String(n0(s.tiempo)) : fmtTiempo(s.tiempo)) : "") : n0(s.tiempo) ? fmtTiempo(s.tiempo) : "";
   [["enA", "enEtA"], ["enB", "enEtB"]].forEach(([inp, et], k) => {
     const c = ent.campos[k];
@@ -11507,8 +11597,19 @@ function pintarEntreno() {
   });
   let cajaObj = $("enObjPct");
   if (!cajaObj) { cajaObj = document.createElement("div"); cajaObj.id = "enObjPct"; cajaObj.className = "en-objpct"; primerCampo.parentElement.before(cajaObj); }
-  cajaObj.textContent = ""; cajaObj.hidden = !(objPct && ent.campos.includes("kg"));
-  if (!cajaObj.hidden) {
+  cajaObj.textContent = ""; cajaObj.hidden = !(objPct && ent.campos.includes(objPct.campo || "kg"));
+  if (!cajaObj.hidden && objPct.campo === "reps") {   // v345: % del máximo de repeticiones: la sugerencia es el marcador del campo de reps; no se guarda sola
+    const o1 = document.createElement("span"); o1.textContent = objPct.obj; cajaObj.appendChild(o1);
+    if (objPct.sug) { const o2 = document.createElement("strong"); o2.textContent = objPct.sug; cajaObj.appendChild(o2); }
+    const kR = ent.campos.indexOf("reps"), inpR = $(kR === 0 ? "enA" : "enB");
+    inpR.placeholder = objPct.reps > 0 ? String(objPct.reps) : "reps";
+    if (objPct.reps > 0) {
+      const bu = document.createElement("button"); bu.type = "button"; bu.className = "nav-btn en-usar"; bu.textContent = "Usar " + objPct.reps + " reps";
+      bu.setAttribute("aria-label", "Usar las " + objPct.reps + " repeticiones sugeridas en el campo de repeticiones (no confirma la serie)");
+      bu.addEventListener("click", () => { inpR.value = String(objPct.reps); inpR.dispatchEvent(new Event("input", { bubbles: true })); inpR.focus(); });
+      cajaObj.appendChild(bu);
+    }
+  } else if (!cajaObj.hidden) {
     const o1 = document.createElement("span"); o1.textContent = objPct.obj; cajaObj.appendChild(o1);
     if (objPct.sug) { const o2 = document.createElement("strong"); o2.textContent = objPct.sug; cajaObj.appendChild(o2); }
     [["enA", "enEtA"], ["enB", "enEtB"]].forEach(([inp], k) => { if (ent.campos[k] === "kg") $(inp).placeholder = objPct.kg ? num(objPct.kg) : "kg"; });
@@ -11693,6 +11794,8 @@ function pintarVistaSeries() {
     f.appendChild(el("span", "ens-n", s.calentamiento ? "Cal." : bloque ? "R" + n0(s.ronda || n) : String(n)));
     if (!kgRep) {   // otras medidas: solo lectura (se editan en la pantalla de la serie)
       const t = el("span", "ens-texto", serieTexto(s)); f.appendChild(t); t.style.gridColumn = "2 / 4";
+      const oT = !hecho ? objetivoPctSerie(s) : null;   // v345: también aquí (p. ej. % del máximo de repeticiones en un ejercicio sin carga)
+      if (oT) f.dataset.objpct = oT.obj + (oT.sug ? " · " + oT.sug : "");
     } else {
       const rIn = document.createElement("input"), kIn = document.createElement("input");
       [rIn, kIn].forEach(i => { i.autocomplete = "off"; });
@@ -11700,8 +11803,9 @@ function pintarVistaSeries() {
       rIn.setAttribute("aria-label", "Repeticiones, " + (s.calentamiento ? "calentamiento" : "serie " + n)); kIn.setAttribute("aria-label", "Peso en kg, " + (s.calentamiento ? "calentamiento" : "serie " + n));
       const editable = !hecho && ensPesoLibre(s);
       const objV = !hecho ? objetivoPctSerie(s) : null;   // v338: serie con objetivo en %: el peso hecho queda vacío; el objetivo/sugerido va en su línea
-      rIn.value = b.reps !== undefined ? b.reps : ensRepsTxt(s); kIn.value = b.kg !== undefined ? b.kg : objV ? "" : ensKgTxt(s);
-      if (objV) kIn.placeholder = objV.kg ? num(objV.kg) : "–";
+      rIn.value = b.reps !== undefined ? b.reps : ensRepsTxt(s); kIn.value = b.kg !== undefined ? b.kg : objV && objV.campo === "kg" ? "" : ensKgTxt(s);
+      if (objV && objV.campo === "kg") kIn.placeholder = objV.kg ? num(objV.kg) : "–";
+      if (objV && objV.campo === "reps") { rIn.value = b.reps !== undefined ? b.reps : (n0(s.reps) > 0 ? String(n0(s.reps)) : ""); rIn.placeholder = objV.reps > 0 ? String(objV.reps) : "–"; }   // v345
       if (editable) {
         rIn.placeholder = (s.ciclo_id || esRango(s)) ? "máx" : "0"; kIn.placeholder = "0";
         rIn.addEventListener("input", () => { ent.borr = ent.borr || {}; ent.borr[s.id] = { ...(ent.borr[s.id] || {}), reps: rIn.value }; });
@@ -11832,7 +11936,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v344" + (BETA ? " beta" : "");
+const VERSION_APP = "v345" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

@@ -78,7 +78,7 @@ const escribir = (k, v) => {
 };
 // Datos de cada día que no son series (ejercicios añadidos aún sin series, entrenos y partes vacíos, su descripción,
 // su letra y su posición): se guardan en el día (tabla entrenos, columna extra) para verlos igual en todos los dispositivos
-const CLAVES_EXTRA = new Set(["orden-grupos-v1", "orden-partes-v1", "pos-partes-v1","bloques-vacios-v1", "bloques-v1", "sesiones-v1", "espera-grupo-v1", "partes-v1", "espera-parte-v1", "espera-nota-v1", "espera-letra-v1", "espera-antes-v1", "nombres-hist-v1"]);
+const CLAVES_EXTRA = new Set(["resumen-dia-v1", "orden-grupos-v1", "orden-partes-v1", "pos-partes-v1","bloques-vacios-v1", "bloques-v1", "sesiones-v1", "espera-grupo-v1", "partes-v1", "espera-parte-v1", "espera-nota-v1", "espera-letra-v1", "espera-antes-v1", "nombres-hist-v1"]);
 if (BETA) { document.documentElement.classList.add("beta"); document.title = "Fuerza y Ritmo β"; document.querySelector('meta[name="apple-mobile-web-app-title"]').content = "Fuerza y Ritmo β"; }
 
 // Cada tabla se sincroniza por cuenta; los cambios locales en conflicto se conservan.
@@ -289,6 +289,8 @@ function leerRecuperacion(txt) {
 const norm = t => (t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 const compacto = t => norm(t).replace(/\s+/g, "");   // para buscar «300m» y encontrar «Series 300 m»
 const nuevoId = () => crypto.randomUUID ? crypto.randomUUID() : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16));
+// v348: Semana se muestra SIEMPRE con un solo día y una tira de días. La lista de días plegables («semana completa») sigue en el código, sin interfaz, tras este ajuste interno.
+const SEMANA_COMPLETA = false;
 let desplazamiento = 0;   // semanas respecto a la actual
 // Día abierto a pantalla completa: se recuerda si se abrió hoy (al día siguiente la app vuelve a la semana)
 let diaAbierto = (g => g && g.abierto === iso(new Date()) ? g.id : null)(leer("dia-abierto-v1"));
@@ -1220,12 +1222,15 @@ function mezclar(tabla, f) {
   return true;
 }
 // ---- Extra de cada día: construirlo desde lo guardado en el dispositivo y aplicarlo cuando llega del servidor ----
-const PROPIEDADES_EXTRA = new Set(["e", "s", "g", "p", "pa", "n", "l", "a", "bv", "og", "op", "pp", "hn"]);
+// v348: «rs» = resumen del día que escribe el usuario (máx. 10 caracteres; se ve en la tira de días). Texto suelto por fecha; en el extra del día solo viaja si no está vacío.
+let resumenDia = leer("resumen-dia-v1") || {};
+const PROPIEDADES_EXTRA = new Set(["e", "s", "g", "p", "pa", "n", "l", "a", "bv", "og", "op", "pp", "hn", "rs"]);
 function extraDe(f) {
   const pre = f + "|";
   const sub = o => { const r = {}; Object.keys(o || {}).filter(k => k.startsWith(pre)).sort().forEach(k => { r[k.slice(pre.length)] = o[k]; }); return r; };
   const e = { e: enEspera[f] || [], s: sesionesVacias[f] || [], g: sub(esperaGrupo), p: sub(partesVacias), pa: sub(esperaParte), n: sub(esperaNota), l: sub(esperaLetra), a: sub(esperaAntes), bv: sub(bloquesVacios), og: ordenGrupos[f] || [], op: sub(ordenPartes), hn: sub(nombresHist), pp: sub(posPartes) };
-  Object.keys(e).forEach(k => { if (Array.isArray(e[k]) ? !e[k].length : !Object.keys(e[k]).length) delete e[k]; });
+  if (resumenDia[f]) e.rs = resumenDia[f];   // v348
+  Object.keys(e).forEach(k => { if (typeof e[k] === "string" ? !e[k] : Array.isArray(e[k]) ? !e[k].length : !Object.keys(e[k]).length) delete e[k]; });
   // v249: lo que esta versión no conoce (p. ej. propiedades de una versión posterior) se conserva tal cual al volver a serializar el día;
   // las propiedades CONOCIDAS se reconstruyen siempre desde el estado local, así que borrarlas a propósito sigue funcionando
   const previo = (db.entrenos[f] || {}).extra;
@@ -1243,6 +1248,8 @@ function aplicarExtra(f, e) {
   if ((e.og || []).length) ordenGrupos[f] = e.og.slice(); else delete ordenGrupos[f];
   poner(ordenPartes, e.op);
   poner(posPartes, e.pp);   // v250
+  if (typeof e.rs === "string" && e.rs) resumenDia[f] = e.rs; else delete resumenDia[f];   // v348: lo que llega del servidor manda; vacío = sin resumen
+  escribir("resumen-dia-v1", resumenDia);
   // v273: «hn» (nombre del entreno de las completadas conservadas por «Vaciar día») se FUSIONA con lo local en vez de reemplazarlo: si el servidor trae un extra sin
   // «hn» (p. ej. lo reescribió una versión que no lo conocía con datos antiguos), no se pierde el nombre guardado aquí y volcarExtra() lo vuelve a subir. Una entrada
   // sobrante es inofensiva: el nombre que vale es el `grupo` de la serie si lo tiene, y «Vaciar día» limpia las del día.
@@ -1262,7 +1269,7 @@ function volcarExtra() {
     clearTimeout(timerExtra);
     if (!sesion || sesion.user_id !== cuentaLocal) return;
     const fechas = new Set([...Object.keys(enEspera), ...Object.keys(sesionesVacias), ...Object.keys(ordenGrupos)]);
-    [ordenPartes, posPartes, esperaGrupo, partesVacias, esperaParte, esperaNota, esperaLetra, esperaAntes, bloquesVacios, nombresHist].forEach(o => Object.keys(o || {}).forEach(k => fechas.add(k.split("|")[0])));
+    [ordenPartes, posPartes, esperaGrupo, partesVacias, esperaParte, esperaNota, esperaLetra, esperaAntes, bloquesVacios, nombresHist, resumenDia].forEach(o => Object.keys(o || {}).forEach(k => fechas.add(k.split("|")[0])));
     Object.values(db.entrenos).forEach(x => { if (x.extra && Object.keys(x.extra).length) fechas.add(x.fecha); });
     let hay = false;
     // Guardado interno y automático: no es un paso que deshacer (si no, Ctrl+Z se «gastaba» en él y se perdía el rehacer)
@@ -2140,7 +2147,42 @@ function pintarBanda() {
     $("mesoBanda").textContent = "Mesociclo «" + m.nombre + "» · semana " + semana + " de " + n0(m.semanas) + (esDescarga(m, semana - 1) ? " · Descarga" : "");
   }
 }
+// v348: en el modo de un solo día siempre hay un día elegido de la semana vista: el que ya estuviera, hoy (semana actual), el primero con series o el lunes
+function asegurarDiaElegido() {
+  if (SEMANA_COMPLETA) return;
+  const lunes = lunesVista(), ids = Array.from({ length: 7 }, (_, i) => iso(sumarDias(lunes, i)));
+  if (diaAbierto && ids.includes(diaAbierto)) return;
+  diaAbierto = desplazamiento === 0 ? iso(new Date()) : ids.find(id => seriesDelDia(id).length) || ids[0];
+  escribir("dia-abierto-v1", { id: diaAbierto, abierto: iso(new Date()) });
+}
+const INICIALES_DIA = ["L", "M", "X", "J", "V", "S", "D"];
+// Tira de días: estado del punto con las series VIVAS del día (seriesDelDia, sin borradas; incluye calentamientos): verde = tiene series y TODAS hechas; gris = tiene series y alguna pendiente (previsto); nada = sin series
+function pintarTira() {
+  const t = $("tiraDias"); if (!t) return;
+  t.hidden = SEMANA_COMPLETA;
+  if (SEMANA_COMPLETA) return;
+  const lunes = lunesVista(), hoyIso = iso(new Date());
+  const dd = Array.from({ length: 7 }, (_, i) => { const f = sumarDias(lunes, i), id = iso(f), ser = seriesDelDia(id), rs = (resumenDia[id] || "").trim(); return { i, f, id, rs, n: ser.length, hechas: ser.filter(hecha).length }; });
+  t.classList.toggle("con-resumen", dd.some(d => d.rs));
+  t.textContent = "";
+  dd.forEach(d => {
+    const estado = !d.n ? "sin series" : d.hechas === d.n ? "hecho" : "previsto";
+    const b = document.createElement("button"); b.type = "button"; b.className = "td-btn" + (d.id === hoyIso ? " hoy" : "") + (d.id === diaAbierto ? " sel" : "") + (d.n ? (d.hechas === d.n ? " td-hecho" : " td-prev") : "");
+    b.dataset.id = d.id;
+    const ini = document.createElement("span"); ini.className = "td-ini"; ini.textContent = INICIALES_DIA[d.i];
+    const num = document.createElement("span"); num.className = "td-num"; num.textContent = d.f.getDate();
+    const pt = document.createElement("span"); pt.className = "td-punto"; pt.setAttribute("aria-hidden", "true");
+    b.append(ini, num, pt);
+    if (dd.some(x => x.rs)) { const r = document.createElement("span"); r.className = "td-rs"; r.textContent = d.rs; b.appendChild(r); }
+    b.setAttribute("aria-label", NOMBRES[d.i] + " " + d.f.getDate() + (d.id === hoyIso ? ", hoy" : "") + ", " + estado + (d.rs ? ". " + d.rs : ""));
+    if (d.id === hoyIso) b.setAttribute("aria-current", "date");
+    b.setAttribute("aria-pressed", String(d.id === diaAbierto));
+    b.addEventListener("click", () => abrirDia(d.id));
+    t.appendChild(b);
+  });
+}
 function pintarSemana() {
+  asegurarDiaElegido();
   const lunes = lunesVista();
   if (zonaReordenar?.startsWith("dia:") && !Array.from({ length: 7 }, (_, i) => "dia:" + iso(sumarDias(lunes, i))).includes(zonaReordenar)) terminarModoOrden();
   const hoyIso = iso(new Date());
@@ -2150,15 +2192,15 @@ function pintarSemana() {
                   : n < 0 ? "Hace " + -n + " semanas" : "Dentro de " + n + " semanas";
   rel.classList.toggle("actual", n === 0);
   // «Hoy»: en otra semana, o en esta si hoy está plegado; en la vista de un día, si no es hoy
-  $("hoyBtn").hidden = n === 0 && desplegado(hoyIso);
+  $("hoyBtn").hidden = SEMANA_COMPLETA ? n === 0 && desplegado(hoyIso) : diaAbierto === hoyIso;   // v348: en el modo de un solo día, «Hoy» solo si no estás en hoy
   $("diaHoy").hidden = !diaAbierto;
   if (diaAbierto === hoyIso) $("diaHoy").setAttribute("aria-current", "date");
   else $("diaHoy").removeAttribute("aria-current");
   pintarBanda();
   // Cada día se despliega o se pliega (por defecto, solo hoy desplegado); con un día abierto, solo ese día
   $("vistaSemana").classList.toggle("solo-dia", !!diaAbierto);
-  $("diaNav").hidden = !diaAbierto;
-  $("navSemana").hidden = !!diaAbierto;
+  $("diaNav").hidden = !SEMANA_COMPLETA || !diaAbierto;   // v348: sin «‹ Semana» ni día anterior/siguiente (la tira y las flechas de semana los sustituyen)
+  $("navSemana").hidden = SEMANA_COMPLETA && !!diaAbierto;
   if (diaAbierto) $("diaNavTit").textContent = NOMBRES[(deIso(diaAbierto).getDay() + 6) % 7] + " " + fmt(deIso(diaAbierto));
   dias.forEach(d => {
     const f = sumarDias(lunes, d.i);
@@ -2173,6 +2215,7 @@ function pintarSemana() {
   });
   rellenar();
   pintarBloques(true);
+  pintarTira();
   pintarResumen();
 }
 
@@ -2614,10 +2657,31 @@ function vaciarDiaCompleto(dia) {
   };
   clearTimeout(timerAviso); timerAviso = setTimeout(() => { $("toast").hidden = true; deshacerSug = null; }, 15000);
 }
+// v348: Resumen del día (máx. 10 caracteres, opcional, solo lo escribe el usuario). Vacío = quitar. Cancelar no cambia nada (pedirNombre no distingue «vacío» de «cancelar»).
+function pedirResumen(titulo, valor, ayuda) {
+  return new Promise(resolver => {
+    const d = $("dlgNombre");
+    $("nomTit").textContent = titulo; $("nomAyuda").textContent = ayuda || ""; $("nomInput").value = valor || "";
+    d.returnValue = "";
+    d.onclose = () => resolver(d.returnValue === "ok" ? $("nomInput").value.trim() : null);
+    d.showModal(); $("nomInput").select();
+  });
+}
+async function editarResumenDia(dia) {
+  const actual = resumenDia[dia.id] || "";
+  const t = await pedirResumen("Resumen del día", actual, "Hasta 10 caracteres, por ejemplo «Pierna» o «Descanso». Se ve bajo el día en la tira. Vacío = quitarlo.");
+  if (t === null || t === actual) return;
+  let nuevo = Array.from(t).slice(0, 10).join("");
+  if (nuevo) resumenDia[dia.id] = nuevo; else delete resumenDia[dia.id];
+  escribir("resumen-dia-v1", resumenDia);
+  pintarTira();
+  if (t.length > nuevo.length) setEstado("Resumen recortado a 10 caracteres.");
+}
 function menuDia(dia) {
   const series = seriesDelDia(dia.id), html = db.entrenos[dia.id]?.html || "";
   const titulo = NOMBRES[dia.i] + " " + fmt(deIso(dia.id));
   abrirMenu(titulo, "", [
+    !SEMANA_COMPLETA && { texto: resumenDia[dia.id] ? "Resumen del día: «" + resumenDia[dia.id] + "» · cambiar…" : "Resumen del día…", accion: () => editarResumenDia(dia) },
     gruposDelDia(dia.id).length > 0 && { texto: "Cambiar nombre de un entrenamiento…", accion: () => {
       const gs = gruposDelDia(dia.id);
       if (gs.length === 1) cambiarNombreEntreno(dia,gs[0]);
@@ -3705,6 +3769,7 @@ function elegirDiaDestino(lunes, titulo, alElegir) {
 function irADia(f, aviso) {
   if (zonaReordenar && zonaReordenar !== "dia:" + f) terminarModoOrden();
   desplazamiento = Math.round((lunesDe(deIso(f)) - lunesDe(new Date())) / 6048e5);
+  if (!SEMANA_COMPLETA) { diaAbierto = f; escribir("dia-abierto-v1", { id: f, abierto: iso(new Date()) }); }   // v348: el día elegido es el que se ha tocado
   verPestana("semana");
   pintarSemana();
   if (aviso) setEstado(aviso);
@@ -3718,6 +3783,7 @@ function pintarBloques(forzar) {
   if (arrastreActivo || (!forzar && escribiendoSerie())) { repintarLuego = true; return; }
   repintarLuego = false;
   dias.forEach(pintarDia);   // v256: sin barra verde de progreso semanal (el resumen semanal y cada día siguen mostrando su progreso)
+  pintarTira();   // v348: los puntos de la tira siguen al estado de las series
 }
 // Último ejercicio o bloque tocado (para mantenerlo quieto en pantalla al repintar)
 let ultimoTocado = null;
@@ -11269,7 +11335,7 @@ $("diaSig").addEventListener("click", () => abrirDia(iso(sumarDias(deIso(diaAbie
 // Tocar «Semana» estando ya en la semana con un día abierto vuelve a la semana entera
 let semanaVisible = false;
 $("tabSemana").addEventListener("pointerdown", () => { semanaVisible = !$("vistaSemana").hidden; });
-$("tabSemana").addEventListener("click", () => { if (semanaVisible && diaAbierto) cerrarDia(); });
+$("tabSemana").addEventListener("click", () => { if (!semanaVisible) return; if (SEMANA_COMPLETA) { if (diaAbierto) cerrarDia(); } else abrirDia(iso(new Date())); });   // v348: tocar «Semana» estando en ella lleva a hoy
 // Deslizar en horizontal sobre el día pasa al anterior o al siguiente (no desde el borde, que es el «atrás» de Safari)
 let gestoDia = null;
 $("semana").addEventListener("touchstart", e => {
@@ -11967,7 +12033,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v347" + (BETA ? " beta" : "");
+const VERSION_APP = "v348" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

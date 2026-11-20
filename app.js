@@ -2867,7 +2867,11 @@ async function nuevaParte(dia, grupo) {
   const sug = ["Calentamiento", "Parte principal", "Vuelta a la calma"].find(x => !hay.includes(x)) || "Parte " + (hay.length + 1);
   const n = await pedirNombre("Nombre de la parte", sug, "Por ejemplo «Calentamiento», «Parte principal», «Fuerza», «Series» o «Vuelta a la calma». Cada parte tiene su color y sus botones para añadir.");
   if (!n) return;
-  if (!hay.includes(n)) { const k = dia.id + "|" + grupo; partesVacias[k] = [...(partesVacias[k] || []), n]; guardarSesiones(); volcarExtra(); }
+  if (!hay.includes(n)) {
+    const k = dia.id + "|" + grupo; partesVacias[k] = [...(partesVacias[k] || []), n]; guardarSesiones(); volcarExtra();
+    // v355: la parte nueva (y el entreno que la contiene) quedan desplegados, listos para «＋ Añadir»; mismo mapa de plegado de siempre
+    gruposPlegados[dia.id + "|" + grupo] = 0; gruposPlegados["p|" + dia.id + "|" + grupo + "|" + n] = 0; escribir("grupos-plegados-v1", gruposPlegados);
+  }
   if (dia.col.classList.contains("plegado")) plegarDia(dia);
   pintarDia(dia);
 }
@@ -12052,7 +12056,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v317" + (BETA ? " beta" : "");
+const VERSION_APP = "v318" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

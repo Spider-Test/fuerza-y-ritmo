@@ -3047,16 +3047,8 @@ html.ampliado #vistaSemana.solo-dia #semana, html.ampliado #vistaSemana.solo-dia
 .tabbar button[aria-selected="true"] svg { color: var(--verde); }
 
 @media (max-width: 760px), (pointer: coarse) {
-  /* Fila de serie: círculo · texto · ✕ = tres destinos de 44 px, sin solaparse y separados 8 px (el círculo visible sigue siendo de 22 px) */
-  .series li { gap: 8px; min-height: 44px; }
-  .series .sv { min-height: 44px; align-content: center; }
-  .marcar { width: 44px; height: 44px; min-width: 44px; margin: 0 0 0 -10px; border: 0; border-radius: 50%; position: relative; }
-  .marcar::before { content: ""; position: absolute; left: 11px; top: 11px; width: 22px; height: 22px; box-sizing: border-box; border: 2px solid var(--accent); border-radius: 50%; }
-  .marcar:hover { background: none; }
-  .marcar:hover::before { background: var(--accent-soft); }
-  .marcar::after { content: none; }
-  .quitar, .borrar { width: 44px; min-width: 44px; height: 44px; }
-  .series .borrar { margin-right: -6px; }   /* el ✕ entra 6 px en el relleno de la tarjeta para que el texto no pierda ancho */
+  /* v354: las filas de serie de Semana (círculo, texto, ✕, ✓ y asa) vuelven a las medidas de beta352; el ✕ de quitar de tramos/bloques sigue en 44 px */
+  .quitar { width: 44px; min-width: 44px; height: 44px; }
   /* Botones y controles sueltos */
   .menu-btn, .bloque-cab .menu-btn, .bloque-toggle { min-width: 44px; min-height: 44px; }
   .cerrar { width: 44px; height: 44px; border-radius: 22px; }
@@ -3069,8 +3061,6 @@ html.ampliado #vistaSemana.solo-dia #semana, html.ampliado #vistaSemana.solo-dia
   button.en-nota { min-height: 44px; display: flex; align-items: center; }
   .rpe-dia, .mas-nota { display: flex; align-items: center; }
   .modo, .modo-dist { min-width: 44px; min-height: 44px; }
-  .n-hecha { min-width: 44px; min-height: 44px; }
-  .series li.fila-dist > .borrar { height: 44px; }   /* filas de carrera (cuadrícula): el ✕ llega a 44 px de alto (la asa ≡ de debajo queda como excepción) */
   .cancelar-form { height: 44px; }
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select { min-height: 44px; }
   .ns-fila .paso { height: 44px; }

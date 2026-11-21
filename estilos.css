@@ -191,7 +191,7 @@ dialog::backdrop { background: rgba(0,0,0,0.45); }
 .historial .h-f { color: var(--muted-txt); font-size: 14px; }
 .historial .h-s { display: flex; flex-direction: column; gap: 2px; }
 .historial .es-pr { color: var(--gold); font-weight: 700; }
-.peligro { align-self: flex-start; border: 1px solid var(--line); background: none; color: var(--error); border-radius: 8px; padding: 8px 12px; font-weight: 600; }
+.peligro { align-self: flex-start; border: 1px solid var(--line); background: none; color: var(--error); border-radius: 8px; padding: 8px 12px; font-weight: 600; font-size: 15px; }   /* v357: antes 13,3 px (tamaño por defecto del navegador), más pequeño que «Guardar» (15 px) en la misma fila */
 .peligro.confirmar { background: var(--error); color: var(--card); border-color: var(--error); }
 #listaEj { display: flex; flex-direction: column; padding: 6px 8px 12px; max-height: 55vh; overflow-y: auto; }
 .opcion { text-align: left; border: 0; background: none; padding: 12px 10px; border-radius: 8px; font-size: 16px; border-bottom: 1px solid var(--line); }
@@ -3088,4 +3088,24 @@ html.ampliado #vistaSemana.solo-dia #semana, html.ampliado #vistaSemana.solo-dia
 @media (min-width: 375px) and (max-width: 760px), (min-width: 375px) and (pointer: coarse) {
   #navSemana .nav-btn.flecha { width: 44px; min-width: 44px; }
   #navSemana .nav-btn.cal-btn, #navSemana #calBtn { width: 44px; min-width: 44px; }
+}
+
+/* v357 (MEJ-UI-020 L11): paridad de los botones secundarios compactos de barra/cabecera. Misma superficie visible que «Reordenar»
+   (texto de 12 px, 38 px de alto visible en móvil, radio 6 px, borde y fondo de tarjeta). La zona táctil es el propio botón
+   (44 px de alto en móvil/táctil) y la superficie se pinta con ::before (como «Reordenar»): no hay áreas invisibles añadidas ni solapes.
+   Afecta solo a «+ Nueva lista», «+ Nueva» (molestias), «Seleccionar» y «+ Nuevo» (mesociclos). «Reordenar» no se toca. */
+#nuevaLista.nav-btn, #nuevaMolestia.nav-btn, .sec-cab .sec-botones .nav-btn {
+  position: relative; isolation: isolate; height: auto; min-height: 36px; min-width: 0; padding: 5px 10px;
+  font-size: 12px; font-weight: 600; line-height: normal; white-space: nowrap; border-radius: 0;
+  background: transparent; border-color: transparent;
+}
+#nuevaLista.nav-btn::before, #nuevaMolestia.nav-btn::before, .sec-cab .sec-botones .nav-btn::before {
+  content: ""; position: absolute; inset: 3px 2px; z-index: -1; border: 1px solid var(--line); border-radius: 6px; background: var(--card);
+}
+.sec-cab .sec-botones .nav-btn::after { content: ""; position: absolute; inset: -5px -1px; }   /* escritorio: «Seleccionar» y «+ Nuevo» conservan su zona de 44 px de v264 */
+#nuevaLista.nav-btn:hover:not(:disabled), #nuevaMolestia.nav-btn:hover:not(:disabled), .sec-cab .sec-botones .nav-btn:hover:not(:disabled) { background: transparent; border-color: transparent; }
+#nuevaLista.nav-btn:hover::before, #nuevaMolestia.nav-btn:hover::before, .sec-cab .sec-botones .nav-btn:hover::before { border-color: var(--accent); }
+@media (max-width: 760px), (pointer: coarse) {
+  #nuevaLista.nav-btn, #nuevaMolestia.nav-btn, .sec-cab .sec-botones .nav-btn { min-height: 44px; }
+  .sec-cab .sec-botones .nav-btn::after { content: none; }   /* en móvil/táctil el propio botón ya mide 44 px: sin área invisible añadida */
 }

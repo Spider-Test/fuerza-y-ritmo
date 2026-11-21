@@ -27,7 +27,7 @@
   window.addEventListener("pageshow", actualizar);
 })();
 </script>
-<link rel="stylesheet" href="estilos.css?v=v318">
+<link rel="stylesheet" href="estilos.css?v=v319">
 </head>
 <body>
 
@@ -70,7 +70,7 @@
   <nav class="tabbar" role="tablist" aria-label="Secciones">
     <button type="button" role="tab" id="tabSemana" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span>Semana</span></button>
     <button type="button" role="tab" id="tabEjercicios" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 7v10M17.5 7v10M3.5 9.5v5M20.5 9.5v5M6.5 12h11"/></svg><span>Ejercicios</span></button>
-    <button type="button" role="tab" id="tabListas" aria-label="Entrenamientos" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><path d="M4 6.5h.01M4 12h.01M4 17.5h.01" stroke-width="3" stroke-linecap="round"/></svg><span>Entrenos</span></button>
+    <button type="button" role="tab" id="tabListas" aria-label="Entrenos" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><path d="M4 6.5h.01M4 12h.01M4 17.5h.01" stroke-width="3" stroke-linecap="round"/></svg><span>Entrenos</span></button>
     <button type="button" role="tab" id="tabMarcas" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5h16M7 16.5v-5M12 16.5V6.5M17 16.5v-8"/></svg><span>Marcas</span></button>
     <button type="button" role="tab" id="tabPlan" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2.5"/><path d="M9 4.5V3h6v1.5M8.5 10h7M8.5 14h7M8.5 18h4"/></svg><span>Ajustes</span></button>
   </nav>
@@ -113,13 +113,13 @@
     <main class="semana" id="semana"></main>
   </div>
 
-  <nav class="plan-nav organizar-nav" id="organizarNav" aria-label="Organizar entrenamientos" hidden>
+  <nav class="plan-nav organizar-nav" id="organizarNav" aria-label="Organizar entrenos" hidden>
     <button type="button" class="plan-nav-btn activa" data-organizar="listas">Listas</button>
     <button type="button" class="plan-nav-btn" data-organizar="crear">Crear o importar</button>
     <button type="button" class="plan-nav-btn" data-organizar="entrenos">Mis entrenamientos</button>
   </nav>
   <div id="vistaListas" hidden>
-    <div class="barra listas-barra"><h2 class="listas-tit">Listas de entrenamientos</h2><button type="button" class="nav-btn" id="nuevaLista">+ Nueva lista</button></div>
+    <div class="barra listas-barra"><h2 class="listas-tit">Listas de entrenos</h2><button type="button" class="nav-btn" id="nuevaLista">+ Nueva lista</button></div>
     <div id="listasCont"></div>
   </div>
 
@@ -162,7 +162,7 @@
     <section class="plan-sec" data-sec="ia">
       <h3>Crear con IA</h3>
       <p class="vacio-lista">Elige tu objetivo, copia el prompt, pégalo en ChatGPT, Claude u otra IA y pega aquí su respuesta: la app crea las plantillas (o el mesociclo) y los ejercicios que falten.</p>
-      <div class="botonera"><button type="button" class="anadir" id="iaAbrir">Crear con IA</button><button type="button" class="nav-btn" id="iaPegarAbrir">Pegar entrenamiento de IA</button><label class="nav-btn doc-btn">Importar documento…<input type="file" id="iaDocArchivo" accept=".pdf,.docx,.txt,.md,.csv,.xlsx,.xls,.ods,image/*,application/pdf" hidden></label></div>
+      <div class="botonera"><button type="button" class="anadir" id="iaAbrir">Crear con IA</button><button type="button" class="nav-btn" id="iaPegarAbrir">Pegar entreno de IA</button><label class="nav-btn doc-btn">Importar documento…<input type="file" id="iaDocArchivo" accept=".pdf,.docx,.txt,.md,.csv,.xlsx,.xls,.ods,image/*,application/pdf" hidden></label></div>
       <p class="menu-det nota">«Importar documento»: un plan en PDF, Word, Excel, CSV o texto (o una foto). La app saca su texto y te prepara el prompt para convertirlo; si ya viene en el formato de la app, lo lee directamente.</p>
     </section>
     <section class="plan-sec" data-sec="rutinas">
@@ -262,7 +262,7 @@
     <input id="buscarEj" type="search" placeholder="Busca o escribe un ejercicio nuevo" aria-label="Ejercicio" autocomplete="off" enterkeyhint="go">
     <button class="cerrar" aria-label="Cerrar">✕</button>
   </form>
-  <div class="tabs filtro-tipo" id="selTipo" role="group" aria-label="Tipo de entrenamiento">
+  <div class="tabs filtro-tipo" id="selTipo" role="group" aria-label="Tipo de entreno">
     <button type="button" data-tipo="" aria-pressed="true">Todos</button>
     <button type="button" data-tipo="fuerza" class="t-fuerza" aria-pressed="false">Fuerza</button>
     <button type="button" data-tipo="carrera" class="t-carrera" aria-pressed="false">Carrera</button>
@@ -581,7 +581,7 @@
     <div id="iaPrompt" class="ia-paso">
       <p class="ia-doc-nota" id="iaDocNota" hidden></p>
       <label class="campo">¿Qué quieres?
-        <select id="iaModo"><option value="plan">Plan de varias semanas o mesociclo</option><option value="sesion">Entrenamiento suelto (una sesión)</option></select>
+        <select id="iaModo"><option value="plan">Plan de varias semanas o mesociclo</option><option value="sesion">Entreno suelto (una sesión)</option></select>
       </label>
       <div class="fila" id="iaRefCaja">
         <label class="campo">Basado en (opcional) <select id="iaRef"><option value="">Nada: desde cero</option></select></label>
@@ -646,23 +646,23 @@
       <p class="aviso-estim">Las rutinas que propone una IA son sugerencias generales, no un plan médico ni personalizado. Revísalas y adáptalas a cómo te encuentres.</p>
     </div>
     <div id="iaPegar" class="ia-paso" hidden>
-      <label class="campo">Texto del entrenamiento · puedes editarlo <textarea id="iaRespuesta" rows="9" placeholder="Pega aquí la respuesta completa de la IA (empieza por «RUTINA:»)"></textarea></label>
+      <label class="campo">Texto del entreno · puedes editarlo <textarea id="iaRespuesta" rows="9" placeholder="Pega aquí la respuesta completa de la IA (empieza por «RUTINA:»)"></textarea></label>
       <p class="aviso" id="iaError" role="status"></p>
-      <div class="d-botones"><button type="button" class="nav-btn" id="iaDocumentoAyuda" hidden>Preparar conversión con mi IA</button><button type="button" class="anadir" id="iaRevisar">Revisar entrenamiento</button></div>
+      <div class="d-botones"><button type="button" class="nav-btn" id="iaDocumentoAyuda" hidden>Preparar conversión con mi IA</button><button type="button" class="anadir" id="iaRevisar">Revisar entreno</button></div>
     </div>
     <div id="iaVistaCaja" class="ia-paso" hidden>
       <h3 id="iaVistaTit" class="ia-tit"></h3>
       <div id="iaVista" class="ia-vista"></div>
       <p class="menu-det nota" id="iaAvisoDias" role="status"></p>
       <details id="iaDiaOp" class="ia-guardar" hidden>
-        <summary>Añadir entrenamiento</summary>
+        <summary>Añadir entreno</summary>
         <div class="ia-guardar-campos">
           <label class="campo" id="iaDiaSesionL">Sesión <select id="iaDiaSesion"></select></label>
-          <label class="campo">Nombre del entrenamiento <input id="iaNombreSesion" maxlength="60" required></label>
+          <label class="campo">Nombre del entreno <input id="iaNombreSesion" maxlength="60" required></label>
           <label class="campo">Dónde guardarlo
             <select id="iaDestino"><option value="calendario">En el calendario</option><option value="plantilla">Como plantilla</option><option value="ambos">Calendario y plantilla</option></select>
           </label>
-          <label class="campo" id="iaFechaCaja">Día del entrenamiento <input id="iaDiaFecha" type="date" required></label>
+          <label class="campo" id="iaFechaCaja">Día del entreno <input id="iaDiaFecha" type="date" required></label>
           <p id="iaDestinoNota" class="nota"></p>
           <button type="button" class="anadir" id="iaAnadirDia">Guardar y abrir calendario</button>
         </div>
@@ -692,7 +692,7 @@
     <p>Toca cada apartado para verlo. Puedes volver aquí cuando quieras desde <b>Ajustes → Instrucciones de uso</b>. ¿Echas algo en falta o algo no va bien? Envíanos una sugerencia:</p>
     <button type="button" class="nav-btn sug-btn" id="sugAyuda">💬 Enviar una sugerencia o avisar de un fallo</button>
     <details><summary>La semana y el texto del día</summary>
-      <p>En el móvil, las secciones están abajo: <b>Semana</b>, <b>Ejercicios</b>, <b>Entrenamientos</b>, <b>Marcas</b> y <b>Ajustes</b>. En el ordenador van arriba, centradas. En pantallas grandes todo se amplía un poco para aprovechar el ancho; en <b>Ajustes → Tamaño en el ordenador</b> eliges otro tamaño si lo prefieres.</p>
+      <p>En el móvil, las secciones están abajo: <b>Semana</b>, <b>Ejercicios</b>, <b>Entrenos</b>, <b>Marcas</b> y <b>Ajustes</b>. En el ordenador van arriba, centradas. En pantallas grandes todo se amplía un poco para aprovechar el ancho; en <b>Ajustes → Tamaño en el ordenador</b> eliges otro tamaño si lo prefieres.</p>
       <p>La <b>Semana</b> muestra una <b>tira con los días</b> de la semana y, debajo, solo el día elegido. Cada día de la tira lleva un punto (verde si todas sus series están hechas, gris si hay series pendientes, sin punto si no hay ninguna) y, debajo, la primera línea de lo que hayas escrito en su espacio de texto. Cambia de día tocando la tira o <b>deslizando a los lados</b>.</p>
             <p>Cada día tiene un espacio para escribir lo que quieras. Se guarda solo. Mientras escribes aparece el botón <b>N</b> de negrita.</p>
       <p>Cambia de semana con las flechas ‹ ›; <b>Hoy</b> te devuelve a la semana actual. El anillo de cada día muestra cuántas series llevas hechas de las planificadas.</p>
@@ -771,13 +771,13 @@
       <p>Los ejercicios que aún no tienen series también se mueven, y al añadirles la primera serie se quedan donde los pusiste. Con <b>Mover a otra sesión…</b> (menú ⋯) pasas un ejercicio o una superserie a otra sesión del día o a «Sin sesión».</p>
       <p>En una sesión puedes usar <b>Subir</b> y <b>Bajar</b> de su menú ⋯; con teclado, las flechas sobre el asa ≡ mueven ejercicios y superseries. Para pasar algo a otro entreno del día, usa su ⋯ → «Mover a otro entreno del día». Durante 5 segundos aparece <b>Deshacer</b>. El nuevo orden se usa también en el modo entreno y al guardar como plantilla.</p>
     </details>
-    <details><summary>Listas de entrenamientos</summary>
+    <details><summary>Listas de entrenos</summary>
       <p>En la pestaña <b>Listas</b> guardas tus entrenamientos agrupados: por ejemplo una lista «Fuerza 3 días» con Torso, Pierna y Full body. Crea una con <b>+ Nueva lista</b>.</p>
-      <p><b>Meter entrenamientos:</b> desde el ⋯ de un día o de un entreno, «Guardar en una lista de entrenamientos…» (eliges la lista y le pones nombre), o dentro de la lista, «+ Añadir entrenamiento» para elegir una de tus plantillas. Un entrenamiento puede estar en varias listas.</p>
+      <p><b>Meter entrenamientos:</b> desde el ⋯ de un día o de un entreno, «Guardar en una lista de entrenos…» (eliges la lista y le pones nombre), o dentro de la lista, «+ Añadir entreno» para elegir una de tus plantillas. Un entrenamiento puede estar en varias listas.</p>
       <p><b>Usarlos:</b> toca el nombre para ver sus ejercicios; <b>+ Día</b> lo pone en el día que elijas (con ‹ › cambias de semana). Ordénalos con el asa ≡. Con <b>+ Bloque</b> creas cajas (semanas, fases…) con sus entrenamientos dentro, como un mesociclo: se pliegan tocando su nombre, se mueven enteras con su ≡ y se pueden duplicar desde su ⋯; un entrenamiento puede repetirse en varias semanas («Repetir debajo» o «Duplicar» la semana). También desde un día: <b>+ Entreno</b> → «Desde la lista…». La lista marca cuál toca <b>siguiente</b> y avanza sola cada vez que pones uno; en su ⋯ puedes elegir otro como siguiente o quitarlo de la lista (sigue en tus plantillas).</p>
     </details>
     <details><summary>Plantillas, copiar y pegar</summary>
-      <p><b>Mover a otro día:</b> ⋯ de un entreno → «📅 Mover a otro día…», o ⋯ del día → «📅 Mover el entrenamiento a otro día…». Se lleva sus series, los ejercicios aún sin series y sus partes; con Deshacer.</p>
+      <p><b>Mover a otro día:</b> ⋯ de un entreno → «📅 Mover a otro día…», o ⋯ del día → «📅 Mover el entreno a otro día…». Se lleva sus series, los ejercicios aún sin series y sus partes; con Deshacer.</p>
       <p><b>Copiar y pegar un entrenamiento:</b> en el ⋯ del día, «Copiar día» (o en el ⋯ de un entreno, «Copiar entreno»). Después, en el ⋯ del día donde lo quieras, «📋 Pegar … en este día». Lo pegado entra pendiente y se puede deshacer.</p>
       <p>En el menú <b>⋯</b> de cada día puedes copiar el día, pegar lo último copiado, añadir una plantilla, guardar los ejercicios como plantilla o compartirlos con un amigo.</p>
       <p>Si los ejercicios tienen nombre de sesión (por ejemplo «Pierna»), su menú ⋯ copia, guarda o comparte solo esa sesión. Puedes tener varias sesiones el mismo día.</p>
@@ -791,23 +791,23 @@
       <p>Los ejercicios que trabajan esa zona muestran un aviso ⚠ (en la ficha de cada ejercicio puedes ajustar sus zonas) y «Crear con IA» la tiene en cuenta. No sustituye la opinión de un profesional.</p>
     </details>
     <details><summary>Mesociclos y semana de descarga</summary>
-      <p>En <b>Entrenamientos → Mis entrenamientos</b>, las secciones se abren y cierran tocando su título (con su contador); la app recuerda cuáles dejas abiertas. En <b>Plantillas</b> tienes un buscador por nombre o por ejercicio.</p>
+      <p>En <b>Entrenos → Mis entrenamientos</b>, las secciones se abren y cierran tocando su título (con su contador); la app recuerda cuáles dejas abiertas. En <b>Plantillas</b> tienes un buscador por nombre o por ejercicio.</p>
       <p>Para trabajar con varias plantillas a la vez, <b>mantén pulsada</b> una (o pulsa <b>Seleccionar</b>) y marca las que quieras, también entre los resultados del buscador. Abajo aparecen las acciones: <b>Añadir a un día</b> (cada una como su sesión), <b>Mesociclo</b> (crear uno repartiéndolas por la semana o añadirlas a uno existente), <b>Compartir</b> (un solo enlace con todas) y <b>Eliminar</b> (con confirmación y Deshacer).</p>
-      <p>En <b>Entrenamientos → Mis entrenamientos → Mesociclos</b> repartes tus plantillas por los días de la semana durante varias semanas. Puedes sumar kilos cada semana.</p>
+      <p>En <b>Entrenos → Mis entrenamientos → Mesociclos</b> repartes tus plantillas por los días de la semana durante varias semanas. Puedes sumar kilos cada semana.</p>
       <p>La <b>semana de descarga</b> (la última, o cada N semanas) baja un 30 % el peso y la distancia, o el número de series (lo eliges tú). En la semana aparece marcada como «Descarga».</p>
       <p>Pulsa <b>Guardar y rellenar calendario</b> para que aparezcan las series planificadas.</p>
     </details>
     <details><summary>Crear con IA y rutinas tipo</summary>
-      <p>En <b>Entrenamientos → Crear o importar</b> eliges objetivo, días, nivel, material y limitaciones. Copia el prompt, pégalo en ChatGPT, Claude u otra IA y pega su respuesta en el paso 2.</p>
+      <p>En <b>Entrenos → Crear o importar</b> eliges objetivo, días, nivel, material y limitaciones. Copia el prompt, pégalo en ChatGPT, Claude u otra IA y pega su respuesta en el paso 2.</p>
       <p>La app te muestra una vista previa y lo guarda como plantillas, en una <b>lista de entrenamientos</b> (si cambia cada semana, cada semana va en su bloque) o como mesociclo. Crea los ejercicios que falten. Si algo no encaja, te dice qué línea falla.</p>
-      <p><b>Entrenamiento suelto:</b> en «¿Qué quieres?» elige «Entrenamiento suelto», el tipo de sesión (pierna, torso, series, umbral, tirada larga, natación, «Otro»…), la duración y la intensidad. Tus molestias activas y tus ritmos van en el prompt. Al pegar la respuesta, elige el día y pulsa <b>Añadir al día</b> (y, si quieres, guárdala también como plantilla).</p>
-      <p><b>Importar un documento:</b> en Entrenamientos → Crear o importar, «Importar documento…» admite PDF, Word (.docx), Excel (.xlsx), CSV, texto o una foto. La app extrae el texto y lo abre para revisarlo y editarlo. Reconoce el formato de la app y estructuras sencillas con sesiones y ejercicios como «Sentadilla: 3x10». Si no reconoce alguna línea, la conserva para corregirla o preparar una conversión con tu IA. Después puedes editar las cantidades, elegir una sesión y fecha para el calendario, o asignar días y revisar un mesociclo antes de rellenarlo. Un PDF escaneado o una foto no tienen texto que leer: la app te lo dice y te prepara el prompt para que adjuntes el archivo a la IA.</p>
+      <p><b>Entrenamiento suelto:</b> en «¿Qué quieres?» elige «Entreno suelto», el tipo de sesión (pierna, torso, series, umbral, tirada larga, natación, «Otro»…), la duración y la intensidad. Tus molestias activas y tus ritmos van en el prompt. Al pegar la respuesta, elige el día y pulsa <b>Añadir al día</b> (y, si quieres, guárdala también como plantilla).</p>
+      <p><b>Importar un documento:</b> en Entrenos → Crear o importar, «Importar documento…» admite PDF, Word (.docx), Excel (.xlsx), CSV, texto o una foto. La app extrae el texto y lo abre para revisarlo y editarlo. Reconoce el formato de la app y estructuras sencillas con sesiones y ejercicios como «Sentadilla: 3x10». Si no reconoce alguna línea, la conserva para corregirla o preparar una conversión con tu IA. Después puedes editar las cantidades, elegir una sesión y fecha para el calendario, o asignar días y revisar un mesociclo antes de rellenarlo. Un PDF escaneado o una foto no tienen texto que leer: la app te lo dice y te prepara el prompt para que adjuntes el archivo a la IA.</p>
       <p><b>Media maratón y maratón:</b> además de 5 y 10 km. Puedes poner tu marca objetivo y la fecha de la carrera (las semanas se cuentan hasta ella). El prompt incluye tus marcas previstas de Marcas (VDOT y Riegel) y pide descarga y tapering antes de la carrera. Las tiradas largas pueden llevar ritmos distintos por tramos.</p>
-      <p>En <b>Entrenamientos → Mis entrenamientos → Rutinas tipo</b> tienes algunos ejemplos listos. Todo se copia a tus plantillas y lo puedes editar como cualquier otra.</p>
+      <p>En <b>Entrenos → Mis entrenamientos → Rutinas tipo</b> tienes algunos ejemplos listos. Todo se copia a tus plantillas y lo puedes editar como cualquier otra.</p>
       <p>Son sugerencias generales, no un plan médico ni personalizado.</p>
     </details>
     <details><summary>Importar carreras</summary>
-      <p>En <b>Entrenamientos → Crear o importar → Importar carreras</b> subes un archivo GPX o TCX del reloj o de Strava, el CSV de actividades de Strava o Garmin, o el <b>CSV de vueltas de COROS</b> (en la app de COROS, la actividad → exportar vueltas). Cada carrera se guarda en su fecha con distancia y tiempo, y alimenta Marcas y ritmos.</p>
+      <p>En <b>Entrenos → Crear o importar → Importar carreras</b> subes un archivo GPX o TCX del reloj o de Strava, el CSV de actividades de Strava o Garmin, o el <b>CSV de vueltas de COROS</b> (en la app de COROS, la actividad → exportar vueltas). Cada carrera se guarda en su fecha con distancia y tiempo, y alimenta Marcas y ritmos.</p>
       <p><b>Archivos FIT (lo más completo):</b> en la app de COROS, abre la actividad → compartir (arriba) → <b>Exportar archivo .fit</b>; en COROS Training Hub (web), la actividad → Exportar → FIT. En Garmin Connect (web), la actividad → ⚙ → <b>Exportar original</b> (descarga un .zip: descomprímelo y elige el .fit). Del FIT se toman la fecha y la hora, cada vuelta con su tipo según el reloj (sin adivinar por el ritmo), el nombre del entrenamiento programado y sus objetivos, el desnivel del barómetro, y las pulsaciones media y máxima y la cadencia.</p>
       <p><b>Dónde ver tus pulsaciones:</b> en <b>Marcas → Pulsaciones</b> (el primer apartado): FC máxima, de dónde sale (y un botón para ir a esa actividad), FC en reposo, zonas Z1–Z5 con sus pulsaciones, el tiempo en cada zona de las últimas 4 semanas y la gráfica de tu pico de FC en cada actividad. Con <b>Editar</b> eliges cómo se calcula y pones tu edad o tu FC en reposo. En el día, cada carrera importada muestra su FC media y máxima debajo del total, y cada serie la suya.</p>
       <p><b>FC máxima automática:</b> se calcula con el pico mantenido (media de 10 segundos) de tus archivos FIT y TCX de los últimos 6 meses, descartando los primeros minutos, los saltos bruscos y los valores imposibles. Ajustes y Marcas te dicen de dónde sale («168 ppm · Series 1000 m del 2 nov»). En <b>Ajustes → Cómo se calcula tu FC máxima</b> eliges: <b>automática</b> (con tus archivos; mientras no haya, por tu edad), <b>por tu edad</b> (fórmula de Tanaka: 208 − 0,7 × edad) o <b>a mano</b>. Debajo ves lo que da cada opción y cuál se usa. Si un archivo supera la que usas, te avisa. La FC en reposo (opcional) hace que las zonas se calculen sobre tu reserva.</p>
@@ -923,7 +923,7 @@
   <div class="d-cuerpo">
     <div class="cal-nav"><button type="button" class="nav-btn flecha" id="calAnt" aria-label="Mes anterior">‹</button><span id="calMes" class="cal-mes"></span><button type="button" class="nav-btn flecha" id="calSig" aria-label="Mes siguiente">›</button></div>
     <div class="cal-grid" id="calDias"></div>
-    <p class="menu-det nota">● entrenamiento hecho · ◐ a medias · ○ planificado. Toca un día para ir a él.</p>
+    <p class="menu-det nota">● entreno hecho · ◐ a medias · ○ planificado. Toca un día para ir a él.</p>
     <div class="d-botones"><button type="button" class="nav-btn" id="calHoy">Ir a hoy</button></div>
   </div>
 </dialog>
@@ -1085,6 +1085,6 @@
 <div class="toast" id="toast" role="status" hidden><span id="toastTxt"></span><button type="button" id="toastBtn">Deshacer</button></div>
 <div class="fiesta" id="fiesta" aria-hidden="true"></div>
 
-<script src="app.js?v=v318"></script>
+<script src="app.js?v=v319"></script>
 </body>
 </html>

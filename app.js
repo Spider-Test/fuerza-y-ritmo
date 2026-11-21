@@ -1320,7 +1320,7 @@ function botonDescartarFechas(cuerpo, dlg, ctx) {
     texto.textContent = "Se descartarán los cambios pendientes de " + filas.length + " series con fechas incorrectas, incluidas las que no se ven en esta página. Las series nuevas aún no guardadas en la nube se quitarán del dispositivo. Si alguna ya existía en la nube, se recuperará esa versión. No se borrarán otros entrenamientos. Se conservará una copia recuperable antes de continuar.";
     const si = document.createElement("button"), no = document.createElement("button"), estadoDescarte = document.createElement("p");
     si.type = no.type = "button"; si.className = "peligro"; no.className = "nav-btn";
-    si.textContent = "Sí, descartar estas " + filas.length + " series"; no.textContent = "Cancelar";
+    si.textContent = "Sí, descartar " + (filas.length === 1 ? "esta serie" : "estas " + filas.length + " series"); no.textContent = "Cancelar";
     estadoDescarte.setAttribute("role", "status");
     no.onclick = () => { confirmacion.textContent = ""; boton.disabled = false; };
     confirmacion.append(texto, si, no, estadoDescarte); boton.disabled = true;
@@ -1370,7 +1370,7 @@ function botonDescartarFechas(cuerpo, dlg, ctx) {
         if (!escribir("datos-v2", siguienteDb)) throw new Error("No se pudo guardar el resultado en este dispositivo. Se conserva la copia de seguridad.");
         db = siguienteDb; versionDatos++;
         dlg.close(); mostrarFechasPendientes(); pintarTodo();
-        setEstado("Descartados los cambios de " + filas.length + " series. Copia conservada en la exportación de Ajustes.");
+        setEstado("Descartados los cambios de " + plural(filas.length, "serie", "series") + ". Copia conservada en la exportación de Ajustes.");
         sincronizar();
       } catch (e) {
         estadoDescarte.textContent = e instanceof SesionCambiada ? "La cuenta ha cambiado. Cierra esta ventana." : (e.message || "No se ha podido completar el descarte.");
@@ -1395,7 +1395,7 @@ function abrirFechasPendientes() {
     const bloque = document.createElement("fieldset"), leyenda = document.createElement("legend");
     leyenda.textContent = (nombreEj(s.ejercicio_id) || "Ejercicio") + (s.grupo ? " · " + s.grupo : "") + (s.borrado ? " · eliminado pendiente de sincronizar" : ""); bloque.appendChild(leyenda);
     const detalle = document.createElement("p"); detalle.textContent = "Serie: " + (s.reps || 0) + " rep. · " + (s.peso || 0) + " kg · " + (s.distancia || 0) + " m"; bloque.appendChild(detalle);
-    const lab = document.createElement("label"); lab.className = "campo"; lab.textContent = "Fecha del entrenamiento";
+    const lab = document.createElement("label"); lab.className = "campo"; lab.textContent = "Fecha del entreno";
     const fecha = document.createElement("input"); fecha.type = "date"; fecha.required = true; fecha.min = "1000-01-01"; fecha.max = "9999-12-31";
     fecha.value = fechaSerieValida(s.fecha) ? s.fecha : ""; fecha.disabled = fechaSerieValida(s.fecha);
     lab.appendChild(fecha); bloque.appendChild(lab);
@@ -1586,7 +1586,7 @@ function validarEdicionIA() {
   catch { avisoImportacionIA("La sesión ha cambiado. Vuelve a importar desde tu cuenta."); return false; }
   if (!validarCamposBorradorIA()) return false;
   if (!rutinaIA?.nombre.trim() || sesionesImportadas().some(({s}) => !s.nombre.trim() || s.items.some(it => (it.bloque ? it.tramos : [it]).some(t => !t.ejercicio.trim())))) {
-    avisoImportacionIA("Completa los nombres del entrenamiento y sus ejercicios antes de guardar."); return false;
+    avisoImportacionIA("Completa los nombres del entreno y sus ejercicios antes de guardar."); return false;
   }
   if (sesionesImportadas().some(({s}) => !s.items.length || (s.partesBorrador || []).some(p => !s.items.some(it => it.seccion === p)))) {
     avisoImportacionIA("Añade un ejercicio a las partes vacías o quítalas antes de guardar."); return false;
@@ -2075,7 +2075,7 @@ const dias = DIAS.map((_, i) => {
   const btn = col.querySelector(".negrita");
   ed.id = "e-" + DIAS[i];
   ed.dataset.pista = PISTAS[i];
-  ed.setAttribute("aria-label", "Entrenamiento del " + NOMBRES[i]);
+  ed.setAttribute("aria-label", "Entreno del " + NOMBRES[i]);
   btn.setAttribute("aria-label", "Negrita en " + NOMBRES[i]);
   $("semana").appendChild(col);
   const dia = { i, col, ed, btn, fechaEl: col.querySelector(".dia-fecha"), bloquesEl: col.querySelector(".bloques"), rpeEl: col.querySelector(".rpe-dia"),
@@ -2320,9 +2320,10 @@ function pegarItems(fecha, items, grupo, mesoId, masKg, ordenInicial) {
   });
 }
 const contarSeries = items => items.reduce((a, it) => a + (it.bloque ? (it.tramos || []).reduce((b, t) => b + t.series.length, 0) : it.series.length), 0);
+const plural = (n, a, b) => n + " " + (n === 1 ? a : b);   // v356: «1 serie», «2 series»
 const resumenItems = items => {
   const n = contarSeries(items);
-  return items.length + (items.length === 1 ? " elemento · " : " elementos · ") + n + (n === 1 ? " serie" : " series");
+  return items.length + (items.length === 1 ? " ejercicio · " : " ejercicios · ") + n + (n === 1 ? " serie" : " series");
 };
 const nombreEj = id => (db.ejercicios[id] || {}).nombre || "";
 const nombresItems = items => items.map(it => it.bloque
@@ -2396,7 +2397,7 @@ async function guardarCalentamientoParte(dia, grupo, parte) {
     ? { bloque: true, seccion: "Calentamiento", tramos: it.tramos.map(t => ({ ejercicio_id: t.ejercicio_id, series: t.series.map(marca) })) }
     : { ejercicio_id: it.ejercicio_id, seccion: "Calentamiento", series: it.series.map(marca) });
   cambiar("plantillas", { id: existe ? existe.id : nuevoId(), nombre, items, borrado: false });
-  setEstado("Calentamiento «" + nombre + "» guardado (" + contarSeries(items) + " series)");
+  setEstado("Calentamiento «" + nombre + "» guardado (" + plural(contarSeries(items), "serie", "series") + ")");
 }
 function elegirCalentamientoGuardado(dia, grupo) {
   const ps = vivos("plantillas").filter(esPlantillaCalentamiento).sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
@@ -2613,21 +2614,21 @@ function menuDia(dia) {
   const series = seriesDelDia(dia.id), html = db.entrenos[dia.id]?.html || "";
   const titulo = NOMBRES[dia.i] + " " + fmt(deIso(dia.id));
   abrirMenu(titulo, "", [
-    gruposDelDia(dia.id).length > 0 && { texto: "Cambiar nombre de un entrenamiento…", accion: () => {
+    gruposDelDia(dia.id).length > 0 && { texto: "Cambiar nombre de un entreno…", accion: () => {
       const gs = gruposDelDia(dia.id);
       if (gs.length === 1) cambiarNombreEntreno(dia,gs[0]);
-      else abrirMenu("¿Qué entrenamiento quieres renombrar?", "", gs.map(g => ({ texto:g || "Entreno 1",accion:()=>cambiarNombreEntreno(dia,g) })));
+      else abrirMenu("¿Qué entreno quieres renombrar?", "", gs.map(g => ({ texto:g || "Entreno 1",accion:()=>cambiarNombreEntreno(dia,g) })));
     } },
-    (series.length || (enEspera[dia.id] || []).length) && { texto: "📅 Mover el entrenamiento a otro día…", accion: () => elegirDiaDestino(lunesDe(deIso(dia.id)), "¿A qué día muevo el entrenamiento del " + titulo.toLowerCase() + "?", f => moverADia(dia, null, f)) },
+    (series.length || (enEspera[dia.id] || []).length) && { texto: "📅 Mover el entreno a otro día…", accion: () => elegirDiaDestino(lunesDe(deIso(dia.id)), "¿A qué día muevo el entreno del " + titulo.toLowerCase() + "?", f => moverADia(dia, null, f)) },
     (series.length || aTexto(html).trim()) && { texto: "Copiar día", accion: () => copiar(titulo, html, series, "dia") },
     hayItemsCopiados() && { texto: "📋 Pegar «" + porta.nombre + "» en este día", accion: () => pegar(dia) },
     { texto: "Añadir plantilla…", accion: () => elegirPlantilla("Añadir plantilla al " + titulo, p => aplicarPlantilla(dia, p)) },
     // v263: sin «+ Bloque suelto (sin entreno)…» en este menú (los bloques se crean dentro de un entrenamiento: «＋ Añadir» › «+ Bloque»)
     series.filter(s => !s.bloque_id).length > 1 && { texto: "Seleccionar series para agrupar en superserie", accion: () => empezarSelSeries(dia) },
-    series.length && { texto: "Guardar en una lista de entrenamientos…", accion: () => guardarEnLista(series[0].grupo || "Entrenamiento", series) },
+    series.length && { texto: "Guardar en una lista de entrenos…", accion: () => guardarEnLista(series[0].grupo || "Entrenamiento", series) },
     series.length && { texto: "Guardar ejercicios como plantilla…", accion: () => guardarPlantilla(series[0].grupo || "Entrenamiento", series) },
     series.length && { texto: "Compartir con un amigo…", accion: () => compartir(series[0].grupo || titulo, itemsDe(series, true)) },
-    series.length && { texto: "Vaciar ejercicios del día", peligro: true, confirmar: "Pulsa otra vez: se borran " + series.length + " series", accion: () => {
+    series.length && { texto: "Vaciar ejercicios del día", peligro: true, confirmar: "Pulsa otra vez: se borran " + plural(series.length, "serie", "series"), accion: () => {
       series.forEach(s => cambiar("series", { ...s, borrado: true }, true)); delete enEspera[dia.id]; guardarEspera(); persistir(); pintarDia(dia);
     } }
   ]);
@@ -2670,7 +2671,7 @@ function cabeceraParte(dia, grupo, p, color, nNombradas, partes, seriesItem) {
         renombrarParteLocal(dia.id, grupo, p.nombre, "");
         persistir(); pintarDia(dia);
       } },
-      ss.length && { texto: "Borrar la parte y sus ejercicios", peligro: true, confirmar: "Pulsa otra vez: se borran " + ss.length + " series", accion: () => {
+      ss.length && { texto: "Borrar la parte y sus ejercicios", peligro: true, confirmar: "Pulsa otra vez: se borran " + plural(ss.length, "serie", "series"), accion: () => {
         const kOrden = "p|" + dia.id + "|" + grupo, ordenAntes = estadoOrden(kOrden), diaAntes = instantaneaDia(dia.id, []);
         registrarAntes("@orden", kOrden, ordenAntes);
         const antes = ss.map(x => ["series", { ...x }]);
@@ -2801,7 +2802,7 @@ function parteDuplicadaEnEntreno(dia, destino, parte) {
 function moverParteAEntreno(dia, origen, parte, destino, seriesParte, etiqueta, abrirDestino, nombresDestino, indice, secuenciaDestino) {
   // v279: NO se fusionan partes. Si el entreno destino ya tiene una parte con el mismo nombre se cancela sin tocar nada: ni series, ni estructura, ni orden, ni plegados
   if (parteDuplicadaEnEntreno(dia, destino, parte)) {
-    const m = "Ese entrenamiento ya tiene una parte con este nombre. Renómbrala o elige otro destino.";
+    const m = "Ese entreno ya tiene una parte con este nombre. Renómbrala o elige otro destino.";
     setEstado(m, true); avisoDeshacer(m, null);
     return false;
   }
@@ -2968,7 +2969,7 @@ function moverADia(dia, grupo, f) {
   guardarEspera(); guardarSesiones(); escribir("espera-nota-v1", esperaNota); escribir("espera-letra-v1", esperaLetra); escribir("espera-antes-v1", esperaAntes);
   persistir();
   irADia(f);
-  avisoDeshacer((grupo === null ? "Entrenamiento" : "«" + (grupo || "Entreno 1") + "»") + " movido al " + NOMBRES[(deIso(f).getDay() + 6) % 7].toLowerCase() + " " + fmt(deIso(f)), null);
+  avisoDeshacer((grupo === null ? "Entreno" : "«" + (grupo || "Entreno 1") + "»") + " movido al " + NOMBRES[(deIso(f).getDay() + 6) % 7].toLowerCase() + " " + fmt(deIso(f)), null);
   $("toastBtn").hidden = false;
   if (entradaDia) entradaDia.despues = instantaneaDia(claveDias, idsSeries);
   deshacerSug = () => {
@@ -3098,18 +3099,18 @@ function gruposDelDia(fecha) {
 }
 async function cambiarNombreEntreno(dia, grupo) {
   const fecha = dia.id, ctx = contextoSesion();
-  const nombre = await pedirNombre("Nombre del entrenamiento", grupo, "Solo cambia el nombre de este entrenamiento del día. Se conservan sus partes, series y progreso.");
+  const nombre = await pedirNombre("Nombre del entreno", grupo, "Solo cambia el nombre de este entrenamiento del día. Se conservan sus partes, series y progreso.");
   try { comprobarSesion(ctx); } catch { return; }
   if (!nombre || nombre === grupo) return;
-  if (dia.id !== fecha) { setEstado("El entrenamiento ha cambiado. Abre su menú de nuevo.", true); return; }
+  if (dia.id !== fecha) { setEstado("El entreno ha cambiado. Abre su menú de nuevo.", true); return; }
   renombrarEntreno(dia, grupo, nombre);
 }
 // v258: aplica el cambio de nombre (lo usan los diálogos de ⋯ del entreno y del día)
 function renombrarEntreno(dia, grupo, nombre) {
   const fecha = dia.id;
   if (!nombre || nombre === grupo) return;
-  if (!gruposDelDia(fecha).includes(grupo)) { setEstado("El entrenamiento ha cambiado. Abre su menú de nuevo.", true); return; }
-  if (gruposDelDia(fecha).some(g => g !== grupo && norm(g) === norm(nombre))) { setEstado("Ya hay un entrenamiento con ese nombre en este día. Elige otro para mantenerlos separados.", true); return; }
+  if (!gruposDelDia(fecha).includes(grupo)) { setEstado("El entreno ha cambiado. Abre su menú de nuevo.", true); return; }
+  if (gruposDelDia(fecha).some(g => g !== grupo && norm(g) === norm(nombre))) { setEstado("Ya hay un entreno con ese nombre en este día. Elige otro para mantenerlos separados.", true); return; }
   const partes = nombresPartes(fecha, grupo), viejo = fecha + "|" + grupo, nuevo = fecha + "|" + nombre;
   seriesDelDia(fecha).filter(s => (s.grupo || "") === grupo).forEach(s => cambiar("series", { ...s, grupo: nombre }, true));
   sesionesVacias[fecha] = (sesionesVacias[fecha] || []).map(g => g === grupo ? nombre : g);
@@ -3126,7 +3127,7 @@ function renombrarEntreno(dia, grupo, nombre) {
   });
   if (ent?.dia.id === fecha && ent.grupo === grupo) ent.grupo = nombre;
   guardarSesiones(); guardarVacios(); escribir("grupos-plegados-v1", gruposPlegados); persistir(); pintarDia(dia);
-  setEstado("Entrenamiento renombrado: " + nombre);
+  setEstado("Entreno renombrado: " + nombre);
 }
 // v262: retirada la edición directa del nombre en la cabecera (editarNombreEnLinea, v258/v259): el nombre se cambia desde ⋯ → «Cambiar nombre»
 async function cambiarNombreParte(dia, grupo, parte) {
@@ -3145,7 +3146,7 @@ function renombrarParte(dia, grupo, parte, nombre) {
   if (!nombre || nombre === parte) return;
   const nombres = nombresPartes(fecha,grupo).concat((enEspera[fecha] || []).filter(id => (esperaGrupo[fecha+"|"+id] || "") === grupo).map(id => esperaParte[fecha+"|"+id] || ""));
   if (!nombres.includes(parte)) { setEstado("La parte ha cambiado. Abre su menú de nuevo.",true); return; }
-  if (nombres.some(p => p !== parte && norm(p) === norm(nombre))) { setEstado("Ya existe esa parte en este entrenamiento. Elige otro nombre.",true); return; }
+  if (nombres.some(p => p !== parte && norm(p) === norm(nombre))) { setEstado("Ya existe esa parte en este entreno. Elige otro nombre.",true); return; }
   const k = fecha + "|" + grupo, eraVacia = (partesVacias[k] || []).includes(parte);
   seriesDelDia(fecha).filter(s => (s.grupo || "") === grupo && (s.seccion || "") === parte).forEach(s => cambiar("series",{ ...s,seccion:nombre },true));
   renombrarParteLocal(fecha,grupo,parte,nombre);
@@ -3167,7 +3168,7 @@ function renombrarParte(dia, grupo, parte, nombre) {
 function menuGrupo(dia, grupo) {
   const series = seriesDelDia(dia.id).filter(s => (s.grupo || "") === grupo);
   const nGrupos = gruposDelDia(dia.id).length;   // v249: cuentan también los entrenos vacíos
-  abrirMenu(grupo || "Entrenamiento", resumenItems(itemsDe(series)), [
+  abrirMenu(grupo || "Entreno", resumenItems(itemsDe(series)), [
     // v262: el nombre vuelve a cambiarse desde este menú, con una acción deliberada (antes, v258/v259, tocando su texto en la cabecera).
     // «Ejercicios sueltos» (sin nombre, con otros entrenos con nombre en el día) no es un entreno: no se renombra
     (grupo || !gruposDelDia(dia.id).some(Boolean)) && { texto: "Cambiar nombre", accion: () => cambiarNombreEntreno(dia, grupo) },
@@ -3194,11 +3195,11 @@ function menuGrupo(dia, grupo) {
     nGrupos > 1 && !dia.bloquesEl.querySelector(":scope > .grupo .grupo-cab .asa") && { texto: "Bajar sesión", accion: () => moverGrupo(dia.id, grupo, 1) },
     series.filter(s => !s.bloque_id).length > 1 && { texto: "Seleccionar series para agrupar en superserie", accion: () => empezarSelSeries(dia) },
     series.length && { texto: "Copiar entreno", accion: () => copiar(grupo || "Entreno 1", "", series, "entreno") },
-    series.length && { texto: "Guardar en una lista de entrenamientos…", accion: () => guardarEnLista(grupo || "Entrenamiento", series) },
+    series.length && { texto: "Guardar en una lista de entrenos…", accion: () => guardarEnLista(grupo || "Entrenamiento", series) },
     { texto: "Añadir calentamiento guardado…", accion: () => elegirCalentamientoGuardado(dia, grupo) },   // v273
     { texto: "Guardar como plantilla…", accion: () => guardarPlantilla(grupo, series) },
     { texto: "Compartir con un amigo…", accion: () => compartir(grupo, itemsDe(series, true)) },
-    { texto: "Quitar este entreno del día", peligro: true, confirmar: series.length ? "Pulsa otra vez: se borran " + series.length + " series" : "Pulsa otra vez para quitarlo", accion: () => {
+    { texto: "Quitar este entreno del día", peligro: true, confirmar: series.length ? "Pulsa otra vez: se borran " + plural(series.length, "serie", "series") : "Pulsa otra vez para quitarlo", accion: () => {
       registrarAntes("@dia", dia.id, instantaneaDia(dia.id, []));
       const entradaDia = pasoHist?.find(x => x.t === "@dia" && x.k === dia.id);
       series.forEach(s => cambiar("series", { ...s, borrado: true }, true));
@@ -3377,7 +3378,7 @@ function resolverEjerciciosCompartidos(lista) {
     // El «close» del menú anterior (el que acaba de lanzar esta acción) llega después de abrir este: se ignora mientras el menú siga abierto
     const alCerrar = () => { if ($("menu").open) return; $("menu").removeEventListener("close", alCerrar); if (!hecho) { hecho = true; resolver(null); } };
     $("menu").addEventListener("close", alCerrar);
-    abrirMenu("Ejercicios de este entrenamiento",
+    abrirMenu("Ejercicios de este entreno",
       (pend.length === 1 ? "1 ejercicio no coincide" : pend.length + " ejercicios no coinciden") + " con tu catálogo. " +
       (puedeCrear ? "Puedes crearlos " + (creaComun() ? "en el catálogo común (lo verán todos los usuarios aprobados)" : "como ejercicios personales (solo los verás tú)") + " o vincularlos a otros que ya existan. No se crea nada hasta que pulses el botón." : "Tu cuenta no puede crear ejercicios: vincula cada uno a uno existente o cancela. No se añade nada hasta entonces."),
       [{ texto: "Continuar", mantener: true, accion: () => {
@@ -3583,7 +3584,7 @@ async function retirarEnlacesRevocados(codigo, cuantos, volver = () => abrirMisC
 }
 function detalleEnlace(f, volver = () => abrirMisCompartidos()) {
   const enlace = URL_APP + "#c=" + f.codigo, activo = f.estado === "activo";
-  abrirMenu("«" + (f.nombre || "Sin nombre") + "»", "Código " + f.codigo + " · " + (f.tipo === "mesociclo" ? "mesociclo" : f.tipo === "paquete" ? "varias plantillas" : "entrenamiento") + " · creado el " + fechaLarga(f.creado) + " · " +
+  abrirMenu("«" + (f.nombre || "Sin nombre") + "»", "Código " + f.codigo + " · " + (f.tipo === "mesociclo" ? "mesociclo" : f.tipo === "paquete" ? "varias plantillas" : "entreno") + " · creado el " + fechaLarga(f.creado) + " · " +
     (f.estado === "revocado" ? "revocado el " + fechaLarga(f.revocado) : f.estado === "caducado" ? "caducó el " + fechaLarga(f.caduca) : f.caduca ? "caduca el " + fechaLarga(f.caduca) : "sin caducidad (creado antes de que existiera la caducidad)"), [
     activo && { texto: "Copiar código", mantener: true, accion: () => copiarTexto(f.codigo, "Código copiado") },
     activo && { texto: "Copiar enlace", mantener: true, accion: () => copiarTexto(enlace, "Enlace copiado") },
@@ -3624,7 +3625,7 @@ function compartidoValido(c) {
 
 const MENSAJES_ESTADO_COMPARTIDO = {
   caducado: "Este código ha caducado. Pide a tu amigo que lo comparta de nuevo.",
-  revocado: "El autor ha revocado este enlace. Pídele que vuelva a compartir el entrenamiento.",
+  revocado: "El autor ha revocado este enlace. Pídele que vuelva a compartir el entreno.",
   no_encontrado: "No hay nada compartido con ese código.",
   formato_invalido: "Ese código no es válido: son 8 letras y números.",
   demasiados_intentos: "Demasiados intentos fallidos seguidos. Espera unos minutos antes de volver a probar.",
@@ -3676,7 +3677,7 @@ async function abrirCompartido(texto) {
   }
   // Un entrenamiento: primero solo se ve; «Añadir a mi rutina» deja elegir día o guardarlo como plantilla
   const lunes = lunesDe(new Date());
-  abrirMenu("«" + c.nombre + "»", de + " · " + contarSeries(c.items) + " series. Solo lo estás viendo: no se añade nada hasta que tú quieras.",
+  abrirMenu("«" + c.nombre + "»", de + " · " + plural(contarSeries(c.items), "serie", "series") + ". Solo lo estás viendo: no se añade nada hasta que tú quieras.",
     [{ texto: "+ Añadir a mi rutina…", accion: () => abrirMenu("¿Cómo lo añado?", "«" + c.nombre + "»", [
       { texto: "Ponerlo en un día…", accion: () => elegirDiaDestino(lunes, "¿En qué día pongo «" + c.nombre + "»?", async f => {
         const mapa = await resolverEjerciciosCompartidos(ejerciciosDeItemsCompartidos(listaEj)); if (!mapa) return;
@@ -3904,10 +3905,10 @@ function pintarDiaSinAncla(dia) {
     const iniciar = document.createElement("button");
     iniciar.type = "button"; iniciar.className = "grupo-iniciar";
     const completado = filasGrupo.length > 0 && filasGrupo.every(hecha);
-    iniciar.textContent = !filasGrupo.length ? "Añade series para empezar este entrenamiento" : completado ?
-      "✓ Completado · Ver entrenamiento" : (filasGrupo.some(hecha) ? "▶ Seguir" : "▶ Empezar") + " este entrenamiento";
+    iniciar.textContent = !filasGrupo.length ? "Añade series para empezar este entreno" : completado ?
+      "✓ Completado · Ver entreno" : (filasGrupo.some(hecha) ? "▶ Seguir" : "▶ Empezar") + " este entreno";
     iniciar.disabled = !filasGrupo.length;
-    iniciar.setAttribute("aria-label", (completado ? "Ver entrenamiento completado: " : "Iniciar solo ") + (g.nombre || "Entreno 1"));
+    iniciar.setAttribute("aria-label", (completado ? "Ver entreno completado: " : "Iniciar solo ") + (g.nombre || "Entreno 1"));
     iniciar.addEventListener("click", () => empezarEntreno(dia, g.nombre));
     // v252: con un solo entreno en el día, el botón inferior del día («Empezar/Seguir entreno (x/y)») ya inicia este mismo entreno:
     // la franja de arriba sobra. Se mantiene si hay varios entrenos (para elegir uno) o si aún no tiene series (aviso, sin botón inferior)
@@ -3916,7 +3917,7 @@ function pintarDiaSinAncla(dia) {
     if (!filasGrupo.length) {
       const nota = document.createElement("p");
       nota.className = "grupo-aviso-vacio";
-      nota.textContent = "Añade series para empezar este entrenamiento";
+      nota.textContent = "Añade series para empezar este entreno";
       caja.appendChild(nota);
     } else if (varios) caja.appendChild(iniciar);
     // Partes opcionales del entreno (Calentamiento, Parte principal…): si no hay ninguna, todo va seguido como siempre
@@ -4232,16 +4233,16 @@ function pintarDiaSinAncla(dia) {
         !espera && otrasSesiones.length && { texto: "Mover a otro entreno del día…", accion: () => abrirMenu("¿A qué entreno?", "", otrasSesiones.map(x => ({
           texto: x || "Sin sesión", accion: () => moverASesion(seriesDeItem(dia.id, g.nombre, clave), x) }))) },
         { texto: "Ver ficha del ejercicio", accion: () => abrirDetalle(ej, contextoCarga(dia.id, g.nombre, espera ? [] : seriesDeItem(dia.id, g.nombre, clave))) },
-        sinCarga(ej) && pendientesCarga(ej, contextoCarga(dia.id, g.nombre, espera ? [] : seriesDeItem(dia.id, g.nombre, clave))).length && { texto: "Quitar peso previsto en este entrenamiento y día…", accion: () => ofrecerRetiradaCarga(ej, contextoCarga(dia.id, g.nombre, seriesDeItem(dia.id, g.nombre, clave))) },
+        sinCarga(ej) && pendientesCarga(ej, contextoCarga(dia.id, g.nombre, espera ? [] : seriesDeItem(dia.id, g.nombre, clave))).length && { texto: "Quitar peso previsto en este entreno y día…", accion: () => ofrecerRetiradaCarga(ej, contextoCarga(dia.id, g.nombre, seriesDeItem(dia.id, g.nombre, clave))) },
         !espera && tipoDe(ej) === "carrera" && { texto: "Marcar como carrera (competición)…", accion: () => marcarComoCarrera(dia, seriesDeItem(dia.id, g.nombre, clave), g.nombre || nombre) },
-        { texto: "Eliminar ejercicio" + (espera ? "" : " y sus series"), peligro: true, confirmar: espera ? "Pulsa otra vez para quitarlo" : "Pulsa otra vez: se borran " + seriesDeItem(dia.id, g.nombre, clave).length + " series", accion: () => {
+        { texto: "Eliminar ejercicio" + (espera ? "" : " y sus series"), peligro: true, confirmar: espera ? "Pulsa otra vez para quitarlo" : "Pulsa otra vez: se borran " + plural(seriesDeItem(dia.id, g.nombre, clave).length, "serie", "series"), accion: () => {
           // Quita el ejercicio de esta sesión con todas sus series (hechas incluidas); se puede deshacer
           const del = espera ? [] : seriesDeItem(dia.id, g.nombre, clave);
           del.forEach(x => cambiar("series", { ...x, borrado: true }, true));
           quitarEspera(dia.id, clave);
           persistir();
           pintarDia(dia);
-          avisoDeshacer(nombre + " eliminado" + (del.length ? " (" + del.length + " series)" : ""), del.length ? del.map(x => ["series", { ...x }]) : null);
+          avisoDeshacer(nombre + " eliminado" + (del.length ? " (" + plural(del.length, "serie", "series") + ")" : ""), del.length ? del.map(x => ["series", { ...x }]) : null);
         } }
       ]));
       const asa = el.querySelector(".bloque-cab .asa");
@@ -4785,7 +4786,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
     rellenarCon(s, true);
     if (chkBilbo) chkBilbo.checked = !!s.ciclo_id;
     if (s.ciclo_id === "auto") { fb.value = ""; fb.placeholder = "reps máx"; }
-    boton.textContent = "✓ Guardar " + (series.slice(0, series.indexOf(s) + 1).filter(x => !x.calentamiento).length);
+    boton.textContent = "✓ Guardar";   // v356: antes «✓ Guardar N» (N era el nº de serie y no se entendía); más largo desbordaba la tarjeta a 320–390 px
     b.querySelector(".desmarcar").hidden = !hecha(s);
     b.querySelector(".desmarcar").onclick = () => { delete borradores[claveBor]; desmarcar(s); };
     ol.querySelectorAll("li").forEach(x => x.classList.remove("editando")); li.classList.add("editando");
@@ -4795,6 +4796,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
   series.forEach(s => {
     if (!s.calentamiento) numero++;
     const nSerie = numero;   // el número de esta serie (numero sigue creciendo en el bucle)
+    const etqSerie = s.calentamiento ? "calentamiento " + series.slice(0, series.indexOf(s) + 1).filter(x => x.calentamiento).length : "serie " + numero;   // v356: texto de las etiquetas accesibles
     const li = document.createElement("li");
     const planificada = !hecha(s);
     li.className = (planificada ? "plan" : "") + (s.calentamiento ? " calent" : "");
@@ -4804,7 +4806,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
       // Círculo para marcarla como hecha tal cual estaba planificada
       const c = document.createElement("button");
       c.type = "button"; c.className = "marcar"; c.textContent = "";
-      c.setAttribute("aria-label", "Marcar como hecha la serie " + numero);
+      c.setAttribute("aria-label", (s.calentamiento ? "Marcar como hecho el " : "Marcar como hecha la ") + etqSerie);
       c.addEventListener("click", () => {
         if (s.ciclo_id === "auto" || (tipo === "fuerza" && pideDato(s))) { li.querySelector(".sv").click(); return; }   // en Bilbo y en «máx» hay que apuntar lo que salió
         marcarHecha(s, { ...s, hecha: true, peso: pesoMostrado(s) });
@@ -4820,13 +4822,13 @@ function bloque(dia, id, series, grupo, parte, copia) {
     // v262: serie de distancia con líneas de detalle (descanso, pulso, desnivel, objetivo): en el móvil se presenta como ficha (solo CSS;
     // mismos datos y mismas acciones de editar, borrar y reordenar)
     if (dist && li.querySelector(".sv").children.length > 1) li.classList.add("fila-dist");
-    li.querySelector(".sv").setAttribute("aria-label", (planificada ? "Completar" : "Editar") + " serie " + numero + ": " + serieTexto(s));
+    li.querySelector(".sv").setAttribute("aria-label", (planificada ? "Completar" : "Editar") + " " + etqSerie + ": " + serieTexto(s));
     li.querySelector(".sv").addEventListener("click", () => {
       if (otraEdicionPendiente() && editando?.id !== s.id) { setEstado("Guarda o cancela la edición antes de abrir otra serie"); return; }
       if (!formEl.hidden && editando?.id === s.id) return;
       abrirSerie(s, li); guardarBor();
     });
-    li.querySelector(".borrar").setAttribute("aria-label", "Borrar serie " + numero);
+    li.querySelector(".borrar").setAttribute("aria-label", "Borrar " + etqSerie);
     if (prs.has(s.id)) { const p = document.createElement("span"); p.className = "pr"; p.textContent = "PR"; p.title = "Récord personal"; li.querySelector(".sv").after(p); }
     li.querySelector(".borrar").addEventListener("click", () => borrarSerie(s));
     li.dataset.sid = s.id;
@@ -5575,7 +5577,7 @@ function tarjetaBloque(dia, bloqueId, series) {
           .concat(primera.map(s0 => ({ texto: nombreEj(s0.ejercicio_id), accion: () => editarNota(dia, series.filter(x => x.ejercicio_id === s0.ejercicio_id), "Descripción de " + nombreEj(s0.ejercicio_id)) })))) },
       { texto: "Desagrupar (series sueltas)", accion: () => desagruparBloque(dia, series) },
       { texto: "Compartir con un amigo…", accion: () => compartir("Superserie ×" + rondas.length + " · " + primera.map(s => nombreEj(s.ejercicio_id)).join(" + "), itemsDe(series, true)) },
-      { texto: "Quitar superserie", peligro: true, confirmar: "Pulsa otra vez: se borran " + series.length + " series", accion: () => {
+      { texto: "Quitar superserie", peligro: true, confirmar: "Pulsa otra vez: se borran " + plural(series.length, "serie", "series"), accion: () => {
         series.forEach(s => cambiar("series", { ...s, borrado: true }, true)); persistir(); pintarDia(dia);
       } }
     ]);
@@ -5751,9 +5753,9 @@ function tarjetaBloque(dia, bloqueId, series) {
           const delEj = series.filter(x => x.ejercicio_id === s.ejercicio_id);
           abrirMenu(ejV.nombre || "Ejercicio", "En esta superserie · " + delEj.length + (delEj.length === 1 ? " serie" : " series"), [
             { texto: "Ver ficha del ejercicio", accion: () => abrirDetalle(s.ejercicio_id, contextoCarga(dia.id, s.grupo, delEj)) },
-            sinCarga(s.ejercicio_id) && pendientesCarga(s.ejercicio_id, contextoCarga(dia.id, s.grupo, delEj)).length && { texto: "Quitar peso previsto en este entrenamiento y día…", accion: () => ofrecerRetiradaCarga(s.ejercicio_id, contextoCarga(dia.id, s.grupo, delEj)) },
+            sinCarga(s.ejercicio_id) && pendientesCarga(s.ejercicio_id, contextoCarga(dia.id, s.grupo, delEj)).length && { texto: "Quitar peso previsto en este entreno y día…", accion: () => ofrecerRetiradaCarga(s.ejercicio_id, contextoCarga(dia.id, s.grupo, delEj)) },
             { texto: notaDe(delEj) ? "Editar la descripción…" : "+ Descripción (tempo, banda, EEP…)", accion: () => editarNota(dia, delEj, "Descripción de " + (ejV.nombre || "el ejercicio")) },
-            variosTramos && { texto: "Quitar de la superserie", peligro: true, confirmar: "Pulsa otra vez: se borran sus " + delEj.length + " series de todas las rondas", accion: () => {
+            variosTramos && { texto: "Quitar de la superserie", peligro: true, confirmar: "Pulsa otra vez: se borran sus " + plural(delEj.length, "serie", "series") + " de todas las rondas", accion: () => {
               const antes = delEj.map(x => ["series", { ...x }]);
               delEj.forEach(x => cambiar("series", { ...x, borrado: true }, true));
               persistir(); pintarDia(dia);
@@ -6434,7 +6436,7 @@ function soltarListas(secs) {
   avisoDeshacer("Lista «" + db.listas[mov].nombre + "» movida", antes);
 }
 async function nuevaLista(alCrear) {
-  const n = await pedirNombre("Nueva lista de entrenamientos", "", "Por ejemplo «Fuerza 3 días», «Torso / Pierna», «Pretemporada» o «Carrera».");
+  const n = await pedirNombre("Nueva lista de entrenos", "", "Por ejemplo «Fuerza 3 días», «Torso / Pierna», «Pretemporada» o «Carrera».");
   if (!n) return;
   // v344: una lista nueva va al FINAL (orden mayor que todas las vivas; con todas a 0, la primera explícita)
   const l = { id: nuevoId(), nombre: n, items: [], siguiente: 0, orden: Math.max(0, ...vivos("listas").map(x => n0(x.orden))) + PASO_ORDEN_LISTAS, borrado: false };
@@ -6445,7 +6447,7 @@ async function nuevaLista(alCrear) {
 }
 function elegirLista(titulo, alElegir) {
   const ls = listasOrdenadas();
-  abrirMenu(titulo, "", ls.map(l => ({ texto: l.nombre + " · " + entrenosDeLista(l).length + " entrenamientos", accion: () => alElegir(l) }))
+  abrirMenu(titulo, "", ls.map(l => ({ texto: l.nombre + " · " + plural(entrenosDeLista(l).length, "entreno", "entrenos"), accion: () => alElegir(l) }))
     .concat([{ texto: "+ Nueva lista…", accion: () => nuevaLista(alElegir) }]));
 }
 // Elegir un entrenamiento de una lista (con su semana o bloque delante); el siguiente va marcado
@@ -6498,11 +6500,11 @@ function guardarEnLista(nombreSugerido, series) {
   });
 }
 async function guardarEnListaEn(l, ubi, nombreSugerido, series) {
-  const nombre = await pedirNombre("Nombre del entrenamiento", nombreSugerido, "Se guarda como una copia nueva e independiente, también en tus plantillas. Puede tener el mismo nombre que otras entradas; no se reemplaza nada.");
+  const nombre = await pedirNombre("Nombre del entreno", nombreSugerido, "Se guarda como una copia nueva e independiente, también en tus plantillas. Puede tener el mismo nombre que otras entradas; no se reemplaza nada.");
   if (!nombre) return;
   const fresca = db.listas[l.id];
-  if (!fresca || fresca.borrado) { setEstado("La lista ya no está disponible. No se ha guardado el entrenamiento."); return; }
-  if (ubi && JSON.stringify(fresca.items || []) !== ubi.estructura) { setEstado("La lista ha cambiado mientras escribías. No se ha guardado el entrenamiento; vuelve a intentarlo."); return; }
+  if (!fresca || fresca.borrado) { setEstado("La lista ya no está disponible. No se ha guardado el entreno."); return; }
+  if (ubi && JSON.stringify(fresca.items || []) !== ubi.estructura) { setEstado("La lista ha cambiado mientras escribías. No se ha guardado el entreno; vuelve a intentarlo."); return; }
   const items = itemsDe(series).map(it => it.bloque ? { bloque: true, seccion: it.seccion || "", tramos: it.tramos } : { ejercicio_id: it.ejercicio_id, seccion: it.seccion || "", series: it.series });
   const antes = [["listas", { ...fresca, items: copiaJson(fresca.items || []) }]], id = nuevoId();
   cambiar("plantillas", { id, nombre, items, borrado: false });
@@ -6515,7 +6517,7 @@ async function renombrarEntradaLista(listaId, i, plantillaId) {
   const inicial = db.listas[listaId], p = db.plantillas[plantillaId];
   if (!inicial || inicial.borrado || (inicial.items || [])[i] !== plantillaId || !p || p.borrado) return;
   const estructura = JSON.stringify(inicial.items || []);
-  const nombre = await pedirNombre("Nombre del entrenamiento en esta lista", p.nombre, "Se crea una copia independiente solo para esta entrada. La plantilla original y las demás entradas y listas conservan su nombre y contenido.");
+  const nombre = await pedirNombre("Nombre del entreno en esta lista", p.nombre, "Se crea una copia independiente solo para esta entrada. La plantilla original y las demás entradas y listas conservan su nombre y contenido.");
   if (!nombre) return;
   const fresca = db.listas[listaId], actual = db.plantillas[plantillaId];
   if (!fresca || fresca.borrado || JSON.stringify(fresca.items || []) !== estructura || !actual || actual.borrado) {
@@ -6560,7 +6562,7 @@ function pintarListas() {
     const sec = document.createElement("section");
     sec.className = "cat-sec lista-sec" + (abierta ? "" : " cerrada");
     sec.dataset.zonaOrden = "lista:" + l.id; sec.dataset.listaId = l.id;
-    sec.innerHTML = '<div class="lista-cab"><button type="button" class="sec-toggle"><span class="flecha-dia" aria-hidden="true">▸</span><h3></h3><span class="sec-n"></span></button><button type="button" class="menu-btn">⋯</button></div><div class="sec-cuerpo"><div class="sec-cuerpo-in"><div class="lista-ents"></div><div class="add-fila"><button type="button" class="add-ej">+ Entrenamiento</button><button type="button" class="add-ej">+ Bloque (semana, fase…)</button><button type="button" class="add-ej add-meso">+ Mesociclo</button></div></div></div>';
+    sec.innerHTML = '<div class="lista-cab"><button type="button" class="sec-toggle"><span class="flecha-dia" aria-hidden="true">▸</span><h3></h3><span class="sec-n"></span></button><button type="button" class="menu-btn">⋯</button></div><div class="sec-cuerpo"><div class="sec-cuerpo-in"><div class="lista-ents"></div><div class="add-fila"><button type="button" class="add-ej">+ Entreno</button><button type="button" class="add-ej">+ Bloque (semana, fase…)</button><button type="button" class="add-ej add-meso">+ Mesociclo</button></div></div></div>';
     instalarControlOrden(sec, sec.querySelector(".lista-cab"), l.nombre);
     if (ls.length > 1) {   // v344: asa de la lista entera (solo activa con «Reordenar» de las listas)
       const asaL = asaArrastre(sec, () => [...cont.querySelectorAll(":scope > .lista-sec")], soltarListas, l.nombre);
@@ -6601,13 +6603,13 @@ function pintarListas() {
     sec.querySelector(":scope > .sec-cuerpo .add-meso").addEventListener("click", () => nuevoGrupo());
     const menu = sec.querySelector(".lista-cab .menu-btn");
     menu.setAttribute("aria-label", "Opciones de la lista " + l.nombre);
-    menu.addEventListener("click", () => abrirMenu(l.nombre, rec.length + (rec.length === 1 ? " entrenamiento" : " entrenamientos"), [
-      { texto: "+ Añadir entrenamiento…", accion: () => anadir() },
+    menu.addEventListener("click", () => abrirMenu(l.nombre, rec.length + (rec.length === 1 ? " entreno" : " entrenos"), [
+      { texto: "+ Añadir entreno…", accion: () => anadir() },
       { texto: "+ Añadir bloque (semana, fase…)…", accion: () => nuevaSemana() },
       { texto: (l.items || []).some(esGrupoL) ? "+ Añadir mesociclo…" : "Agrupar en un mesociclo…", accion: () => nuevoGrupo() },
       rec.length && { texto: "Poner el siguiente («" + rec[sig].p.nombre + "») en un día…", accion: () => ponerEntrenoDeLista(l, rec[sig].p, rec[sig].k) },
       { texto: "Cambiar nombre…", accion: async () => { const n = await pedirNombre("Nombre de la lista", l.nombre); if (n) guardarLista(db.listas[l.id], { nombre: n }); } },
-      { texto: "Eliminar lista", peligro: true, confirmar: "Los entrenamientos siguen en tus plantillas", accion: () => {
+      { texto: "Eliminar lista", peligro: true, confirmar: "Los entrenos siguen en tus plantillas", accion: () => {
         const antes = [["listas", { ...l }]];
         cambiar("listas", { ...l, borrado: true }); pintarListas();
         avisoDeshacer("Lista «" + l.nombre + "» eliminada", antes);
@@ -6668,7 +6670,7 @@ function pintarListas() {
         cab.dataset.i = i;
         cab.innerHTML = '<button type="button" class="lg-toggle"><span class="flecha-dia" aria-hidden="true">▸</span><span class="lg-tit"></span><span class="ls-n"></span></button><button type="button" class="menu-btn">⋯</button>';
         cab.querySelector(".lg-tit").textContent = x.titulo;
-        cab.querySelector(".ls-n").textContent = (nB ? nB + (nB === 1 ? " semana/bloque · " : " semanas/bloques · ") : "") + nE + (nE === 1 ? " entrenamiento" : " entrenamientos");
+        cab.querySelector(".ls-n").textContent = (nB ? nB + (nB === 1 ? " semana/bloque · " : " semanas/bloques · ") : "") + nE + (nE === 1 ? " entreno" : " entrenos");
         const tg = cab.querySelector(".lg-toggle");
         tg.setAttribute("aria-expanded", String(!plegado));
         tg.addEventListener("click", () => {
@@ -6679,13 +6681,13 @@ function pintarListas() {
         cab.querySelector(".menu-btn").setAttribute("aria-label", "Opciones de " + x.titulo);
         cab.querySelector(".menu-btn").addEventListener("click", () => abrirMenu(x.titulo, cab.querySelector(".ls-n").textContent, [
           { texto: "+ Semana o bloque en este mesociclo…", accion: () => nuevaSemana(finGrupo(i)) },
-          { texto: "+ Entrenamiento en este mesociclo…", accion: () => anadir(finGrupo(i)) },
+          { texto: "+ Entreno en este mesociclo…", accion: () => anadir(finGrupo(i)) },
           { texto: "Cambiar nombre…", accion: async () => {
             const n = await pedirNombre("Nombre del mesociclo", x.titulo);
             if (!n) return;
             guardarLista(db.listas[l.id], { items: (db.listas[l.id].items || []).map(y => esGrupoL(y) && y.grupo === x.grupo ? { ...y, titulo: n } : y) });
           } },
-          { texto: "Duplicar (copia con sus semanas y entrenamientos)", accion: async () => {
+          { texto: "Duplicar (copia con sus semanas y entrenos)", accion: async () => {
             const n = await pedirNombre("Nombre de la copia", /\d+/.test(x.titulo) ? x.titulo.replace(/\d+/, d => String(+d + 1)) : x.titulo + " (copia)");
             if (!n) return;
             const its2 = (db.listas[l.id].items || []).slice(), f2 = finGrupo(i);
@@ -6693,7 +6695,7 @@ function pintarListas() {
             its2.splice(f2 + 1, 0, { grupo: nuevoId(), titulo: n }, ...copia);
             guardarLista(db.listas[l.id], { items: its2 });
           } },
-          { texto: "Quitar el mesociclo (sus semanas y entrenamientos se quedan)", accion: () => {
+          { texto: "Quitar el mesociclo (sus semanas y entrenos se quedan)", accion: () => {
             const fresca = db.listas[l.id], antes = [["listas", { ...fresca }]];
             guardarLista(fresca, { items: (fresca.items || []).filter(y => !(esGrupoL(y) && y.grupo === x.grupo)) });
             avisoDeshacer("Agrupación «" + x.titulo + "» quitada", antes);
@@ -6714,11 +6716,11 @@ function pintarListas() {
         fs.innerHTML = '<span class="ls-tit"></span><span class="ls-n"></span><button type="button" class="menu-btn">⋯</button>';
         fs.querySelector(".ls-tit").textContent = x.titulo;
         const ents = (() => { let c = 0, j = i + 1; const its = l.items || []; while (j < its.length && !esSep(its[j])) { if (db.plantillas[its[j]] && !db.plantillas[its[j]].borrado) c++; j++; } return c; })();
-        fs.querySelector(".ls-n").textContent = ents + (ents === 1 ? " entrenamiento" : " entrenamientos");
+        fs.querySelector(".ls-n").textContent = ents + (ents === 1 ? " entreno" : " entrenos");
         fs.querySelector(".menu-btn").addEventListener("click", () => abrirMenu(x.titulo, "", [
-          { texto: "+ Añadir entrenamiento aquí…", accion: () => anadir(finSeccion(i)) },
+          { texto: "+ Añadir entreno aquí…", accion: () => anadir(finSeccion(i)) },
           { texto: "Empezar un mesociclo aquí (agrupa desde esta semana)…", accion: () => nuevoGrupo(i - 1) },
-          { texto: "Duplicar (copia con los mismos entrenamientos)", accion: async () => {
+          { texto: "Duplicar (copia con los mismos entrenos)", accion: async () => {
             const n = await pedirNombre("Nombre de la copia", x.titulo.replace(/\d+/, d => String(+d + 1)) === x.titulo ? x.titulo + " (copia)" : x.titulo.replace(/\d+/, d => String(+d + 1)));
             if (!n) return;
             const its = (db.listas[l.id].items || []).slice(), fin = finSeccion(i);
@@ -6731,7 +6733,7 @@ function pintarListas() {
             const its = (db.listas[l.id].items || []).map(y => esSep(y) && y.sep === x.sep ? { ...y, titulo: n } : y);
             guardarLista(db.listas[l.id], { items: its });
           } },
-          { texto: "Quitar el bloque (sus entrenamientos se quedan en la lista)", accion: () => {
+          { texto: "Quitar el bloque (sus entrenos se quedan en la lista)", accion: () => {
             const fresca = db.listas[l.id], antes = [["listas", { ...fresca }]];
             guardarLista(fresca, { items: (fresca.items || []).filter(y => !(esSep(y) && y.sep === x.sep)) });
             avisoDeshacer("«" + x.titulo + "» quitada", antes);
@@ -6759,7 +6761,7 @@ function pintarListas() {
         cuerpoB.className = "lb-cuerpo";
         const add = document.createElement("div");
         add.className = "add-fila lb-add";
-        add.innerHTML = '<button type="button" class="add-ej">+ Entrenamiento en este bloque</button>';
+        add.innerHTML = '<button type="button" class="add-ej">+ Entreno en este bloque</button>';
         add.firstChild.addEventListener("click", () => anadir(finSeccion(i)));
         caj.append(fs, cuerpoB, add);
         cajaG.appendChild(caj);
@@ -7016,7 +7018,7 @@ function refrescarDetalle() {
     $("detGraficaTit").textContent = "Progreso";
   } else if (esDistancia(tipo)) {
     if (st.mejorRitmo) rec.appendChild(recuadro("Mejor ritmo", ritmo(st.mejorRitmo, tipo), fmtDist(st.mejorRitmo.distancia) + " en " + fmtTiempo(st.mejorRitmo.tiempo) + " · " + fechaCorta(st.mejorRitmo.fecha), true));
-    rec.appendChild(recuadro("Distancia total", fmtDist(st.total), st.sesiones.length + " sesiones · " + st.lista.length + " series"));
+    rec.appendChild(recuadro("Distancia total", fmtDist(st.total), plural(st.sesiones.length, "sesión", "sesiones") + " · " + plural(st.lista.length, "serie", "series")));
     if (st.tiempoTotal > 0) rec.appendChild(recuadro("Tiempo total", fmtTiempo(st.tiempoTotal), ""));
     (st.marcas || []).forEach(s => {
       const li = document.createElement("li");
@@ -7032,14 +7034,14 @@ function refrescarDetalle() {
     etiqueta = v => km ? num(Math.round(v * 100) / 100) + " km" : num(Math.round(v)) + " m";
   } else if (tipo === "movilidad") {
     const segs = x => n0(x.tiempo) * (x.por_lado ? 2 : 1);
-    rec.appendChild(recuadro("Sesiones", String(st.sesiones.length), st.lista.length + " series", true));
+    rec.appendChild(recuadro("Sesiones", String(st.sesiones.length), plural(st.lista.length, "serie", "series"), true));
     if (st.tiempoTotal > 0) rec.appendChild(recuadro("Tiempo total", fmtSegs(st.tiempoTotal), "contando los dos lados"));
     $("detGraficaTit").textContent = "Progreso · minutos por sesión";
     puntos = st.sesiones.slice(-12).map(s => ({ f: s.fecha, v: Math.round(s.series.reduce((m, x) => m + segs(x), 0) / 6) / 10 }));
     etiqueta = v => num(v) + " min";
   } else if (st.normal && !st.normal.length) {
     // v262: solo series por condición (p. ej. pasos de granjero): una marca por condición, sin ganador entre condiciones distintas
-    rec.appendChild(recuadro("Sesiones", String(st.sesiones.length), st.lista.length + " series", true));
+    rec.appendChild(recuadro("Sesiones", String(st.sesiones.length), plural(st.lista.length, "serie", "series"), true));
     if (!st.condiciones.length) rec.appendChild(recuadro("Marcas", "—", "Se comparan con la misma carga y distancia (con su tiempo) o la misma carga por tiempo o repeticiones"));
     $("detGraficaTit").textContent = "Progreso · series por sesión";
     puntos = st.sesiones.slice(-12).map(s => ({ f: s.fecha, v: s.series.length }));
@@ -7050,20 +7052,20 @@ function refrescarDetalle() {
     const val = (st.normal || st.lista).filter(x => n0(x[campo]) > 0 && !x.calentamiento);
     const mejor = val.reduce((m, x) => !m || n0(x[campo]) > n0(m[campo]) ? x : m, null);
     if (mejor) rec.appendChild(recuadro(medida === "reps" ? "Máximo de repeticiones" : "Tiempo máximo", fmtV(n0(mejor[campo])), (n0(mejor.peso) > 0 ? "con " + num(mejor.peso) + " kg · " : "") + fechaCorta(mejor.fecha), true));
-    rec.appendChild(recuadro("Sesiones", String(st.sesiones.length), st.lista.length + " series"));
+    rec.appendChild(recuadro("Sesiones", String(st.sesiones.length), plural(st.lista.length, "serie", "series")));
     $("detGraficaTit").textContent = "Progreso · " + (medida === "reps" ? "repeticiones máximas" : "tiempo máximo") + " por sesión";
     puntos = st.sesiones.slice(-12).map(x => ({ f: x.fecha, v: Math.max.apply(null, x.series.filter(y => !porCondicion(y)).map(y => n0(y[campo])).concat(0)) }));
     etiqueta = v => medida === "reps" ? num(v) + " reps" : fmtSegs(Math.round(v));
   } else if (st.mejor) {
     rec.appendChild(recuadro("Peso máximo", num(st.mejor.peso) + " kg", "× " + n0(st.mejor.reps) + " · " + fechaCorta(st.mejor.fecha), true));
     rec.appendChild(recuadro("1RM estimado", num(Math.round(rm(st.mejorRm))) + " kg", serieTexto(st.mejorRm) + " · " + fechaCorta(st.mejorRm.fecha)));
-    rec.appendChild(recuadro("Sesiones", String(st.sesiones.length), st.lista.length + " series"));
+    rec.appendChild(recuadro("Sesiones", String(st.sesiones.length), plural(st.lista.length, "serie", "series")));
     $("detGraficaTit").textContent = "Progreso · 1RM estimado";
     puntos = st.sesiones.slice(-12).map(s => ({ f: s.fecha, v: Math.max.apply(null, s.series.filter(cuentaRm).map(rm).concat(0)) }));
     etiqueta = v => num(Math.round(v * 10) / 10) + " kg";
   } else {
     rec.appendChild(recuadro("Más repeticiones", n0(st.mejorReps.reps) + " reps", fechaCorta(st.mejorReps.fecha), true));
-    rec.appendChild(recuadro("Sesiones", String(st.sesiones.length), st.lista.length + " series"));
+    rec.appendChild(recuadro("Sesiones", String(st.sesiones.length), plural(st.lista.length, "serie", "series")));
     $("detGraficaTit").textContent = "Progreso · repeticiones";
     puntos = st.sesiones.slice(-12).map(s => ({ f: s.fecha, v: Math.max.apply(null, s.series.map(x => n0(x.reps))) }));
     etiqueta = v => num(v) + " reps";
@@ -7305,8 +7307,8 @@ function ofrecerRetiradaCarga(id, contexto) {
   if (!filas.length) return;
   const antes = filas.map(s => ({ ...s }));
   const sello = s => JSON.stringify([s.id, s.fecha, s.grupo || "", s.ejercicio_id, !!s.borrado, hecha(s), s.peso || 0, s.pct || 0, s.pct_ref || "", s.ciclo_id || "", s.seccion || "", s.bloque_id || "", s.copia || 0]);
-  abrirMenu("Peso previsto de este entrenamiento", "La ficha ya no incluye Carga. Cambiarla no elimina valores guardados. Entrenamiento: «" + (contexto.grupo || "Ejercicios sueltos") + "». Fecha: " + fechaLargaPlant(contexto.fecha) + ". " + filas.length + (filas.length === 1 ? " serie pendiente afectada." : " series pendientes afectadas.") + " Se quitarán kg, % y la referencia al ciclo solo de estas pendientes; el historial de ciclos, las completadas y otras copias/días se conservan. Al confirmar volverás al entrenamiento y podrás Deshacer.", [
-    { texto: "Quitar el peso previsto solo en este entrenamiento y día", accion: () => {
+  abrirMenu("Peso previsto de este entreno", "La ficha ya no incluye Carga. Cambiarla no elimina valores guardados. Entrenamiento: «" + (contexto.grupo || "Ejercicios sueltos") + "». Fecha: " + fechaLargaPlant(contexto.fecha) + ". " + filas.length + (filas.length === 1 ? " serie pendiente afectada." : " series pendientes afectadas.") + " Se quitarán kg, % y la referencia al ciclo solo de estas pendientes; el historial de ciclos, las completadas y otras copias/días se conservan. Al confirmar volverás al entrenamiento y podrás Deshacer.", [
+    { texto: "Quitar el peso previsto solo en este entreno y día", accion: () => {
       const actuales = pendientesCarga(id, contexto);
       if (admite(id, "carga") || actuales.length !== antes.length || actuales.some((s, i) => sello(s) !== sello(antes[i]))) { setEstado("Las series cambiaron. Reabre la acción para revisar el contexto y el recuento."); return; }
       const deshacer = actuales.map(s => ["series", { ...s }]);
@@ -8672,7 +8674,7 @@ function anadirMesoALista(m, l) {
   if (porSemana) for (let w = 0; w < n0(m.semanas); w++) { const ps = semana(w); if (!ps.length) continue; nuevos.push({ sep: nuevoId(), titulo: "Semana " + (w + 1) + (esDescarga(m, w) ? " (descarga)" : "") }, ...ps); }
   else { const ps = semana(0); if (ps.length) nuevos.push(...ps); }
   if (nuevos.length) nuevos.unshift({ grupo: nuevoId(), titulo: m.nombre + " · " + n0(m.semanas) + " semanas" });
-  if (!nuevos.length) { avisoDeshacer("Este mesociclo no tiene entrenamientos en sus días: añádelos primero", null); return; }
+  if (!nuevos.length) { avisoDeshacer("Este mesociclo no tiene entrenos en sus días: añádelos primero", null); return; }
   const meter = () => {
     const fresca = db.listas[l.id], antes = { ...fresca };
     cambiar("listas", { ...fresca, items: (fresca.items || []).concat(nuevos) });
@@ -9227,7 +9229,7 @@ function pintarResumen() {
   const mins = v => num(Math.round(v)) + " min";
   if (a.mov || b.mov) cont.appendChild(recuadro("Movilidad", mins(a.mov), dif(Math.round(a.mov), Math.round(b.mov), mins)));
   const pct = (hechas, total) => total ? Math.round(hechas / total * 100) + " % completado" : "Sin sesiones previstas";
-  if (a.entrenosPrevistos || b.entrenosPrevistos) cont.appendChild(recuadro("Entrenamientos completados", a.entrenosHechos + " de " + a.entrenosPrevistos, pct(a.entrenosHechos, a.entrenosPrevistos) + " · semana anterior: " + b.entrenosHechos + " de " + b.entrenosPrevistos));
+  if (a.entrenosPrevistos || b.entrenosPrevistos) cont.appendChild(recuadro("Entrenos completados", a.entrenosHechos + " de " + a.entrenosPrevistos, pct(a.entrenosHechos, a.entrenosPrevistos) + " · semana anterior: " + b.entrenosHechos + " de " + b.entrenosPrevistos));
   cont.appendChild(recuadro("Series hechas", a.series + " de " + a.total, (a.total ? Math.round(a.series / a.total * 100) + " % de lo planificado · " : "") + "anterior: " + b.series + " de " + b.total));
   Object.entries(a.porTipo).forEach(([tipo, t]) => cont.appendChild(recuadro((TIPOS[tipo] || TIPOS.fuerza).nombre + " · series", t.hechas + " de " + t.total, pct(t.hechas, t.total))));
   cont.appendChild(recuadro("Días entrenados", String(a.dias), "anterior: " + b.dias));
@@ -9400,8 +9402,8 @@ function restaurar(archivo) {
       if (!local || (local.borrado && !f.borrado) || Date.parse(f.actualizado) > Date.parse(local.actualizado)) cambios.push([t, f]);
     }));
     if (!cambios.length) { setEstado("La copia no tiene nada que no esté ya en la app."); return; }
-    abrirMenu("Restaurar copia", "Copia del " + (j.exportado ? fechaCorta(iso(new Date(j.exportado))) : "?") + ": se recuperan " + cambios.length + " elementos que faltan o son más antiguos aquí. No se borra nada de lo que tienes.", [
-      { texto: "Restaurar " + cambios.length + " elementos", accion: () => {
+    abrirMenu("Restaurar copia", "Copia del " + (j.exportado ? fechaCorta(iso(new Date(j.exportado))) : "?") + ": se recuperan " + plural(cambios.length, "elemento", "elementos") + " que faltan o son más antiguos aquí. No se borra nada de lo que tienes.", [
+      { texto: "Restaurar " + plural(cambios.length, "elemento", "elementos"), accion: () => {
         cambios.forEach(([t, f]) => {
           const fila = {};
           TABLAS[t].campos.forEach(c => { if (f[c] !== undefined) fila[c] = f[c]; });
@@ -9410,7 +9412,7 @@ function restaurar(archivo) {
           if (t === "ejercicios" && !fila.compartido && !db.ejercicios[fila.id]) fila.retenido = true;
           cambiar(t, fila, true);
         });
-        persistir(); pintarTodo(); setEstado("Copia restaurada: " + cambios.length + " elementos");
+        persistir(); pintarTodo(); setEstado("Copia restaurada: " + plural(cambios.length, "elemento", "elementos"));
       } }
     ]);
   };
@@ -9591,7 +9593,7 @@ function guardarRutina(r, comoMeso, inicio, semanas, enLista) {
     cambiar("listas", { ...fresca, items }, true);
     listasAbiertas[fresca.id] = true; escribir("listas-abiertas-v1", listasAbiertas);
     persistir(); pintarPlan();
-    avisoDeshacer(n + (n === 1 ? " entrenamiento guardado" : " entrenamientos guardados") + " en la lista «" + fresca.nombre + "»", null);
+    avisoDeshacer(n + (n === 1 ? " entreno guardado" : " entrenos guardados") + " en la lista «" + fresca.nombre + "»", null);
     verPestana("listas");
     return;
   }
@@ -9707,14 +9709,14 @@ function vistaRutina(r, cont) {
       const d = document.createElement("div"); d.className = "rutina-ses";
       const cab = document.createElement("div"); cab.className = "ia-editor-cab";
       const t = document.createElement("b"); t.textContent = s.nombre + (s.dias.length ? " · " + textoDias(s.dias) : "");
-      cab.append(t, boton("Cambiar nombre", () => renombrar("Nombre del entrenamiento", s.nombre, n => {
+      cab.append(t, boton("Cambiar nombre", () => renombrar("Nombre del entreno", s.nombre, n => {
         s.nombre = n.slice(0,60); actualizarDestinoIA();
       }))); d.appendChild(cab);
       const partes = partesImportacionIA(s);
       partes.forEach((parte, posicionParte) => {
         const items = s.items.filter(it => (it.seccion || "") === parte);
         const caja = document.createElement("details"); caja.className = "rutina-parte-det ia-parte-editor"; caja.open = true;
-        const summary = document.createElement("summary"); summary.textContent = (parte || "Sin parte") + " · " + contarSeries(items) + " series";
+        const summary = document.createElement("summary"); summary.textContent = (parte || "Sin parte") + " · " + plural(contarSeries(items), "serie", "series");
         caja.appendChild(summary);
         const acciones = document.createElement("div"); acciones.className = "ia-editor-acciones";
         acciones.appendChild(boton("Renombrar parte", () => renombrar("Nombre de la parte", parte, n => {
@@ -10228,7 +10230,7 @@ async function importarDocumento(f) {
     $("iaRespuesta").value = prepararTextoImportado(texto, f.name);
     $("iaDocumentoAyuda").hidden = false;
     $("iaRevisar").click();
-    setEstado("Documento leído. Revisa el texto y el entrenamiento antes de guardarlo.");
+    setEstado("Documento leído. Revisa el texto y el entreno antes de guardarlo.");
   } else {
     pintarCamposIA();
     setEstado("El archivo no contiene texto extraíble. Puedes adjuntarlo a tu IA con el prompt preparado.");
@@ -10267,7 +10269,7 @@ function orientarImportacionIA() {
   pasoIA("vista");
   $("iaVistaTit").textContent = rutinaIA.nombre.replace(/_/g, " ");
   $("iaAvisoDias").textContent = tipo === "entrenamiento"
-    ? "Edita las partes y los ejercicios aquí. Los cambios no se guardan hasta que elijas dónde añadir el entrenamiento."
+    ? "Edita las partes y los ejercicios aquí. Los cambios no se guardan hasta que elijas dónde añadir el entreno."
     : "Hay varias sesiones, pero no se indica una duración en semanas. Elige una sesión para el calendario o abre el editor de mesociclo para organizar el plan.";
   $("iaVistaCaja").scrollIntoView({ block: "start" });
 }
@@ -10367,7 +10369,7 @@ $("iaRevisar").addEventListener("click", () => {
   if (!r.error && !numerado) $("iaRespuesta").value = preparado;
   rutinaIA = r.error ? null : r;
   $("iaError").textContent = r.error ? (docIA
-    ? "El documento se ha leído, pero su estructura no se puede convertir completa automáticamente. No se ha guardado ningún entrenamiento. Puedes preparar la conversión con tu IA o adaptar el texto; añadir solo RUTINA no basta si las series tienen otro formato."
+    ? "El documento se ha leído, pero su estructura no se puede convertir completa automáticamente. No se ha guardado ningún entreno. Puedes preparar la conversión con tu IA o adaptar el texto; añadir solo RUTINA no basta si las series tienen otro formato."
     : r.error + " Puedes editar el texto aquí. Usa ## para cada sesión y - Ejercicio [fuerza]: 3x10 para sus ejercicios.") : "";
   $("iaVistaTit").textContent = r.error ? "" : r.nombre;
   pintarVistaIA();
@@ -10405,7 +10407,7 @@ $("iaAnadirDia").addEventListener("click", () => {
   if (!r || !validarEdicionIA()) return;
   const original = sesionesImportadas()[Number($("iaDiaSesion").value)]?.s;
   const titulo = $("iaNombreSesion").value.trim();
-  if (!original || !titulo) { avisoImportacionIA("Escribe el nombre del entrenamiento para guardarlo."); $("iaDiaOp").open=true; $("iaNombreSesion").focus(); return; }
+  if (!original || !titulo) { avisoImportacionIA("Escribe el nombre del entreno para guardarlo."); $("iaDiaOp").open=true; $("iaNombreSesion").focus(); return; }
   if (destino !== "plantilla" && !fechaSerieValida(f)) { avisoImportacionIA("Elige un día válido para el calendario."); $("iaDiaOp").open=true; $("iaDiaFecha").focus(); $("iaDiaFecha").reportValidity(); return; }
   const s = { ...original, nombre: titulo };
   if (destino !== "calendario") guardarRutina({ ...r, multi: false, bloques: [{ sesiones: [s] }] }, false);
@@ -10465,7 +10467,7 @@ function textoDiscos(kg) {
   if (lado < 0.01) return "solo la barra";
   const usados = [];
   for (const d of DISCOS) while (lado >= d - 1e-9) { usados.push(d); lado -= d; }
-  return "por lado: " + usados.map(num).join(" + ") + (lado > 0.01 ? " (faltan " + num(Math.round(lado * 200) / 100) + " kg)" : "");
+  return "Discos: " + usados.map(num).join(" + ") + " por lado" + (lado > 0.01 ? " (faltan " + num(Math.round(lado * 200) / 100) + " kg)" : "");
 }
 // Campo con − y + a los lados
 const paso = input => '<span class="paso"><button type="button" class="menos" aria-label="Menos" tabindex="-1">−</button>' + input + '<button type="button" class="mas" aria-label="Más" tabindex="-1">+</button></span>';
@@ -10566,7 +10568,7 @@ function aceptarCalent(fecha, id, grupo, series, pasos) {
   // Un botón anterior no puede añadir la propuesta de otra carga ni reabrir una respuesta No.
   if (actuales.some(s => !!s.ciclo_id)) {
     pasos = sugerenciaCalent(fecha, id, actuales);
-    if (!pasos || !pasos.length) { setEstado(pasos?.aviso || "Completa una carga Bilbo válida o revisa la respuesta de este ejercicio en el entrenamiento y día; no se añadió calentamiento."); return []; }
+    if (!pasos || !pasos.length) { setEstado(pasos?.aviso || "Completa una carga Bilbo válida o revisa la respuesta de este ejercicio en el entreno y día; no se añadió calentamiento."); return []; }
   }
   const base = actuales.find(s => !s.calentamiento), g = base.grupo || "", bilbo = esBilboCalent(actuales), parte = bilbo ? nombreParteBilbo(id) : PARTE_CALENT_BILBO;
   const dia = dias.find(d => d.id === fecha), caja = dia && [...dia.bloquesEl.querySelectorAll(":scope > .grupo")].find(el => el.dataset.grupo === g);
@@ -11460,8 +11462,8 @@ function pintarCabDia(dia) {
   dia.empezarEl.hidden = !del.length;
   const variasSesiones = new Set(del.map(s => s.grupo || "")).size > 1;
   dia.empezarEl.textContent = del.length && h === del.length ?
-    (variasSesiones ? "✓ Día completado · Ver entrenamientos" : "✓ Completado · Ver entrenamiento") :
-    variasSesiones ? "▶ Elegir entrenamiento" : h ? "▶ Seguir entreno (" + h + "/" + del.length + ")" : "▶ Empezar entreno";
+    (variasSesiones ? "✓ Día completado · Ver entrenos" : "✓ Completado · Ver entreno") :
+    variasSesiones ? "▶ Elegir entreno" : h ? "▶ Seguir entreno (" + h + "/" + del.length + ")" : "▶ Empezar entreno";
 }
 
 // ---------- Deshacer, deslizar y récords ----------
@@ -11597,7 +11599,7 @@ function pintarNotaEntreno() {
   const s = serieEnt();
   $("enNota").textContent = s?.nota || "+ Añadir instrucciones";
   $("enNota").hidden = !s;
-  $("enNota").setAttribute("aria-label", (s?.nota ? "Editar" : "Añadir") + " instrucciones de este ejercicio en este entrenamiento y día");
+  $("enNota").setAttribute("aria-label", (s?.nota ? "Editar" : "Añadir") + " instrucciones de este ejercicio en este entreno y día");
 }
 async function editarNotaEntreno() {
   const contexto = ent, s = serieEnt();
@@ -11608,7 +11610,7 @@ async function editarNotaEntreno() {
   const foto = lista => JSON.stringify(lista.map(x => [x.id, x.nota || ""]).sort((a, b) => a[0].localeCompare(b[0])));
   const antes = foto(alcance), quitar = $("dlgTexto").querySelector('[data-cerrar="quitar"]');
   const oculto = quitar.hidden, aria = $("txtInput").getAttribute("aria-label");
-  quitar.hidden = true; $("txtInput").setAttribute("aria-label", "Instrucciones de este entrenamiento y día");
+  quitar.hidden = true; $("txtInput").setAttribute("aria-label", "Instrucciones de este entreno y día");
   let texto;
   try {
     texto = await pedirTexto((distintas ? "Instrucciones de esta serie" : "Instrucciones comunes") + " · " + nombreEj(s.ejercicio_id), s.nota || "",
@@ -11627,7 +11629,7 @@ function empezarEntreno(dia, grupo) {
     const grupos = [...new Set(seriesDelDia(dia.id).map(s => s.grupo || ""))];
     const abiertos = [...dia.bloquesEl.querySelectorAll(":scope > .grupo:not(.g-plegado)")].map(x => x.dataset.grupo || "").filter(g => grupos.includes(g));
     if (grupos.length > 1) {
-      abrirMenu("Elige un entrenamiento", "Los completados se pueden abrir para revisar lo registrado.", grupos.map(g => {
+      abrirMenu("Elige un entreno", "Los completados se pueden abrir para revisar lo registrado.", grupos.map(g => {
         const filas = seriesDelDia(dia.id).filter(s => (s.grupo || "") === g), hechas = filas.filter(hecha).length;
         return { texto: (hechas === filas.length ? "✓ " : "▶ ") + (g || (grupos.some(Boolean) ? "Ejercicios sueltos" : "Entreno 1")) +
           (hechas === filas.length ? " · Completado" : hechas ? " · Seguir (" + hechas + "/" + filas.length + ")" : " · Empezar"),
@@ -12056,7 +12058,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v318" + (BETA ? " beta" : "");
+const VERSION_APP = "v319" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";
@@ -12802,7 +12804,7 @@ function fpValidar() {
   $("fpElegida").textContent = "Se añadirá el " + fechaLargaPlant(f) + " (" + rel + (visible ? ", en la semana que estás viendo" : ", de otra semana: al confirmar se abrirá ese día") + ").";
   const hay = seriesDelDia(f).length;
   const grupos = gruposDelDia(f).length;
-  if (!hay && grupos) $("fpElegida").textContent += " Ese día ya tiene " + grupos + " entrenamientos o elementos vacíos: se conservan y lo nuevo se añade detrás.";
+  if (!hay && grupos) $("fpElegida").textContent += " Ese día ya tiene " + plural(grupos, "entreno", "entrenos") + " o elementos vacíos: se conservan y lo nuevo se añade detrás.";
   if (aTexto((db.entrenos[f] || {}).html || "").trim()) $("fpElegida").textContent += " Las notas del día se conservan.";
   if (hay) $("fpElegida").textContent += " Ese día ya tiene " + hay + (hay === 1 ? " serie" : " series") + ": se conservan y las nuevas se añaden detrás.";
   $("fpAnadir").disabled = false;

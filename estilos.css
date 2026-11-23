@@ -1423,7 +1423,7 @@ h1 { color: var(--titulo); }
 /* Descanso compacto; en fuerza va en la línea de «Reps ▾ · Por lado» con OK al final */
 .ns-desc.desc-en-ops { flex: 1 1 auto; margin-left: auto; justify-content: flex-end; gap: 6px; min-width: 0; }
 .ns-desc.desc-en-ops .in-c { flex: 0 1 110px; width: 110px; min-width: 70px; text-align: center; }
-.ops-fuerza { flex-wrap: nowrap; }
+.ops-fuerza { flex-wrap: wrap; row-gap: 6px; }   /* v358: antes nowrap; con «Por lado» el grupo [⏱ desc.] [Cancelar] [✓ Guardar] salía de la tarjeta (se cortaba «✓ Guardar»). Si no cabe en una línea, pasa a la siguiente, alineado a la derecha */
 .ops-fuerza .lado-op { white-space: nowrap; flex: none; }
 .ns-extra:has(.desc-en-ops) { display: flex !important; }
 @media (max-width: 760px) {
@@ -1435,7 +1435,7 @@ h1 { color: var(--titulo); }
 /* Línea «Reps ▾ · Por lado · ⏱ descanso · OK»: todo a la misma altura y alineado */
 .ops-fuerza { align-items: center; width: 100%; }
 .ops-fuerza .medida-btn, .ns-desc.desc-en-ops .in-c, .ns-desc.desc-en-ops .anadir { height: 38px; min-height: 38px; box-sizing: border-box; }
-.ns-desc.desc-en-ops { display: flex; align-items: center; gap: 6px; margin-left: auto; flex: none; }
+.ns-desc.desc-en-ops { display: flex; align-items: center; gap: 6px; margin-left: auto; flex: none; flex-wrap: wrap; justify-content: flex-end; max-width: 100%; row-gap: 6px; }   /* v358: si ni el grupo solo cabe (320 px), se parte: [⏱ desc.] y debajo [Cancelar] [✓ Guardar], completos */
 .ns-desc.desc-en-ops .desc-ic { color: var(--muted-txt); font-size: 16px; }
 .ns-desc.desc-en-ops .in-c { width: 64px; flex: none; text-align: center; padding: 6px 4px; border-radius: 8px; }
 .ns-desc.desc-en-ops .anadir { padding: 0 14px; }

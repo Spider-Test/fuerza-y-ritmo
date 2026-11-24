@@ -3111,3 +3111,11 @@ html.ampliado #vistaSemana.solo-dia #semana, html.ampliado #vistaSemana.solo-dia
   #nuevaLista.nav-btn, #nuevaMolestia.nav-btn, .sec-cab .sec-botones .nav-btn { min-height: 44px; }
   .sec-cab .sec-botones .nav-btn::after { content: none; }   /* en móvil/táctil el propio botón ya mide 44 px: sin área invisible añadida */
 }
+
+/* v359 (MEJ-SEM-005): asa ≡ de cada letra (mover la letra entera dentro de su parte). Va en la caja de la letra, sobre el lado derecho de su cabecera;
+   como las demás asas solo se ve y responde con «Reordenar»; con la letra plegada también (se puede mover plegada) */
+.letra-caja { position: relative; }
+.letra-caja > .asa-letra { position: absolute; top: 0; right: 0; z-index: 1; width: 44px; height: 44px; }
+.letra-caja.l-plegada > .asa-letra { display: inline-flex !important; align-items: center; justify-content: center; }
+.reordenando .letra-caja:has(> .asa-letra) > .letra-cab { padding-right: 48px; }
+

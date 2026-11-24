@@ -4099,6 +4099,15 @@ function pintarDiaSinAncla(dia) {
           escribir("grupos-plegados-v1", gruposPlegados);
           ponerL(pl);
         });
+        // v359 (MEJ-SEM-005): asa ≡ para mover la LETRA entera dentro de su parte (solo con «Reordenar», como las demás asas).
+        // Va dentro de la caja de la letra, fuera del botón de la cabecera (no se anidan botones) y sobre su lado derecho.
+        // Una letra con una superserie vacía no se mueve: esas superseries siempre se pintan al final de la parte (no tienen orden guardado)
+        if (items.some(x => x.id.startsWith("v:"))) lc.dataset.fija = "1";
+        else if (porLetra.filter(l => !l.items.some(x => x.id.startsWith("v:"))).length > 1) {
+          const asaL = asaArrastre(lc, () => [...dest.querySelectorAll(":scope > .letra-caja:not([data-fija])")], n => moverLetras(dest, n, p.nombre), "la letra " + letra + " con sus ejercicios");
+          asaL.classList.add("asa-letra");
+          lc.appendChild(asaL);
+        }
       });
       if (p.nombre) {
         const add = document.createElement("div");
@@ -4190,6 +4199,58 @@ function pintarDiaSinAncla(dia) {
       if (i < 0 || j < 0 || j >= l.length) return;
       [l[i], l[j]] = [l[j], l[i]];
       soltar(l);
+    };
+    // v359 (MEJ-SEM-005): mover una LETRA entera (todos sus ejercicios y superseries, que van seguidos) a otra posición entre las letras de SU parte.
+    // El orden se guarda como al mover ejercicios (series.orden y, para los que aún no tienen series, su sitio local); después se normalizan las marcas
+    // de letra de la parte: el primer elemento de cada letra empieza letra y los demás siguen la suya (el primero de la parte no cambia: nunca abre letra).
+    // El plegado sigue al CONTENIDO de cada letra (no a su nombre, que cambia con la posición). «Deshacer» restaura orden, marcas y plegado exactos.
+    const moverLetras = (pc, n, parteNombre) => {
+      const todas = [...pc.querySelectorAll(":scope > .letra-caja")], antes = todas.filter(c => !c.dataset.fija);
+      if (n.length !== antes.length || n.every((c, i) => c === antes[i])) return;
+      const itemsC = c => [...c.querySelectorAll(":scope > .bloque[data-clave]")];
+      const l = movibles(), viejos = antes.flatMap(itemsC), i0 = l.indexOf(viejos[0]);
+      if (i0 < 0 || viejos.some((x, k) => l[i0 + k] !== x)) return;   // solo si los ejercicios de la parte van seguidos (siempre lo están)
+      const nl = l.slice(0, i0).concat(n.flatMap(itemsC), l.slice(i0 + viejos.length));
+      // Estado previo para «Deshacer»: filas completas de las series de la parte, marcas locales del día, cola de espera y plegado de sus letras
+      const pre = dia.id + "|", claveL = L => "l|" + dia.id + "|" + g.nombre + "|" + parteNombre + "|" + L;
+      const idsP = [...pc.querySelectorAll(".bloque[data-clave]")].flatMap(x => x.dataset.espera ? [] : seriesDeItem(dia.id, g.nombre, x.dataset.clave).map(s => s.id));
+      const filas = idsP.filter(id => db.series[id]).map(id => ["series", { ...db.series[id] }]);
+      const mapas = { esperaLetra, esperaAntes, esperaOrden };
+      const snapM = Object.fromEntries(Object.entries(mapas).map(([nm, m]) => [nm, Object.fromEntries(Object.keys(m).filter(x => x.startsWith(pre)).map(x => [x, copiaJson(m[x])]))]));
+      const snapEsp = enEspera[dia.id] ? enEspera[dia.id].slice() : null;
+      const clavesPl = todas.map(c => claveL(c.dataset.letra)), snapPl = Object.fromEntries(clavesPl.map(x => [x, gruposPlegados[x]]));
+      ultimoGesto = Date.now();   // un solo paso de Ctrl/Cmd+Z para todo el movimiento
+      registrarAntes("@dia", dia.id, instantaneaDia(dia.id, []));
+      const entradaDia = pasoHist?.find(x => x.t === "@dia" && x.k === dia.id);
+      // Plegado: cada letra conserva el suyo en su nueva posición (las letras movibles ocupan las mismas posiciones y nombres que antes)
+      const nombres = antes.map(c => c.dataset.letra), valores = n.map(c => gruposPlegados[claveL(c.dataset.letra)]);
+      nombres.forEach((L, j) => { if (valores[j] === undefined) delete gruposPlegados[claveL(L)]; else gruposPlegados[claveL(L)] = valores[j]; });
+      escribir("grupos-plegados-v1", gruposPlegados);
+      // Marcas de letra en el orden nuevo (las letras fijas, con superseries vacías, siguen al final)
+      let k = 0;
+      n.concat(todas.filter(c => c.dataset.fija)).forEach(c => [...c.querySelectorAll(":scope > .bloque")].forEach((el, j) => {
+        const clave = el.dataset.clave, pos = k++;
+        if (!clave || pos === 0) return;   // superserie vacía (siempre al final) o primer elemento de la parte: su marca no cambia
+        const v = j === 0;
+        if (el.dataset.espera) { if (v) esperaLetra[pre + clave] = 1; else delete esperaLetra[pre + clave]; }
+        else seriesDeItem(dia.id, g.nombre, clave).forEach(s => { if (!!s.letra_nueva !== v) cambiar("series", { ...s, letra_nueva: v }, true); });
+      }));
+      escribir("espera-letra-v1", esperaLetra);
+      soltar(nl);   // mismo guardado que al mover un ejercicio (orden de las series y sitio de los que aún no tienen series)
+      if (entradaDia) entradaDia.despues = instantaneaDia(dia.id, []);
+      volcarExtra(); persistir(); pintarBloques(true);
+      const restaurar = () => {
+        sinHistorial = true;
+        try { filas.forEach(([t, f]) => { const c = { ...f }; delete c.sucio; cambiar(t, c, true); }); } finally { sinHistorial = false; }
+        Object.entries(mapas).forEach(([nm, m]) => { Object.keys(m).filter(x => x.startsWith(pre)).forEach(x => delete m[x]); Object.assign(m, copiaJson(snapM[nm])); });
+        if (snapEsp) enEspera[dia.id] = snapEsp.slice(); else delete enEspera[dia.id];
+        clavesPl.forEach(x => { if (snapPl[x] === undefined) delete gruposPlegados[x]; else gruposPlegados[x] = snapPl[x]; });
+        escribir("espera-letra-v1", esperaLetra); escribir("espera-antes-v1", esperaAntes); guardarEsperaOrden(); guardarEspera(); escribir("grupos-plegados-v1", gruposPlegados);
+        volcarExtra(); persistir(); pintarTodo();
+      };
+      avisoDeshacer("Letra movida", null);
+      $("toastBtn").hidden = false;
+      deshacerSug = restaurar;
     };
     const otrasSesiones = [...new Set(grupos.map(x => x.nombre))].filter(x => x !== g.nombre);
     movibles().forEach(el => {
@@ -12058,7 +12119,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v320" + (BETA ? " beta" : "");
+const VERSION_APP = "v321" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

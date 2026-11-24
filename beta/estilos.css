@@ -2166,46 +2166,28 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); box-sha
 }
 
 
-/* Franja de cristal solo en la app instalada en iOS; los títulos quedan debajo. */
+/* v360 (MEJ-UI-002 / MEJ-UI-020): app instalada en iOS. La zona del reloj/Isla dinámica es una banda PLANA del color del fondo (sin cristal, sin desenfoque ni máscara),
+   como en el modo entrenamiento; el contenido y las cabeceras fijas empiezan justo debajo (antes: franja de cristal a safe+10 y 54/46 px de margen extra).
+   Con safe-area 0 (horizontal, sin muesca) la banda mide 0. Una banda sólida es igual con «menos transparencia» o más contraste: no necesita variante. */
 @media (max-width: 760px) {
   html.ios-instalada {
-    --sticky-cabecera: calc(env(safe-area-inset-top, 0px) + 46px);
+    --sticky-cabecera: env(safe-area-inset-top, 0px);
     background: var(--bg);
   }
   html.ios-instalada #vistaSemana:not(.solo-dia) { --sticky-entreno: var(--sticky-cabecera) !important; }
   html.ios-instalada #vistaSemana.solo-dia { --sticky-entreno: calc(var(--sticky-cabecera) + 44px) !important; }
   html.ios-instalada body {
     background: var(--bg);
-    padding-top: calc(env(safe-area-inset-top, 0px) + 54px) !important;
+    padding-top: calc(env(safe-area-inset-top, 0px) + 8px) !important;
   }
   html.ios-instalada body::before {
     content: "";
     position: fixed;
-    /* Empieza debajo del área de estado: evita superponer las dos capas. */
-    inset: calc(env(safe-area-inset-top, 0px) + 10px) 0 auto;
-    height: 36px;
+    inset: 0 0 auto;
+    height: env(safe-area-inset-top, 0px);
     z-index: 1000;
     background: var(--bg);
     pointer-events: none;
-  }
-  @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-    html.ios-instalada body::before {
-      background: color-mix(in srgb, var(--bg) 28%, transparent);
-      -webkit-backdrop-filter: blur(12px);
-      backdrop-filter: blur(12px);
-      /* Entrada y salida progresivas: sin un salto de densidad en los bordes. */
-      -webkit-mask-image: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.048) 10%, rgba(0, 0, 0, 0.173) 20%, rgba(0, 0, 0, 0.327) 30%, rgba(0, 0, 0, 0.452) 40%, rgba(0, 0, 0, 0.5) 50%, rgba(0, 0, 0, 0.452) 60%, rgba(0, 0, 0, 0.327) 70%, rgba(0, 0, 0, 0.173) 80%, rgba(0, 0, 0, 0.048) 90%, transparent 100%);
-      mask-image: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.048) 10%, rgba(0, 0, 0, 0.173) 20%, rgba(0, 0, 0, 0.327) 30%, rgba(0, 0, 0, 0.452) 40%, rgba(0, 0, 0, 0.5) 50%, rgba(0, 0, 0, 0.452) 60%, rgba(0, 0, 0, 0.327) 70%, rgba(0, 0, 0, 0.173) 80%, rgba(0, 0, 0, 0.048) 90%, transparent 100%);
-    }
-  }
-  @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-    html.ios-instalada body::before {
-      background: var(--bg);
-      -webkit-backdrop-filter: none;
-      backdrop-filter: none;
-      -webkit-mask-image: none;
-      mask-image: none;
-    }
   }
 }
 
@@ -3118,4 +3100,15 @@ html.ampliado #vistaSemana.solo-dia #semana, html.ampliado #vistaSemana.solo-dia
 .letra-caja > .asa-letra { position: absolute; top: 0; right: 0; z-index: 1; width: 44px; height: 44px; }
 .letra-caja.l-plegada > .asa-letra { display: inline-flex !important; align-items: center; justify-content: center; }
 .reordenando .letra-caja:has(> .asa-letra) > .letra-cab { padding-right: 48px; }
+
+/* v362: línea fija del cronómetro de descanso en la cabecera de «Ver todas las series» (refleja el descanso de la pantalla de la serie; mismos colores) */
+#dlgEnSeries { overflow-anchor: none; }   /* el ajuste del scroll al aparecer/desaparecer la línea lo hace el JS (igual en todos los navegadores: sin el anclaje automático del scroll) */
+#dlgEnSeries .d-cab { flex-wrap: wrap; }
+.ens-desc { flex: 0 0 100%; display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; border-radius: 12px; background: var(--accent-soft); color: var(--accent-txt); }
+.ens-desc.fin { background: var(--gold-soft); color: var(--gold); }
+.ens-d-txt { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; line-height: 1.15; }
+.ens-d-t { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.ens-d-n { font-family: var(--display); font-weight: 700; font-size: 26px; font-variant-numeric: tabular-nums; }
+.ens-d-b { display: flex; gap: 6px; flex: none; }
+.ens-desc .nav-btn { min-width: 44px; min-height: 44px; padding: 0 8px; font-size: 14px; }
 

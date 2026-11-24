@@ -27,7 +27,7 @@
   window.addEventListener("pageshow", actualizar);
 })();
 </script>
-<link rel="stylesheet" href="estilos.css?v=v359">
+<link rel="stylesheet" href="estilos.css?v=v362">
 </head>
 <body>
 
@@ -1063,7 +1063,11 @@
 </dialog>
 
 <dialog id="dlgEnSeries" aria-labelledby="ensTit">
-  <form method="dialog" class="d-cab"><h3 class="d-tit" id="ensTit">Todas las series</h3><button class="cerrar" aria-label="Cerrar">✕</button></form>
+  <form method="dialog" class="d-cab"><h3 class="d-tit" id="ensTit">Todas las series</h3><button class="cerrar" aria-label="Cerrar">✕</button>
+    <div class="ens-desc" id="ensDesc" role="group" aria-label="Cronómetro de descanso" hidden>
+      <span class="ens-d-txt"><span class="ens-d-t" id="ensDescTit"></span><span class="ens-d-n" id="ensReloj"></span></span>
+      <span class="ens-d-b"><button type="button" class="nav-btn" id="ensMenos">−15 s</button><button type="button" class="nav-btn" id="ensSaltarD">Saltar</button><button type="button" class="nav-btn" id="ensMas">+15 s</button></span>
+    </div></form>
   <div class="d-cuerpo" id="ensCuerpo"></div>
 </dialog>
 
@@ -1085,6 +1089,6 @@
 <div class="toast" id="toast" role="status" hidden><span id="toastTxt"></span><button type="button" id="toastBtn">Deshacer</button></div>
 <div class="fiesta" id="fiesta" aria-hidden="true"></div>
 
-<script src="app.js?v=v359"></script>
+<script src="app.js?v=v362"></script>
 </body>
 </html>

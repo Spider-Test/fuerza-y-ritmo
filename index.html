@@ -27,7 +27,7 @@
   window.addEventListener("pageshow", actualizar);
 })();
 </script>
-<link rel="stylesheet" href="estilos.css?v=v323">
+<link rel="stylesheet" href="estilos.css?v=v324">
 </head>
 <body>
 <div id="barraReloj" aria-hidden="true"></div>
@@ -434,8 +434,11 @@
 </dialog>
 
 <dialog id="dlgRitmos" aria-labelledby="crTitulo">
+  <form method="dialog" class="d-cab">
+    <h3 id="crTitulo" class="d-tit">Calculadora de ritmos</h3>
+    <button class="cerrar" aria-label="Cerrar">✕</button>
+  </form>
   <form id="crFormulario" class="d-form" novalidate>
-    <h3 id="crTitulo">Calculadora de ritmos</h3>
     <label class="campo">Operación
       <select id="crOperacion"><option value="ritmo">Calcular ritmo: distancia + tiempo total</option><option value="tiempo">Calcular tiempo total: distancia + ritmo</option><option value="distancia">Calcular distancia: tiempo total + ritmo</option></select>
     </label>
@@ -1092,6 +1095,6 @@
 <div class="toast" id="toast" role="status" hidden><span id="toastTxt"></span><button type="button" id="toastBtn">Deshacer</button></div>
 <div class="fiesta" id="fiesta" aria-hidden="true"></div>
 
-<script src="app.js?v=v323"></script>
+<script src="app.js?v=v324"></script>
 </body>
 </html>

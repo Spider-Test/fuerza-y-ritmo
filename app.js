@@ -1818,7 +1818,16 @@ function abrirMenu(titulo, detalle, opciones, extra) {
   if (extra) $("menuExtra").appendChild(extra);
   const cont = $("menuOpciones");
   cont.textContent = "";
-  opciones.filter(Boolean).forEach(o => {
+  // v367 (MEJ-UI-020 L10): { grupo: "Título" } pinta un encabezado de grupo (h4, no pulsable ni enfocable; se omite si no le sigue ninguna acción)
+  const lista = opciones.filter(Boolean);
+  lista.forEach((o, k) => {
+    if (o.grupo) {
+      if (!lista[k + 1] || lista[k + 1].grupo) return;
+      const t = document.createElement("h4");
+      t.className = "menu-grupo"; t.textContent = o.grupo;
+      cont.appendChild(t);
+      return;
+    }
     const b = document.createElement("button");
     b.type = "button";
     b.className = "opcion" + (o.peligro ? " peligro-op" : "");
@@ -2614,12 +2623,8 @@ function menuDia(dia) {
   const series = seriesDelDia(dia.id), html = db.entrenos[dia.id]?.html || "";
   const titulo = NOMBRES[dia.i] + " " + fmt(deIso(dia.id));
   abrirMenu(titulo, "", [
-    gruposDelDia(dia.id).length > 0 && { texto: "Cambiar nombre de un entreno…", accion: () => {
-      const gs = gruposDelDia(dia.id);
-      if (gs.length === 1) cambiarNombreEntreno(dia,gs[0]);
-      else abrirMenu("¿Qué entreno quieres renombrar?", "", gs.map(g => ({ texto:g || "Entreno 1",accion:()=>cambiarNombreEntreno(dia,g) })));
-    } },
-    (series.length || (enEspera[dia.id] || []).length) && { texto: "📅 Mover el entreno a otro día…", accion: () => elegirDiaDestino(lunesDe(deIso(dia.id)), "¿A qué día muevo el entreno del " + titulo.toLowerCase() + "?", f => moverADia(dia, null, f)) },
+    // v367 (MEJ-UI-020 L10): acciones agrupadas con títulos de grupo (no pulsables); lo que afecta al día, lo que afecta a un entreno y, al final, lo destructivo. Cada acción es la misma de antes.
+    { grupo: "Día" },
     (series.length || aTexto(html).trim()) && { texto: "Copiar día", accion: () => copiar(titulo, html, series, "dia") },
     hayItemsCopiados() && { texto: "📋 Pegar «" + porta.nombre + "» en este día", accion: () => pegar(dia) },
     { texto: "Añadir plantilla…", accion: () => elegirPlantilla("Añadir plantilla al " + titulo, p => aplicarPlantilla(dia, p)) },
@@ -2628,7 +2633,15 @@ function menuDia(dia) {
     series.length && { texto: "Guardar en una lista de entrenos…", accion: () => guardarEnLista(series[0].grupo || "Entrenamiento", series) },
     series.length && { texto: "Guardar ejercicios como plantilla…", accion: () => guardarPlantilla(series[0].grupo || "Entrenamiento", series) },
     series.length && { texto: "Compartir con un amigo…", accion: () => compartir(series[0].grupo || titulo, itemsDe(series, true)) },
-    series.length && { texto: "Vaciar ejercicios del día", peligro: true, confirmar: "Pulsa otra vez: se borran " + plural(series.length, "serie", "series"), accion: () => {
+    { grupo: "Entrenos" },
+    gruposDelDia(dia.id).length > 0 && { texto: "Cambiar nombre de un entreno…", accion: () => {
+      const gs = gruposDelDia(dia.id);
+      if (gs.length === 1) cambiarNombreEntreno(dia,gs[0]);
+      else abrirMenu("¿Qué entreno quieres renombrar?", "", gs.map(g => ({ texto:g || "Entreno 1",accion:()=>cambiarNombreEntreno(dia,g) })));
+    } },
+    (series.length || (enEspera[dia.id] || []).length) && { texto: "📅 Mover el entreno a otro día…", accion: () => elegirDiaDestino(lunesDe(deIso(dia.id)), "¿A qué día muevo el entreno del " + titulo.toLowerCase() + "?", f => moverADia(dia, null, f)) },
+    { grupo: "Eliminar" },
+    series.length && { texto: "Borrar todas las series del día (también las hechas)", peligro: true, confirmar: "Pulsa otra vez: se borran " + plural(series.length, "serie", "series"), accion: () => {
       series.forEach(s => cambiar("series", { ...s, borrado: true }, true)); delete enEspera[dia.id]; guardarEspera(); persistir(); pintarDia(dia);
     } }
   ]);
@@ -12155,7 +12168,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v323" + (BETA ? " beta" : "");
+const VERSION_APP = "v324" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

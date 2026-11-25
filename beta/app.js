@@ -4401,6 +4401,7 @@ function pintarDiaSinAncla(dia) {
       ]));
       caja.appendChild(add);
     }
+    marcarTipoUniforme(caja, delDia, g.nombre);   // v366 (MEJ-UI-020 L5)
     cont.appendChild(caja);
   });
   // Si la carrera (o la natación) está repartida en varias sesiones, además el total del día de ese deporte
@@ -4411,6 +4412,15 @@ function pintarDiaSinAncla(dia) {
   pintarCabDia(dia);
   pintarResumenDescripcion(dia);
   if (selSeries) pintarSelSeries();
+}
+
+// v366 (MEJ-UI-020, L5-a): solo presentación. Si todos los ejercicios de un entreno (o del grupo de «Ejercicios sueltos») son del mismo tipo,
+// su etiqueta (FUERZA, CARRERA…) no se muestra en las tarjetas de Semana; si mezcla tipos, se muestra en todas. No toca datos ni otras pantallas.
+function marcarTipoUniforme(caja, delDia, nombreGrupo) {
+  const tipos = new Set([...caja.querySelectorAll(".bloque[data-ej]:not(.bloque-rep)")].map(el => (el.className.match(/(?:^|\s)t-(\S+)/) || [])[1]));
+  delDia.forEach(s => { if (s.bloque_id && (s.grupo || "") === nombreGrupo) tipos.add(tipoDe(s.ejercicio_id)); });
+  tipos.delete(undefined);
+  caja.classList.toggle("tipo-uniforme", tipos.size <= 1);
 }
 
 function etiquetaTipo(tipo) {
@@ -12198,7 +12208,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v365" + (BETA ? " beta" : "");
+const VERSION_APP = "v366" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";
@@ -13058,6 +13068,7 @@ const GRUPOS_PLAN = {
 function aplicarGrupoPlan() {
   const grupo = leer("plan-grupo-v1") || "crear", secciones = GRUPOS_PLAN[grupo] || GRUPOS_PLAN.crear;
   document.querySelectorAll("#vistaPlan > .plan-sec[data-sec]").forEach(sec => { sec.hidden = !secciones.includes(sec.dataset.sec); });
+  $("cuentaAcc").hidden = grupo !== "cuenta";   // v366 (L5-c): «Enviar sugerencia», «Cambiar contraseña» y «Cerrar sesión» solo en Ajustes
   // «Usuarios» solo existe para el administrador aprobado, estén donde estén las preferencias de grupo
   actualizarVisibilidadUsuarios();
 }

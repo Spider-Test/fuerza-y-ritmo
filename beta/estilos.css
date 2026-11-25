@@ -2171,7 +2171,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); box-sha
    Con safe-area 0 (horizontal, sin muesca) la banda mide 0. Una banda sólida es igual con «menos transparencia» o más contraste: no necesita variante. */
 @media (max-width: 760px) {
   html.ios-instalada {
-    --sticky-cabecera: env(safe-area-inset-top, 0px);
+    --sticky-cabecera: calc(env(safe-area-inset-top, 0px) + 8px);   /* v365: las cabeceras fijas se pegan justo debajo de la barra #barraReloj (8 px) */
     background: var(--bg);
   }
   html.ios-instalada #vistaSemana:not(.solo-dia) { --sticky-entreno: var(--sticky-cabecera) !important; }
@@ -2179,15 +2179,6 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); box-sha
   html.ios-instalada body {
     background: var(--bg);
     padding-top: calc(env(safe-area-inset-top, 0px) + 8px) !important;
-  }
-  html.ios-instalada body::before {
-    content: "";
-    position: fixed;
-    inset: 0 0 auto;
-    height: env(safe-area-inset-top, 0px);
-    z-index: 1000;
-    background: var(--bg);
-    pointer-events: none;
   }
 }
 
@@ -3135,3 +3126,15 @@ html.ampliado #vistaSemana.solo-dia #semana, html.ampliado #vistaSemana.solo-dia
 @media (max-width: 760px) { button.en-nota { min-height: 44px; height: auto; } }
 /* v364: los demás textos libres de la pantalla de la serie (serie/ejercicio, discos y objetivo, aviso de récord) también parten cadenas largas sin espacios. */
 .en-cuerpo .en-serie, .en-cuerpo .en-extra, .en-cuerpo .aviso, .en-cuerpo .en-grupo, .en-cuerpo .calent-sug { overflow-wrap: anywhere; min-width: 0; }
+
+/* v365 (MEJ-UI-002 / MEJ-UI-020): en la app instalada de iOS (barra de estado «black») la página empieza debajo del reloj y env(safe-area-inset-top) vale 0: la zona del reloj
+   la pinta iOS, que extiende el color del elemento fijo que toca el borde superior o, si no hay ninguno, difumina el contenido que sube. #barraReloj es ese elemento: una
+   barra FIJA REAL de 8 px (el margen superior de body) con el color de fondo, en todas las pestañas. Sustituye al pseudo-elemento body::before de v360 (altura 0, no tapaba nada).
+   Las cabeceras fijas empiezan en --sticky-cabecera = safe + 8 px (justo debajo de la barra). Fuera de la app instalada no existe (display:none). */
+#barraReloj { display: none; }
+@media (max-width: 760px) {
+  html.ios-instalada #barraReloj {
+    display: block; position: fixed; top: 0; left: 0; right: 0;
+    height: calc(env(safe-area-inset-top, 0px) + 8px); z-index: 1002; background: var(--bg);
+  }
+}

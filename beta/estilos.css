@@ -3127,3 +3127,11 @@ html.ampliado #vistaSemana.solo-dia #semana, html.ampliado #vistaSemana.solo-dia
 .en-descanso .en-d-n { font-size: 40px; }
 .en-descanso .en-d-b { grid-column: 1 / -1; width: 100%; }
 .en-descanso .en-d-b .nav-btn { flex: 1; min-width: 0; min-height: 44px; }
+
+/* v364: las instrucciones de la serie (#enNota) no se comprimen ni se salen de su caja. Los hijos directos de .en-cuerpo (columna flex con scroll) no se encogen:
+   si no cabe todo, el CUERPO se desplaza. El texto se parte (también URLs y palabras largas sin espacios) en vez de desbordar por el lateral. Solo presentación. */
+.en-cuerpo > * { flex-shrink: 0; min-width: 0; max-width: 100%; }
+.en-nota, button.en-nota { box-sizing: border-box; min-width: 0; max-width: 100%; height: auto; overflow-wrap: anywhere; word-break: break-word; }
+@media (max-width: 760px) { button.en-nota { min-height: 44px; height: auto; } }
+/* v364: los demás textos libres de la pantalla de la serie (serie/ejercicio, discos y objetivo, aviso de récord) también parten cadenas largas sin espacios. */
+.en-cuerpo .en-serie, .en-cuerpo .en-extra, .en-cuerpo .aviso, .en-cuerpo .en-grupo, .en-cuerpo .calent-sug { overflow-wrap: anywhere; min-width: 0; }

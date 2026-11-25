@@ -3112,3 +3112,18 @@ html.ampliado #vistaSemana.solo-dia #semana, html.ampliado #vistaSemana.solo-dia
 .ens-d-b { display: flex; gap: 6px; flex: none; }
 .ens-desc .nav-btn { min-width: 44px; min-height: 44px; padding: 0 8px; font-size: 14px; }
 
+
+/* v363: el cronómetro de descanso de la pantalla de la serie queda FIJO en la parte baja visible de la zona con scroll (justo encima de «Anterior / Siguiente»)
+   y más compacto (título y reloj en una fila, tres botones debajo), para que se vea y se pueda usar sin hacer scroll. Solo presentación: el fondo es opaco
+   (acento/dorado suave sobre --card) y una sombra sólida del color de la ventana tapa lo que pasa por debajo. */
+.en-cuerpo { scroll-padding-bottom: 130px; }
+.en-descanso {
+  position: sticky; bottom: 0; z-index: 3;
+  display: grid; grid-template-columns: auto auto; justify-content: center; align-items: baseline; column-gap: 12px; row-gap: 6px; padding: 8px 10px 10px;
+  background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--card); box-shadow: 0 0 0 8px var(--card);
+}
+.en-descanso[hidden] { display: none; }
+.en-descanso.fin { background: linear-gradient(var(--gold-soft), var(--gold-soft)), var(--card); }
+.en-descanso .en-d-n { font-size: 40px; }
+.en-descanso .en-d-b { grid-column: 1 / -1; width: 100%; }
+.en-descanso .en-d-b .nav-btn { flex: 1; min-width: 0; min-height: 44px; }

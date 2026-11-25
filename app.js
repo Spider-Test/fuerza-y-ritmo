@@ -11841,9 +11841,11 @@ $("enHecha").addEventListener("click", () => {
   avisarSiPR(fila, [["series", s]], ent.ensSilencio ? "vista" : "pantalla");   // v332: sin aviso «Serie hecha» (se corrige con «↺ Marcar como pendiente»); el de récord se conserva
   if (yaHecha) { pintarEntreno(); return; }
   siguientePendiente();
-  if (!$("enFin").hidden) return;   // era la última: no hay descanso
+  // v361: el descanso CONFIGURADO en la serie sale siempre, también tras la última serie (sobre la pantalla final «Entreno completado»); sin descanso configurado no sale nada.
+  // La recuperación en metros (solo distancia) sigue sin mostrarse tras la última serie, como antes.
+  const ultima = !$("enFin").hidden;
   if (n0(fila.descanso) > 0) empezarDescanso(n0(fila.descanso));
-  else if (n0(fila.rec_dist) > 0) mostrarRecuperacion(n0(fila.rec_dist));
+  else if (!ultima && n0(fila.rec_dist) > 0) mostrarRecuperacion(n0(fila.rec_dist));
 });
 document.querySelectorAll("#dlgEntreno .paso").forEach((p, k) => p.querySelectorAll("button").forEach(x => x.addEventListener("click", () => {
   if (ent) ajustarCampo(p.querySelector("input"), ent.campos[k], x.classList.contains("mas") ? 1 : -1);
@@ -12077,11 +12079,34 @@ function ensConfirmar(id) {
   if (ent.borr) delete ent.borr[id];
   // v329: la vista sigue abierta y ligada a su ocurrencia; se repinta (conserva scroll, borradores y la serie origen de Autorrellenar si sigue en la lista)
   const filas = ensFilas();
-  const fin = !$("enFin").hidden, desc = !$("enDescanso").hidden;
+  const fin = !$("enFin").hidden;
   pintarVistaSeries();
   const pr = hecha(db.series[id]) && prsEj(db.series[id].ejercicio_id).has(id);
-  ensAviso(ensEtiqueta(filas, id) + " hecha" + (pr ? " · ¡Nuevo récord!" : "") + (fin ? " · entreno completado" : desc ? " · descanso en marcha" : "") + (filas.length && filas.every(hecha) ? (filas[0].bloque_id ? ". Todas las series de esta superserie están hechas." : ". Todas las series de este ejercicio están hechas.") : ""), true);
+  ensAviso(ensEtiqueta(filas, id) + " hecha" + (pr ? " · ¡Nuevo récord!" : "") + (fin ? " · entreno completado" : "") + (filas.length && filas.every(hecha) ? (filas[0].bloque_id ? ". Todas las series de esta superserie están hechas." : ". Todas las series de este ejercicio están hechas.") : ""), true);
 }
+// v362: el cronómetro de descanso también se ve y se usa DENTRO de «Ver todas las series»: una línea fija en la cabecera de la vista que solo REFLEJA el estado único
+// del descanso (la caja #enDescanso de la pantalla de la serie: título, reloj y botones −15/+15) y cuyos botones pulsan los mismos botones de la pantalla (mismas funciones, un solo temporizador).
+// Se actualiza con un observador de #enDescanso, así no hace falta tocar empezarDescanso/ticDescanso/finDescanso/moverDescanso/mostrarRecuperacion ni el botón Saltar.
+function ensSincDescanso() {
+  const dlg = $("dlgEnSeries"), linea = $("ensDesc");
+  if (!dlg.open) return;
+  const caja = $("enDescanso"), activo = !caja.hidden && !!ent;
+  const tit = $("enDescTit").textContent, reloj = $("enReloj").textContent, fin = caja.classList.contains("fin");
+  if ($("ensDescTit").textContent !== tit) $("ensDescTit").textContent = tit;
+  if ($("ensReloj").textContent !== reloj) $("ensReloj").textContent = reloj;
+  linea.classList.toggle("fin", fin);
+  $("ensMenos").hidden = $("ensMas").hidden = $("enMenos").hidden;   // en «Recuperación» solo hay Saltar, como en la pantalla
+  if (linea.hidden === activo) {
+    const cab = dlg.querySelector(".d-cab"), h0 = cab.offsetHeight;
+    linea.hidden = !activo;
+    const d = cab.offsetHeight - h0;
+    if (d && dlg.scrollHeight > dlg.clientHeight) dlg.scrollTop = Math.max(0, dlg.scrollTop + d);   // las filas se quedan donde estaban al aparecer/desaparecer la línea
+  }
+}
+new MutationObserver(ensSincDescanso).observe($("enDescanso"), { attributes: true, attributeFilter: ["hidden", "class"], childList: true, characterData: true, subtree: true });
+$("ensMenos").addEventListener("click", () => $("enMenos").click());
+$("ensMas").addEventListener("click", () => $("enMas").click());
+$("ensSaltarD").addEventListener("click", () => $("enSaltarD").click());
 $("enSeries").addEventListener("click", () => {
   const s = serieEnt();
   if (!s) return;
@@ -12096,6 +12121,7 @@ $("enSeries").addEventListener("click", () => {
   ent.ensRef = { ...s };   // identidad de la ocurrencia con la que se abre la vista
   pintarVistaSeries();
   $("dlgEnSeries").showModal();
+  ensSincDescanso();   // v362: con un descanso ya en marcha, la línea aparece al abrir
 });
 $("ensCuerpo").addEventListener("click", e => { if (e.target.closest("#ensAuto")) ensAutorrellenar(); });
 $("dlgEnSeries").addEventListener("close", () => {
@@ -12119,7 +12145,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v321" + (BETA ? " beta" : "");
+const VERSION_APP = "v322" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

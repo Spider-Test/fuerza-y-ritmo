@@ -2166,46 +2166,19 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); box-sha
 }
 
 
-/* Franja de cristal solo en la app instalada en iOS; los títulos quedan debajo. */
+/* v360 (MEJ-UI-002 / MEJ-UI-020): app instalada en iOS. La zona del reloj/Isla dinámica es una banda PLANA del color del fondo (sin cristal, sin desenfoque ni máscara),
+   como en el modo entrenamiento; el contenido y las cabeceras fijas empiezan justo debajo (antes: franja de cristal a safe+10 y 54/46 px de margen extra).
+   Con safe-area 0 (horizontal, sin muesca) la banda mide 0. Una banda sólida es igual con «menos transparencia» o más contraste: no necesita variante. */
 @media (max-width: 760px) {
   html.ios-instalada {
-    --sticky-cabecera: calc(env(safe-area-inset-top, 0px) + 46px);
+    --sticky-cabecera: calc(env(safe-area-inset-top, 0px) + 8px);   /* v365: las cabeceras fijas se pegan justo debajo de la barra #barraReloj (8 px) */
     background: var(--bg);
   }
   html.ios-instalada #vistaSemana:not(.solo-dia) { --sticky-entreno: var(--sticky-cabecera) !important; }
   html.ios-instalada #vistaSemana.solo-dia { --sticky-entreno: calc(var(--sticky-cabecera) + 44px) !important; }
   html.ios-instalada body {
     background: var(--bg);
-    padding-top: calc(env(safe-area-inset-top, 0px) + 54px) !important;
-  }
-  html.ios-instalada body::before {
-    content: "";
-    position: fixed;
-    /* Empieza debajo del área de estado: evita superponer las dos capas. */
-    inset: calc(env(safe-area-inset-top, 0px) + 10px) 0 auto;
-    height: 36px;
-    z-index: 1000;
-    background: var(--bg);
-    pointer-events: none;
-  }
-  @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-    html.ios-instalada body::before {
-      background: color-mix(in srgb, var(--bg) 28%, transparent);
-      -webkit-backdrop-filter: blur(12px);
-      backdrop-filter: blur(12px);
-      /* Entrada y salida progresivas: sin un salto de densidad en los bordes. */
-      -webkit-mask-image: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.048) 10%, rgba(0, 0, 0, 0.173) 20%, rgba(0, 0, 0, 0.327) 30%, rgba(0, 0, 0, 0.452) 40%, rgba(0, 0, 0, 0.5) 50%, rgba(0, 0, 0, 0.452) 60%, rgba(0, 0, 0, 0.327) 70%, rgba(0, 0, 0, 0.173) 80%, rgba(0, 0, 0, 0.048) 90%, transparent 100%);
-      mask-image: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.048) 10%, rgba(0, 0, 0, 0.173) 20%, rgba(0, 0, 0, 0.327) 30%, rgba(0, 0, 0, 0.452) 40%, rgba(0, 0, 0, 0.5) 50%, rgba(0, 0, 0, 0.452) 60%, rgba(0, 0, 0, 0.327) 70%, rgba(0, 0, 0, 0.173) 80%, rgba(0, 0, 0, 0.048) 90%, transparent 100%);
-    }
-  }
-  @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-    html.ios-instalada body::before {
-      background: var(--bg);
-      -webkit-backdrop-filter: none;
-      backdrop-filter: none;
-      -webkit-mask-image: none;
-      mask-image: none;
-    }
+    padding-top: calc(env(safe-area-inset-top, 0px) + 8px) !important;
   }
 }
 
@@ -3117,3 +3090,49 @@ html.ampliado #vistaSemana.solo-dia #semana, html.ampliado #vistaSemana.solo-dia
 .letra-caja.l-plegada > .asa-letra { display: inline-flex !important; align-items: center; justify-content: center; }
 .reordenando .letra-caja:has(> .asa-letra) > .letra-cab { padding-right: 48px; }
 
+/* v362: línea fija del cronómetro de descanso en la cabecera de «Ver todas las series» (refleja el descanso de la pantalla de la serie; mismos colores) */
+#dlgEnSeries { overflow-anchor: none; }   /* el ajuste del scroll al aparecer/desaparecer la línea lo hace el JS (igual en todos los navegadores: sin el anclaje automático del scroll) */
+#dlgEnSeries .d-cab { flex-wrap: wrap; }
+.ens-desc { flex: 0 0 100%; display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; border-radius: 12px; background: var(--accent-soft); color: var(--accent-txt); }
+.ens-desc.fin { background: var(--gold-soft); color: var(--gold); }
+.ens-d-txt { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; line-height: 1.15; }
+.ens-d-t { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.ens-d-n { font-family: var(--display); font-weight: 700; font-size: 26px; font-variant-numeric: tabular-nums; }
+.ens-d-b { display: flex; gap: 6px; flex: none; }
+.ens-desc .nav-btn { min-width: 44px; min-height: 44px; padding: 0 8px; font-size: 14px; }
+
+
+/* v363: el cronómetro de descanso de la pantalla de la serie queda FIJO en la parte baja visible de la zona con scroll (justo encima de «Anterior / Siguiente»)
+   y más compacto (título y reloj en una fila, tres botones debajo), para que se vea y se pueda usar sin hacer scroll. Solo presentación: el fondo es opaco
+   (acento/dorado suave sobre --card) y una sombra sólida del color de la ventana tapa lo que pasa por debajo. */
+.en-cuerpo { scroll-padding-bottom: 130px; }
+.en-descanso {
+  position: sticky; bottom: 0; z-index: 3;
+  display: grid; grid-template-columns: auto auto; justify-content: center; align-items: baseline; column-gap: 12px; row-gap: 6px; padding: 8px 10px 10px;
+  background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--card); box-shadow: 0 0 0 8px var(--card);
+}
+.en-descanso[hidden] { display: none; }
+.en-descanso.fin { background: linear-gradient(var(--gold-soft), var(--gold-soft)), var(--card); }
+.en-descanso .en-d-n { font-size: 40px; }
+.en-descanso .en-d-b { grid-column: 1 / -1; width: 100%; }
+.en-descanso .en-d-b .nav-btn { flex: 1; min-width: 0; min-height: 44px; }
+
+/* v364: las instrucciones de la serie (#enNota) no se comprimen ni se salen de su caja. Los hijos directos de .en-cuerpo (columna flex con scroll) no se encogen:
+   si no cabe todo, el CUERPO se desplaza. El texto se parte (también URLs y palabras largas sin espacios) en vez de desbordar por el lateral. Solo presentación. */
+.en-cuerpo > * { flex-shrink: 0; min-width: 0; max-width: 100%; }
+.en-nota, button.en-nota { box-sizing: border-box; min-width: 0; max-width: 100%; height: auto; overflow-wrap: anywhere; word-break: break-word; }
+@media (max-width: 760px) { button.en-nota { min-height: 44px; height: auto; } }
+/* v364: los demás textos libres de la pantalla de la serie (serie/ejercicio, discos y objetivo, aviso de récord) también parten cadenas largas sin espacios. */
+.en-cuerpo .en-serie, .en-cuerpo .en-extra, .en-cuerpo .aviso, .en-cuerpo .en-grupo, .en-cuerpo .calent-sug { overflow-wrap: anywhere; min-width: 0; }
+
+/* v365 (MEJ-UI-002 / MEJ-UI-020): en la app instalada de iOS (barra de estado «black») la página empieza debajo del reloj y env(safe-area-inset-top) vale 0: la zona del reloj
+   la pinta iOS, que extiende el color del elemento fijo que toca el borde superior o, si no hay ninguno, difumina el contenido que sube. #barraReloj es ese elemento: una
+   barra FIJA REAL de 8 px (el margen superior de body) con el color de fondo, en todas las pestañas. Sustituye al pseudo-elemento body::before de v360 (altura 0, no tapaba nada).
+   Las cabeceras fijas empiezan en --sticky-cabecera = safe + 8 px (justo debajo de la barra). Fuera de la app instalada no existe (display:none). */
+#barraReloj { display: none; }
+@media (max-width: 760px) {
+  html.ios-instalada #barraReloj {
+    display: block; position: fixed; top: 0; left: 0; right: 0;
+    height: calc(env(safe-area-inset-top, 0px) + 8px); z-index: 1002; background: var(--bg);
+  }
+}

@@ -27,7 +27,7 @@
   window.addEventListener("pageshow", actualizar);
 })();
 </script>
-<link rel="stylesheet" href="estilos.css?v=v326">
+<link rel="stylesheet" href="estilos.css?v=v327">
 </head>
 <body>
 <div id="barraReloj" aria-hidden="true"></div>
@@ -67,6 +67,7 @@
 <section id="app" hidden>
   <header class="cabecera">
     <h1>Fuerza y Ritmo</h1>
+    <button type="button" class="ayuda-global ayuda-cab" id="ayudaCab" aria-label="Ayuda" title="Ayuda">?</button>
   </header>
   <nav class="tabbar" role="tablist" aria-label="Secciones">
     <button type="button" role="tab" id="tabSemana" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span>Semana</span></button>
@@ -75,6 +76,7 @@
     <button type="button" role="tab" id="tabMarcas" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5h16M7 16.5v-5M12 16.5V6.5M17 16.5v-8"/></svg><span>Marcas</span></button>
     <button type="button" role="tab" id="tabPlan" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2.5"/><path d="M9 4.5V3h6v1.5M8.5 10h7M8.5 14h7M8.5 18h4"/></svg><span>Ajustes</span></button>
   </nav>
+  <button type="button" class="ayuda-global ayuda-flota" id="ayudaFlota" aria-label="Ayuda" title="Ayuda">?</button>
 
   <div id="vistaSemana">
     <nav class="nav" id="navSemana" aria-label="Cambiar de semana">
@@ -495,10 +497,12 @@
     <button class="cerrar" aria-label="Cerrar">✕</button>
   </form>
   <div class="d-cuerpo">
-    <p class="menu-det" style="padding:0">Uno o varios tramos seguidos que se repiten. Ej.: 1000 m + rec. 300 m ×4, o Press banca + Remo ×4.</p>
+    <p class="menu-det" style="padding:0">Uno o varios ejercicios seguidos que se repiten. Ej.: 1000 m + rec. 300 m ×4, o Press banca + Remo ×4.</p>
     <div id="blqTramos"></div>
-    <button type="button" class="add-ej" id="blqAnadir">+ Añadir tramo</button>
-    <label class="campo">Rondas (veces que se repite) <input id="blqRondas" type="number" min="1" max="50" inputmode="numeric"></label>
+    <button type="button" class="add-ej" id="blqAnadir">+ Añadir ejercicio</button>
+    <div class="campo"><span>Rondas (veces que se repite)</span>
+      <div class="eb-rondas"><button type="button" class="nav-btn eb-paso" id="blqMenos" aria-label="Quitar una ronda">−</button><output class="eb-n" id="blqRondasN">×4</output><button type="button" class="nav-btn eb-paso" id="blqMas" aria-label="Añadir una ronda">+</button></div>
+      <input id="blqRondas" type="hidden" value="4"></div>
     <p id="blqAviso" class="aviso" role="status"></p>
     <div class="d-botones">
       <button type="button" class="nav-btn" id="blqVacio" title="Una superserie sin ejercicios: luego arrastras ejercicios del entreno dentro con ≡">Crear vacío</button>
@@ -1060,6 +1064,7 @@
     <p class="aviso" id="enAviso" role="status"></p>
     <button type="button" class="primario en-hecha" id="enHecha">✓ Hecha</button>
     <button type="button" class="nav-btn en-desmarcar" id="enDesmarcar" hidden>↺ Marcar como pendiente</button>
+    <section class="en-lista" id="enLista" aria-label="Series de este ejercicio" hidden></section>
     <div class="en-descanso" id="enDescanso" hidden>
       <span class="en-d-t" id="enDescTit">Descanso</span>
       <span class="en-d-n" id="enReloj">0:00</span>
@@ -1101,6 +1106,6 @@
 <div class="toast" id="toast" role="status" hidden><span id="toastTxt"></span><button type="button" id="toastBtn">Deshacer</button></div>
 <div class="fiesta" id="fiesta" aria-hidden="true"></div>
 
-<script src="app.js?v=v326"></script>
+<script src="app.js?v=v327"></script>
 </body>
 </html>

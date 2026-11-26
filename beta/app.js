@@ -362,6 +362,8 @@ const MEDIDAS_BASE = { fuerza: ["reps", "tiempo", "carga"], movilidad: ["reps", 
 const medidasPropias = id => { const e = db.ejercicios[id], ok = MAGNITUDES_TIPO[tipoDe(id)] || []; return e && Array.isArray(e.medidas) ? ok.filter(m => e.medidas.includes(m)) : []; };
 const medidasDe = id => { const p = medidasPropias(id); return p.length ? p : (MEDIDAS_BASE[tipoDe(id)] || []).slice(); };
 const admite = (id, m) => medidasDe(id).includes(m);
+// v371: un ejercicio de fuerza o movilidad cuya ficha admite tiempo pero NO repeticiones se mide solo por tiempo: no se ofrece escribir repeticiones (los datos ya guardados no se ocultan: ver las llamadas)
+const soloTiempo = id => { const t = tipoDe(id), p = medidasPropias(id); return (t === "fuerza" || t === "movilidad") && p.includes("tiempo") && !p.includes("reps"); };
 // INC-KG-001: las medidas efectivas de la ficha deciden si una serie nueva admite carga.
 // La medida de progreso no decide los campos; carga/%/ciclo guardados siguen accesibles al editar.
 const sinCarga = id => tipoDe(id) === "fuerza" && !admite(id, "carga");
@@ -4726,7 +4728,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
   }
   if (opsF && propiasF.length) {
     if (!propiasF.includes("carga") && !series.some(cargaGuardada)) b.classList.add("sin-peso"); else b.classList.remove("sin-peso");   // la ficha manda sobre la medida de progreso
-    if (!propiasF.includes("reps") && propiasF.includes("tiempo") && !series.length) ponerPorT(true);
+    if (!propiasF.includes("reps") && propiasF.includes("tiempo") && !series.some(x => n0(x.reps) > 0)) ponerPorT(true);   // v371: también con series ya hechas, si ninguna tiene repeticiones
     if (!propiasF.includes("reps") && !propiasF.includes("tiempo") && !series.some(x => n0(x.reps) > 0 || n0(x.tiempo) > 0)) { b.classList.add("solo-dist"); fb.closest(".paso").hidden = true; if (medidaBtn) medidaBtn.hidden = true; }
   }
   if (mov && propiasF.length) {
@@ -4741,7 +4743,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
     const ic = document.createElement("span"); ic.className = "desc-ic"; ic.textContent = "⏱"; ic.setAttribute("aria-hidden", "true");
     fc.before(ic); fc.placeholder = "desc.";
   }
-  if (medidaBtn) medidaBtn.addEventListener("click", () => menuMedida(id, m => b.querySelector('.seg-medida [data-m="' + m + '"]').click()));
+  if (medidaBtn) medidaBtn.addEventListener("click", () => menuMedida(id, m => b.querySelector('.seg-medida [data-m="' + m + '"]').click(), series.some(x => n0(x.reps) > 0)));
   marcarMedida();
   if (segM) segM.addEventListener("click", ev => {
     const x = ev.target.closest("button[data-m]");
@@ -5768,7 +5770,7 @@ function tarjetaBloque(dia, bloqueId, series) {
     ponerBrM(m, true);
     if (antesT !== (form.dataset.isoT === "1")) fb.value = "";
     fb.focus(); guardarBor();
-  }));
+  }, n0(editando.reps) > 0));   // v371: una serie con repeticiones guardadas sigue ofreciéndolas
   let fbTocadoR = false;   // v351: ¿ha escrito el usuario en el campo de reps de la ronda?
   fb.addEventListener("input", () => { fbTocadoR = true; });
   let brRef = "";   // v345: "reps" = % del máximo de repeticiones (solo con brPct)
@@ -5818,7 +5820,7 @@ function tarjetaBloque(dia, bloqueId, series) {
     fa.placeholder = dist ? UD() : mov ? "reps" : "kg"; fa.inputMode = mov ? "numeric" : "decimal"; fa.setAttribute("aria-label", dist ? "Distancia en " + UD() : mov ? "Repeticiones" : "Peso en kg");
     fb.placeholder = dist ? "tiempo 3,40" : mov ? "tiempo 45 s" : "reps o máx"; fb.inputMode = dist || mov ? "decimal" : "text"; fb.setAttribute("aria-label", dist ? "Tiempo (minutos y segundos)" : mov ? "Tiempo: 45 son segundos" : "Repeticiones (o «máx»)");
     c.querySelector(".por").textContent = dist ? "" : mov ? "o" : "×";
-    const isoT = !dist && !mov && (n0(s.tiempo) > 0 || !!s.max_tiempo || medidaDe(s.ejercicio_id) === "tiempo" && !s.max_reps) && !(n0(s.reps) > 0);
+    const isoT = !dist && !mov && (n0(s.tiempo) > 0 || !!s.max_tiempo || (medidaDe(s.ejercicio_id) === "tiempo" || soloTiempo(s.ejercicio_id)) && !s.max_reps) && !(n0(s.reps) > 0);
     form.dataset.isoT = isoT ? "1" : "";
     if (isoT) { fb.placeholder = "tiempo 45 s"; fb.inputMode = "decimal"; fb.setAttribute("aria-label", "Tiempo: 45 son segundos"); c.querySelector(".por").textContent = "·"; }
     const maxSin = !dist && !mov && esMaxSinDato(s);
@@ -5982,9 +5984,10 @@ function tarjetaBloque(dia, bloqueId, series) {
 
 // «Reps ▾» de los bloques: cómo se mide la serie (en los isométricos, según su ficha, solo por tiempo)
 const NOMBRE_MEDIDA = { reps: "Reps", t: "⏱ Tiempo", maxr: "Máx. reps", maxt: "Máx. tiempo" };
-function menuMedida(ejId, alElegir) {
-  const iso = medidaDe(ejId) === "tiempo";
-  abrirMenu("¿Cómo se mide la serie?", iso ? "Es isométrico (en su ficha): va por tiempo" : "", (iso ? [["t", "⏱ Tiempo"], ["maxt", "Máx. tiempo (aguantar)"]]
+function menuMedida(ejId, alElegir, conReps = false) {
+  const solo = soloTiempo(ejId) && !conReps;   // v371: la ficha no admite repeticiones; si la serie ya las tiene guardadas (conReps) se ofrece todo como antes
+  const iso = medidaDe(ejId) === "tiempo" || solo;
+  abrirMenu("¿Cómo se mide la serie?", solo ? "Su ficha solo admite tiempo" : iso ? "Es isométrico (en su ficha): va por tiempo" : "", (iso ? [["t", "⏱ Tiempo"], ["maxt", "Máx. tiempo (aguantar)"]]
     : [["reps", "Repeticiones"], ["t", "⏱ Tiempo (isométrico)"], ["maxr", "Máx. repeticiones"], ["maxt", "Máx. tiempo (aguantar)"]]).map(([m, t]) => ({ texto: t, accion: () => alElegir(m) })));
 }
 // Ventana para crear un bloque: tramos (con sus valores y recuperación) y número de rondas
@@ -6027,6 +6030,7 @@ function pintarTramos() {
     const fza = !dist && !mov, med = fza ? medidaDe(t.ejercicio_id) : "";
     a.placeholder = dist ? UD() : mov ? "reps" : med !== "peso" ? "kg (opcional)" : "kg"; a.inputMode = "decimal"; a.setAttribute("aria-label", dist ? "Distancia en " + UD() : mov ? "Repeticiones" : "Peso en kg");
     b.placeholder = dist ? "tiempo" : "tiempo 45 s"; b.inputMode = "decimal"; b.setAttribute("aria-label", dist ? "Tiempo (puedes dejar los metros vacíos)" : "Tiempo: 45 son segundos");
+    if (mov && soloTiempo(t.ejercicio_id)) { a.hidden = true; t.a = ""; a.value = ""; fila.querySelector(".por").hidden = true; }   // v371: movilidad solo tiempo: sin campo de repeticiones
     const tmed = fila.querySelector(".tr-medida");
     const pintarM = () => {
       const tt = t.m === "t" || t.m === "maxt", mx = t.m === "maxr" || t.m === "maxt";
@@ -6039,7 +6043,8 @@ function pintarTramos() {
     fila.querySelector(".por").textContent = dist ? "" : mov ? "o" : "×";
     if (fza) {
       fila.classList.add("tr-fuerza");
-      if (!t.m) t.m = med === "tiempo" ? "t" : /^\s*m[aá]x/i.test(String(t.b)) ? "maxr" : "reps";
+      if (soloTiempo(t.ejercicio_id) && t.m && t.m !== "t" && t.m !== "maxt") t.b = "";   // v371: un tramo de un ejercicio solo tiempo no conserva repeticiones escritas
+      if (!t.m || soloTiempo(t.ejercicio_id) && t.m !== "t" && t.m !== "maxt") t.m = med === "tiempo" || soloTiempo(t.ejercicio_id) ? "t" : /^\s*m[aá]x/i.test(String(t.b)) ? "maxr" : "reps";
       tmed.hidden = false;
       tmed.addEventListener("click", () => menuMedida(t.ejercicio_id, m => { const antes = t.m === "t" || t.m === "maxt"; t.m = m; if (antes !== (m === "t" || m === "maxt")) { t.b = ""; b.value = ""; } pintarM(); if (!b.disabled) b.focus(); }));
     }
@@ -6109,7 +6114,7 @@ $("blqAnadir").addEventListener("click", () => abrirSelector(diaBloque, id => {
   const dist = esDistancia(tipoDe(id)), mov = tipoDe(id) === "movilidad";
   tramos.push(mov ? { ejercicio_id: id, a: u ? String(n0(u.reps) || "") : "", b: u ? (n0(u.tiempo) > 0 ? (n0(u.tiempo) < 60 ? String(n0(u.tiempo)) : fmtTiempo(u.tiempo)) : "") : "", c: "" } : { ejercicio_id: id,
     a: u ? String(dist ? distCampo(u.distancia) : (n0(u.peso) > 0 ? num(u.peso) : "")) : (dist && distDeNombre(nombreEj(id)) ? distCampo(distDeNombre(nombreEj(id))) : ""),
-    b: u ? (dist ? (n0(u.tiempo) > 0 ? fmtTiempo(u.tiempo) : "") : String(n0(u.reps) || "")) : "",
+    b: u ? (dist ? (n0(u.tiempo) > 0 ? fmtTiempo(u.tiempo) : "") : soloTiempo(id) ? (n0(u.tiempo) > 0 ? (n0(u.tiempo) < 60 ? String(n0(u.tiempo)) : fmtTiempo(u.tiempo)) : "") : String(n0(u.reps) || "")) : "",   // v371: solo tiempo: el campo es el tiempo de la última serie, nunca sus repeticiones
     c: "" });   // la recuperación no se arrastra de otros días
   pintarTramos();
 }));
@@ -7464,6 +7469,19 @@ function ofrecerRetiradaCarga(id, contexto) {
   ]);
 }
 
+// v370 (MEJ-UI-020 L8): «Datos del catálogo» al final de la ficha, plegada, con una línea de resumen. Solo presentación: no cambia permisos, guardas ni lo que se guarda.
+// Sin permiso de edición, al abrirla se ve como datos (no como botones activos); los controles ya estaban desactivados por las guardas de siempre.
+const MAG_RESUMEN = { reps: "reps", tiempo: "tiempo", carga: "peso", distancia: "distancia" };
+function pintarResumenCatalogo() {
+  const e = ejercicioVivo(detalleId);
+  if (!e) return;
+  const tipo = tipoDe(e.id), partes = [TIPOS[tipo].nombre];
+  if (MAGNITUDES_TIPO[tipo]) { const m = medidasDe(e.id).map(x => MAG_RESUMEN[x] || x); if (m.length) partes.push(m.length > 1 ? m.slice(0, -1).join(", ") + " y " + m[m.length - 1] : m[0]); }
+  if (clasifOk() && tipo === "fuerza") { const r = regionesDe(e.id).map(x => REGIONES[x]).filter(Boolean); if (r.length) partes.push(r.join(" y ")); }
+  if (clasifOk() && esTecnica(e.id)) partes.push("técnica");
+  $("detCatResumen").textContent = partes.join(" · ");
+  $("detCatalogo").classList.toggle("solo-lectura", !editable(e));
+}
 function abrirDetalle(id, contexto = null) {
   const e = ejercicioVivo(id);
   if (!e) return;
@@ -7489,6 +7507,8 @@ function abrirDetalle(id, contexto = null) {
   pintarZonasDetalle(e);
   pintarMagnitudesDetalle(e);
   pintarClasificacionDetalle(e);
+  $("detCatalogo").open = false;   // v370: siempre plegada al abrir (el estado no se guarda)
+  pintarResumenCatalogo();
   if (!$("detalle").open) $("detalle").showModal();
   $("detalle").scrollTop = 0;
 }
@@ -7504,6 +7524,7 @@ $("detTipo").addEventListener("click", ev => {
   refrescarDetalle();
   pintarMagnitudesDetalle(db.ejercicios[detalleId]);
   pintarClasificacionDetalle(db.ejercicios[detalleId]);
+  pintarResumenCatalogo();
 });
 // v263: clasificación de la ficha (Región solo en fuerza; Técnica en todos los tipos). Solo quien puede editar la ficha la cambia; no toca series,
 // medidas, récords ni estadísticas. Oculta si el servidor no soporta P8.
@@ -7528,6 +7549,7 @@ function pintarClasificacionDetalle(e) {
   });
   $("detTecnica").setAttribute("aria-pressed", String(esTecnica(e.id)));
   $("detTecnica").disabled = !puede;
+  pintarResumenCatalogo();
   $("detClasifNota").textContent = (tipo === "fuerza" && !act.length ? "Sin clasificar: los ejercicios no se clasifican solos, elige la región. " : "") +
     "«Técnica» es solo una etiqueta: no cambia cómo se miden ni se comparan tus series." + (puede ? "" : " Las ajusta quien edita el catálogo común.");
 }
@@ -7569,6 +7591,7 @@ function pintarMagnitudesDetalle(e) {
     });
     cont.appendChild(b);
   });
+  pintarResumenCatalogo();
   $("detMagNota").textContent = (propias ? "Elegidas para esta ficha. " : "Las de siempre para " + TIPOS[tipo].nombre.toLowerCase() + ". ") +
     (!columnaMedidas ? "Para cambiarlas hace falta actualizar el servidor (migración P6); de momento se usan las de siempre." :
      !editable(e) ? "Las ajusta quien edita el catálogo común." :
@@ -11835,8 +11858,10 @@ function pintarEntreno() {
   const mov = tipo === "movilidad";
   // v271: un ejercicio sin carga (ver sinCarga) no pide kg si la serie no tiene ninguno guardado; si ya lo tiene, el campo se muestra para no ocultar el dato
   const sc = !dist && !mov && sinCarga(s.ejercicio_id) && !cargaGuardada(s);
-  ent.campos = sc ? (!(n0(s.reps) > 0) && (n0(s.tiempo) > 0 || s.max_tiempo) ? ["s", "reps"] : ["reps", "s"]) : dist ? (n0(s.distancia) > 0 ? ["m", "t"] : ["t", "m"]) : !mov && ((n0(s.tiempo) > 0 || s.max_tiempo) && !(n0(s.reps) > 0) || conDistFuerza(s) && !(n0(s.reps) > 0)) ? ["kg", "s"] : mov ? (n0(s.reps) > 0 || !(n0(s.tiempo) > 0) ? ["reps", "s"] : ["s", "reps"]) : ["kg", "reps"];
+  const sinReps = !dist && soloTiempo(s.ejercicio_id) && !(n0(s.reps) > 0);   // v371: la ficha solo admite tiempo y la serie no tiene repeticiones guardadas
+  ent.campos = sinReps && !sc && !mov ? ["kg", "s"] : sc ? (sinReps || !(n0(s.reps) > 0) && (n0(s.tiempo) > 0 || s.max_tiempo) ? ["s", "reps"] : ["reps", "s"]) : dist ? (n0(s.distancia) > 0 ? ["m", "t"] : ["t", "m"]) : !mov && ((n0(s.tiempo) > 0 || s.max_tiempo) && !(n0(s.reps) > 0) || conDistFuerza(s) && !(n0(s.reps) > 0)) ? ["kg", "s"] : mov ? (!sinReps && (n0(s.reps) > 0 || !(n0(s.tiempo) > 0)) ? ["reps", "s"] : ["s", "reps"]) : ["kg", "reps"];
   // Repeticiones antes de kg también en el recorrido de foco; mover la etiqueta completa conserva sus controles.
+  $("enB").closest(".en-campo").hidden = sinReps && ent.campos[1] === "reps";   // v371: sin campo de repeticiones (queda 0); el tiempo es el primero
   const primerCampo = $(ent.campos[0] === "kg" && ent.campos[1] === "reps" ? "enB" : "enA").closest(".en-campo");
   if (primerCampo.parentElement.firstElementChild !== primerCampo) primerCampo.parentElement.prepend(primerCampo);
   const etiqueta = { kg: "Peso (kg)", reps: "Repeticiones" + (s.por_lado ? " por lado" : ""), m: enKm() ? "Kilómetros" : "Metros", t: "Tiempo", s: "Tiempo" + (s.por_lado ? " por lado" : "") + " (45 = segundos)" };
@@ -11899,7 +11924,7 @@ $("enHecha").addEventListener("click", () => {
   // El entrenamiento no activa audio: conserva la música de otras aplicaciones.
   const a = $("enA"), b = $("enB"), aviso = t => { $("enAviso").textContent = t; };
   const fila = { ...s, hecha: true };
-  if (tipoDe(s.ejercicio_id) === "fuerza" && esMaxSinDato(s) && !s.max_tiempo) fila.max_reps = true;   // «máx reps» de antes, sin marca
+  if (tipoDe(s.ejercicio_id) === "fuerza" && esMaxSinDato(s) && !s.max_tiempo) { if (soloTiempo(s.ejercicio_id) && !(n0(s.reps) > 0)) fila.max_tiempo = true; else fila.max_reps = true; }   // «máx reps» de antes, sin marca; v371: en un ejercicio solo tiempo, la serie al máximo es «máx tiempo»
   if (ent.campos[0] === "kg" && ent.campos[1] === "reps") {
     const kg = parseFloat((a.value.trim() || "0").replace(",", ".")), reps = parseInt(b.value, 10);
     if (!(kg >= 0)) { aviso("Revisa el peso."); a.focus(); return; }
@@ -11912,7 +11937,7 @@ $("enHecha").addEventListener("click", () => {
     fila.reps = parseInt(v.reps, 10) || 0;
     fila.tiempo = leerSegs(v.s);
     if (isNaN(fila.tiempo)) { aviso("Revisa el tiempo (por ejemplo 45 o 1,30)."); return; }
-    if (!(fila.reps > 0) && !(fila.tiempo > 0) && !conDistFuerza(s)) { aviso("Pon las repeticiones o el tiempo."); return; }   // v262: con distancia, el tiempo es opcional
+    if (!(fila.reps > 0) && !(fila.tiempo > 0) && !conDistFuerza(s)) { aviso(soloTiempo(s.ejercicio_id) && !(n0(s.reps) > 0) ? "Pon el tiempo." : "Pon las repeticiones o el tiempo."); return; }   // v262: con distancia, el tiempo es opcional
   } else {
     const v = {}; v[ent.campos[0]] = a.value; v[ent.campos[1]] = b.value;
     fila.distancia = leerDist(v.m);
@@ -12013,6 +12038,7 @@ function ensKgReps(s) {
   const tipo = tipoDe(s.ejercicio_id);
   if (esDistancia(tipo) || tipo === "movilidad") return false;
   if (sinCarga(s.ejercicio_id) && !cargaGuardada(s)) return false;
+  if (soloTiempo(s.ejercicio_id) && !(n0(s.reps) > 0)) return false;   // v371: solo tiempo: sin campo de repeticiones (se apunta en la pantalla de la serie)
   return !((n0(s.tiempo) > 0 || s.max_tiempo) && !(n0(s.reps) > 0) || conDistFuerza(s) && !(n0(s.reps) > 0));
 }
 // Peso libre en kg: ni calentamiento, ni peso de ciclo/Bilbo, ni porcentaje del RM
@@ -12230,7 +12256,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v369" + (BETA ? " beta" : "");
+const VERSION_APP = "v371" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

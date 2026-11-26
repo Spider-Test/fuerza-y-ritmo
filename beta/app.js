@@ -11921,6 +11921,80 @@ function pintarEntreno() {
   $("enAviso").textContent = "";
   $("enAnt").disabled = ent.i === 0;
   $("enSig").disabled = ent.i >= lista.length - 1;
+  pintarListaEntreno();   // v374
+}
+// ---------- v374 (MEJ-UI-020 L10): lista de series siempre visible bajo «✓ Hecha» + respuesta visible al marcar ----------
+// Misma ocurrencia que «Ver todas las series» (día, entreno, parte y copia; en una superserie, la superserie entera por rondas). Solo lee datos: ✓ y «desmarcar» reutilizan
+// ensConfirmar / ensDesmarcar (que a su vez ejecutan #enHecha / desmarcar); tocar una fila salta a esa serie como ‹ ›. No hay ningún guardado propio.
+function filasOcurrenciaEnt(s) {
+  if (s.bloque_id) return seriesDeItem(s.fecha, s.grupo || "", claveSerie(s)).filter(x => !x.borrado && x.bloque_id === s.bloque_id).sort((a, b) => n0(a.ronda) - n0(b.ronda) || a.orden - b.orden);
+  return ocurrenciaNotaEntreno(s).filter(x => !x.borrado).sort(sOrden);
+}
+function entIrA(id) {
+  const k = ent.cola.indexOf(id);
+  if (k < 0 || k === ent.i) return;
+  const s = serieEnt();
+  if (s && !hecha(s) && ensPesoLibre(s) && ent.campos[0] === "kg" && ent.campos[1] === "reps") {   // lo escrito sin confirmar se conserva como borrador (igual que al abrir «Ver todas las series»)
+    ent.borr = ent.borr || {};
+    const b = {}, kgT = $("enA").value.trim(), rT = $("enB").value.trim();
+    if (kgT !== ensKgTxt(s)) b.kg = kgT;
+    if (rT !== ensRepsTxt(s)) b.reps = rT;
+    if (Object.keys(b).length) ent.borr[s.id] = { ...(ent.borr[s.id] || {}), ...b };
+  }
+  ent.i = k; pintarEntreno(); ensAplicarBorradorActiva();
+}
+function pintarListaEntreno() {
+  const cont = $("enLista"), s = ent && serieEnt();
+  if (!cont) return;
+  const filas = s ? filasOcurrenciaEnt(s) : [];
+  if (!s || (filas.length < 2 && !s.bloque_id)) { cont.hidden = true; cont.textContent = ""; return; }
+  if (!ent.ensFijo && !$("dlgEnSeries").open) ent.ensRef = { ...s };   // ensConfirmar / ensDesmarcar usan esta identidad (la misma con la que se abriría «Ver todas las series»); con la vista abierta o durante la acción no se cambia (v329: la vista sigue ligada a su ocurrencia)
+  const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt !== undefined) x.textContent = txt; return x; };
+  const bloque = !!s.bloque_id;
+  cont.textContent = ""; cont.hidden = false;
+  const hechas = filas.filter(hecha).length;
+  const cab = el("p", "en-l-cab");
+  const tit = el("span", "en-l-tit"); nombreConEtiqueta(tit, s, bloque ? "Superserie completa" : "Series del ejercicio");
+  cab.append(tit, el("span", "en-l-n", hechas + "/" + filas.length + " hechas"));
+  cont.appendChild(cab);
+  const muchas = filas.length > 8;   // con muchas series, las hechas quedan plegadas (el estado vive solo en memoria) para que la actual y las pendientes sigan a la vista
+  const ul = el("ul", "en-l-ul");
+  let n = 0, ronda = null, plegadas = 0;
+  let rondaPrev = null;
+  filas.forEach(f => {
+    if (bloque && n0(f.ronda) !== rondaPrev) { rondaPrev = n0(f.ronda); n = 0; }   // en una superserie la numeración vuelve a 1 en cada ronda
+    n += f.calentamiento ? 0 : 1;
+    const esHecha = hecha(f), esAct = f.id === s.id;
+    if (muchas && esHecha && !esAct && !ent.listaHechas) { plegadas++; return; }
+    if (bloque && n0(f.ronda) !== ronda) { ronda = n0(f.ronda); ul.appendChild(el("li", "en-l-ronda", "Ronda " + ronda)); }
+    const li = el("li", "en-l-fila" + (esHecha ? " en-l-hecha" : "") + (esAct ? " en-l-act" : ""));
+    li.dataset.lid = f.id;
+    const ok = el("button", "en-l-ok", esHecha ? "✓" : String(f.calentamiento ? "·" : n)); ok.type = "button"; ok.setAttribute("aria-pressed", String(esHecha));
+    const nom = bloque ? nombreEj(f.ejercicio_id) : (f.calentamiento ? "Calentamiento" : "Serie " + n);
+    ok.setAttribute("aria-label", esHecha ? "Hecha: " + nom + ". Pulsa para marcarla como pendiente" : "Marcar hecha: " + nom);
+    ok.addEventListener("click", () => {
+      ent.ensFijo = true;
+      try {
+        if (esHecha) ensDesmarcar(f.id);
+        else { ensConfirmar(f.id); if (!hecha(db.series[f.id])) entIrA(f.id); }   // si falta algún dato, se va a esa serie para completarlo (la vista cerrada no muestra el aviso)
+      } finally { ent.ensFijo = false; pintarListaEntreno(); }
+    });
+    const ir = el("button", "en-l-ir"); ir.type = "button";
+    ir.append(el("span", "en-l-nom", bloque ? nombreEj(f.ejercicio_id) : nom), el("span", "en-l-res", serieTexto(f).replace(/(\d) (reps?|kg|s|min|m|km)\b/g, "$1\u00a0$2").replace(/ \(/g, "\u00a0(")));
+    ir.setAttribute("aria-label", "Ir a " + nom + ": " + serieTexto(f)); if (esAct) ir.setAttribute("aria-current", "step");
+    ir.addEventListener("click", () => entIrA(f.id));
+    li.append(ok, ir); ul.appendChild(li);
+  });
+  if (plegadas) { const li = el("li", "en-l-mas"), b = el("button", "nav-btn", "Mostrar " + plegadas + (plegadas === 1 ? " hecha" : " hechas")); b.type = "button"; b.addEventListener("click", () => { ent.listaHechas = true; pintarListaEntreno(); }); li.appendChild(b); ul.insertBefore(li, ul.firstChild); }
+  if (muchas && ent.listaHechas) { const li = el("li", "en-l-mas"), b = el("button", "nav-btn", "Ocultar las hechas"); b.type = "button"; b.addEventListener("click", () => { ent.listaHechas = false; pintarListaEntreno(); }); li.appendChild(b); ul.insertBefore(li, ul.firstChild); }
+  cont.appendChild(ul);
+}
+// v374 (A): respuesta visible al marcar «✓ Hecha». Solo clases CSS (animationend/reflow, sin temporizadores); con prefers-reduced-motion no hay animación (CSS)
+function animarClase(x, cls) { if (!x) return; x.classList.remove(cls); void x.offsetWidth; x.classList.add(cls); }
+function animarHecha(id) {
+  animarClase($("enHecha"), "ok-anim");
+  const fila = document.querySelector('#enLista [data-lid="' + id + '"]'); if (fila) animarClase(fila, "ev-hecha");
+  ["enEj", "enSerie", "enValor", "enExtra"].forEach(i => animarClase($(i), "en-entra")); animarClase(document.querySelector("#dlgEntreno .en-campos"), "en-entra");
 }
 function siguientePendiente() {
   const n = ent.cola.length;
@@ -11964,6 +12038,7 @@ $("enHecha").addEventListener("click", () => {
   avisarSiPR(fila, [["series", s]], ent.ensSilencio ? "vista" : "pantalla");   // v332: sin aviso «Serie hecha» (se corrige con «↺ Marcar como pendiente»); el de récord se conserva
   if (yaHecha) { pintarEntreno(); return; }
   siguientePendiente();
+  animarHecha(s.id);   // v374 (A)
   // v361: el descanso CONFIGURADO en la serie sale siempre, también tras la última serie (sobre la pantalla final «Entreno completado»); sin descanso configurado no sale nada.
   // La recuperación en metros (solo distancia) sigue sin mostrarse tras la última serie, como antes.
   const ultima = !$("enFin").hidden;
@@ -12140,6 +12215,7 @@ function pintarVistaSeries() {
   const pie = el("p", "aviso ens-aviso", filas.every(hecha) ? (bloque ? "Todas las series de esta superserie están hechas. Cierra esta ventana cuando quieras." : "Todas las series de este ejercicio están hechas. Cierra esta ventana cuando quieras.") : ""); if (filas.every(hecha)) pie.classList.add("ens-bien"); cuerpo.appendChild(pie);
   $("dlgEnSeries").scrollTop = desp;
   ensActualizarAuto();
+  if ($("dlgEntreno").open) pintarListaEntreno();   // v374: la lista de la pantalla refleja lo que cambie la vista
 }
 function ensActualizarAuto() {
   const b = $("ensAuto"); if (!b) return;
@@ -12269,7 +12345,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v373" + (BETA ? " beta" : "");
+const VERSION_APP = "v374" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

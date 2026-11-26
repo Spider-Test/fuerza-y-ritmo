@@ -3189,3 +3189,33 @@ html.ampliado #vistaSemana.solo-dia #semana, html.ampliado #vistaSemana.solo-dia
 .bloque-rep .series li .sv-p, .bloque-rep .rondas li .sv-p { overflow-wrap: break-word; }
 .tr-desc { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; color: var(--muted-txt); }
 .tr-desc .tr-desc-t { line-height: 1.2; }
+
+/* v374 (MEJ-UI-020 L10): pantalla de la serie. A) respuesta visible al marcar «✓ Hecha» (≤ 0,5 s, solo transform/opacity/color; nada con prefers-reduced-motion).
+   B/C) lista de series compacta bajo «Hecha» (hechas con ✓, la actual resaltada, pendientes atenuadas; superserie por rondas). */
+.en-hecha { position: relative; overflow: visible; }
+.en-hecha.ok-anim { animation: en-hecha-ok 0.45s ease-out; }
+.en-hecha.ok-anim::after { content: "✓"; position: absolute; left: 50%; top: 50%; font-size: 34px; line-height: 1; font-weight: 800; pointer-events: none; animation: en-tic 0.45s ease-out forwards; }
+@keyframes en-hecha-ok { 0% { transform: scale(1); filter: none; } 35% { transform: scale(1.04); filter: brightness(1.18) saturate(1.2); } 100% { transform: scale(1); filter: none; } }
+@keyframes en-tic { 0% { opacity: 0; transform: translate(-50%, -30%) scale(0.5); } 40% { opacity: 1; transform: translate(-50%, -85%) scale(1.25); } 100% { opacity: 0; transform: translate(-50%, -110%) scale(1); } }
+.en-entra { animation: en-entra 0.26s ease-out; }
+@keyframes en-entra { from { opacity: 0.25; transform: translateX(18px); } to { opacity: 1; transform: none; } }
+.en-l-fila.ev-hecha .en-l-ok { animation: en-pop 0.4s ease-out; }
+@keyframes en-pop { 0% { transform: scale(0.6); } 55% { transform: scale(1.25); } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .en-hecha.ok-anim, .en-hecha.ok-anim::after, .en-entra, .en-l-fila.ev-hecha .en-l-ok { animation: none !important; } }
+.en-lista { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; min-width: 0; }
+.en-lista[hidden] { display: none; }
+.en-l-cab { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 0; font-size: 13px; font-weight: 700; color: var(--muted-txt); text-transform: uppercase; letter-spacing: 0.04em; }
+.en-l-n { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.en-l-ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.en-l-ronda { margin: 6px 0 0; font-size: 12px; font-weight: 800; color: var(--accent-txt); text-transform: uppercase; letter-spacing: 0.05em; }
+.en-l-fila { display: flex; align-items: center; gap: 6px; min-height: 44px; border-radius: 10px; padding: 0 2px; }
+.en-l-ok { flex: none; width: 44px; height: 44px; border: 0; background: transparent; font: inherit; font-weight: 700; font-size: 15px; color: var(--muted-txt); border-radius: 50%; cursor: pointer; }
+.en-l-hecha .en-l-ok { color: var(--accent-txt); font-size: 18px; }
+.en-l-ir { flex: 1; min-width: 0; min-height: 44px; display: flex; align-items: center; gap: 8px; border: 0; background: transparent; font: inherit; text-align: left; color: var(--fg); padding: 0 6px; cursor: pointer; }
+.en-l-nom { font-weight: 650; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 55%; }
+.en-l-res { color: var(--muted-txt); font-size: 14px; overflow-wrap: anywhere; }
+.en-l-fila:not(.en-l-hecha):not(.en-l-act) .en-l-ir { opacity: 0.72; }
+.en-l-act { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent-btn); }
+.en-l-act .en-l-nom { color: var(--accent-txt); }
+.en-l-mas { text-align: center; }
+.en-l-mas .nav-btn { min-height: 44px; }

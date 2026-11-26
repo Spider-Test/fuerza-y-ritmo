@@ -668,7 +668,9 @@ dialog.pantalla[open] { display: flex; flex-direction: column; }
 }
 @media (hover: hover) and (pointer: fine) {
   .menu-btn, .series .borrar, .bloque .quitar, .add-ej { transition: opacity 0.15s; }
-  .menu-btn, .series .borrar, .bloque .quitar { opacity: 0; }
+  /* v368 (MEJ-UI-020 L3): en reposo se ven (0,75; contraste >= 3:1) y no solo al pasar el ratón; plena con hover y con foco de teclado. El ⋯ de la cabecera del día ya solo llega a 3,28:1 a plena opacidad (como el de la parte): siempre a 1 */
+  .menu-btn, .series .borrar, .bloque .quitar { opacity: 0.75; }
+  .dia-cab .menu-btn { opacity: 1; }
   .dia:hover .dia-cab .menu-btn, .grupo-cab:hover .menu-btn, .bloque-rep:hover .menu-btn, .bloque:hover .quitar, .series li:hover .borrar,
   .menu-btn:focus-visible, .series .borrar:focus-visible, .bloque .quitar:focus-visible { opacity: 1; }
   .dia:not(:hover):not(:focus-within) .add-ej { opacity: 0.55; }

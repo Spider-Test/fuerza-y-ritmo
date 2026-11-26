@@ -2345,6 +2345,14 @@ function copiar(nombre, html, series, ambito) {
   avisoDeshacer("📋 Copiado: " + nombre + (n ? " (" + n + (n === 1 ? " serie" : " series") + ")" : "") + ". Pégalo en el día que quieras: ⋯ del día → «📋 Pegar»", null);
 }
 const hayItemsCopiados = () => !!(porta && ((porta.items || []).length || porta.html));
+// v369 (MEJ-SEM-006): «Quitar lo copiado» vacía solo el portapapeles de la app (porta + su clave); no toca series ni otros datos. Deshacer restaura exactamente lo anterior (memoria y almacenamiento).
+function quitarCopiado() {
+  if (!hayItemsCopiados()) return;
+  const anterior = porta;
+  porta = null;
+  escribir("portapapeles-v1", null);
+  avisoDeshacer("Copia quitada", [["fn", () => { porta = anterior; escribir("portapapeles-v1", anterior); }]]);
+}
 // Pega y deja deshacerlo: todo lo nuevo se puede quitar de golpe
 function pegarConDeshacer(dia, hacer) {
   const antes = new Set(Object.keys(db.series));
@@ -2627,6 +2635,7 @@ function menuDia(dia) {
     { grupo: "Día" },
     (series.length || aTexto(html).trim()) && { texto: "Copiar día", accion: () => copiar(titulo, html, series, "dia") },
     hayItemsCopiados() && { texto: "📋 Pegar «" + porta.nombre + "» en este día", accion: () => pegar(dia) },
+    hayItemsCopiados() && { texto: "Quitar lo copiado", accion: () => quitarCopiado() },
     { texto: "Añadir plantilla…", accion: () => elegirPlantilla("Añadir plantilla al " + titulo, p => aplicarPlantilla(dia, p)) },
     // v263: sin «+ Bloque suelto (sin entreno)…» en este menú (los bloques se crean dentro de un entrenamiento: «＋ Añadir» › «+ Bloque»)
     series.filter(s => !s.bloque_id).length > 1 && { texto: "Seleccionar series para agrupar en superserie", accion: () => empezarSelSeries(dia) },
@@ -12168,7 +12177,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v324" + (BETA ? " beta" : "");
+const VERSION_APP = "v325" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

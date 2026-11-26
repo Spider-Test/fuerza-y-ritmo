@@ -27,7 +27,7 @@
   window.addEventListener("pageshow", actualizar);
 })();
 </script>
-<link rel="stylesheet" href="estilos.css?v=v325">
+<link rel="stylesheet" href="estilos.css?v=v326">
 </head>
 <body>
 <div id="barraReloj" aria-hidden="true"></div>
@@ -318,34 +318,6 @@
     <p id="detAvisoComun" class="aviso-estim" hidden>Ejercicio del catálogo común: solo lo editan el administrador y quien él autorice. Tus series y tu 1RM son solo tuyos.</p>
     <p id="detAvisoLectura" class="aviso-estim" hidden>Ficha en modo consulta: se abre desde el entrenamiento y aquí no se edita. Al cerrarla vuelves a la misma serie.</p>
     <label id="detCompSec" class="permiso" hidden><input type="checkbox" id="detComp"> En el catálogo común (lo ven todos los usuarios aprobados)</label>
-    <section>
-      <h3>Tipo</h3>
-      <div class="tabs seg" id="detTipo" role="group" aria-label="Tipo de ejercicio">
-        <button type="button" data-tipo="fuerza" aria-pressed="false">Fuerza</button>
-        <button type="button" data-tipo="carrera" aria-pressed="false">Carrera</button>
-        <button type="button" data-tipo="natacion" aria-pressed="false">Natación</button>
-        <button type="button" data-tipo="movilidad" aria-pressed="false">Movilidad</button>
-      </div>
-    </section>
-    <section id="detMagSec" hidden>
-      <h3>Qué se puede medir</h3>
-      <div class="md-chips" id="detMag" role="group" aria-label="Magnitudes que admite el ejercicio"></div>
-      <p class="menu-det nota" id="detMagNota"></p>
-    </section>
-    <section id="detClasifSec" hidden>
-      <h3>Clasificación</h3>
-      <div id="detRegionFila">
-        <p class="menu-det">Región (para encontrarlo; un ejercicio compuesto puede ser Torso y Pierna)</p>
-        <div class="md-chips" id="detRegion" role="group" aria-label="Región del cuerpo"></div>
-      </div>
-      <div class="md-chips"><button type="button" class="chip chip-op clasif" id="detTecnica" aria-pressed="false">Técnica</button></div>
-      <p class="menu-det nota" id="detClasifNota"></p>
-    </section>
-    <section id="detZonasSec">
-      <h3>Zonas que trabaja</h3>
-      <div class="md-chips" id="detZonas"></div>
-      <p class="menu-det nota" id="detZonasNota"></p>
-    </section>
     <section id="detMedidaSec" hidden>
       <h3>Cómo se hace y cómo mides tu progreso</h3>
       <div class="tabs seg" id="detMedida" role="group" aria-label="Cómo se mide el progreso">
@@ -390,6 +362,40 @@
       <h3>Historial</h3>
       <ol class="historial" id="detHistorial"></ol>
     </section>
+    <!-- v370 (MEJ-UI-020 L8): lo del catálogo (tipo, medidas, clasificación, zonas) al final y plegado; primero lo del usuario -->
+    <details id="detCatalogo" class="det-catalogo">
+      <summary><span class="dc-tit">Datos del catálogo</span><span class="dc-res" id="detCatResumen"></span></summary>
+      <div class="dc-cuerpo">
+        <section>
+          <h3>Tipo</h3>
+          <div class="tabs seg" id="detTipo" role="group" aria-label="Tipo de ejercicio">
+            <button type="button" data-tipo="fuerza" aria-pressed="false">Fuerza</button>
+            <button type="button" data-tipo="carrera" aria-pressed="false">Carrera</button>
+            <button type="button" data-tipo="natacion" aria-pressed="false">Natación</button>
+            <button type="button" data-tipo="movilidad" aria-pressed="false">Movilidad</button>
+          </div>
+        </section>
+        <section id="detMagSec" hidden>
+          <h3>Qué se puede medir</h3>
+          <div class="md-chips" id="detMag" role="group" aria-label="Magnitudes que admite el ejercicio"></div>
+          <p class="menu-det nota" id="detMagNota"></p>
+        </section>
+        <section id="detClasifSec" hidden>
+          <h3>Clasificación</h3>
+          <div id="detRegionFila">
+            <p class="menu-det">Región (para encontrarlo; un ejercicio compuesto puede ser Torso y Pierna)</p>
+            <div class="md-chips" id="detRegion" role="group" aria-label="Región del cuerpo"></div>
+          </div>
+          <div class="md-chips"><button type="button" class="chip chip-op clasif" id="detTecnica" aria-pressed="false">Técnica</button></div>
+          <p class="menu-det nota" id="detClasifNota"></p>
+        </section>
+        <section id="detZonasSec">
+          <h3>Zonas que trabaja</h3>
+          <div class="md-chips" id="detZonas"></div>
+          <p class="menu-det nota" id="detZonasNota"></p>
+        </section>
+      </div>
+    </details>
     <button type="button" id="detBorrar" class="peligro">Eliminar ejercicio</button>
   </div>
 </dialog>
@@ -1095,6 +1101,6 @@
 <div class="toast" id="toast" role="status" hidden><span id="toastTxt"></span><button type="button" id="toastBtn">Deshacer</button></div>
 <div class="fiesta" id="fiesta" aria-hidden="true"></div>
 
-<script src="app.js?v=v325"></script>
+<script src="app.js?v=v326"></script>
 </body>
 </html>

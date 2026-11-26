@@ -3151,3 +3151,20 @@ html.ampliado #vistaSemana.solo-dia #semana, html.ampliado #vistaSemana.solo-dia
 /* v367 (MEJ-UI-020, L10): títulos de grupo en el menú ⋯ del día (solo lectura: encabezados, no botones) */
 .menu-op .menu-grupo { margin: 10px 4px 2px; font-family: var(--display); font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted-txt); pointer-events: none; }
 .menu-op .menu-grupo:first-child { margin-top: 2px; }
+
+/* v370 (MEJ-UI-020 L8): ficha del ejercicio: primero lo del usuario; «Datos del catálogo» al final, plegada y con resumen. Solo presentación. */
+.det-catalogo { border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.det-catalogo > summary { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; min-height: 44px; cursor: pointer; list-style: none; }
+.det-catalogo > summary::-webkit-details-marker { display: none; }
+.det-catalogo .dc-tit { font-family: var(--display); font-size: 17px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.det-catalogo .dc-tit::before { content: "▸"; display: inline-block; margin-right: 8px; color: var(--muted-txt); font-size: 12px; transition: transform 0.15s; }
+.det-catalogo[open] .dc-tit::before { transform: rotate(90deg); }
+.det-catalogo .dc-res { color: var(--muted-txt); font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.det-catalogo .dc-cuerpo { padding: 0 14px 14px; display: flex; flex-direction: column; gap: 16px; }
+/* Opciones largas («Movilidad», «Isométrico (tiempo)»): pasan a la línea siguiente en lugar de cortarse */
+#detalle .tabs.seg { flex-wrap: wrap; }
+#detalle .tabs.seg button { flex: 1 1 auto; white-space: normal; overflow-wrap: anywhere; }
+/* Sin permiso para editarlos: se leen como datos, no como botones activos (siguen desactivados por las guardas de siempre) */
+.det-catalogo.solo-lectura .tabs { background: transparent; padding: 0; gap: 6px; flex-wrap: wrap; }
+.det-catalogo.solo-lectura .tabs button, .det-catalogo.solo-lectura .chip { cursor: default; background: transparent; border: 1px dashed var(--line); box-shadow: none; color: var(--muted-txt); opacity: 1; border-radius: 999px; padding: 4px 10px; font-size: 13px; font-weight: 600; flex: 0 0 auto; }
+.det-catalogo.solo-lectura .tabs button[aria-pressed="true"], .det-catalogo.solo-lectura .chip[aria-pressed="true"] { background: var(--accent-soft); border: 1px solid var(--accent); color: var(--accent-txt); }

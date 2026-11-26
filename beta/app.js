@@ -5335,6 +5335,8 @@ let ebE = null;
 // Valores del borrador: no se escribe ninguna serie hasta confirmar el panel.
 function ebCamposValores(id, filas) {
   const dist = esDistancia(tipoDe(id)), medidas = new Set(dist ? ["distancia", "tiempo"] : medidasDe(id));
+  // v373: un ejercicio de fuerza sin medidas propias en la ficha y que no se mide por tiempo no muestra «Tiempo (s)» si ninguna serie tiene tiempo guardado (los datos guardados siempre se muestran)
+  if (tipoDe(id) === "fuerza" && !medidasPropias(id).length && medidaDe(id) !== "tiempo") medidas.delete("tiempo");
   return ["peso", "reps", "tiempo", "distancia"].filter(k => medidas.has(k === "peso" ? "carga" : k) || filas.some(s => n0(s[k]) > 0 || k === "peso" && n0(s.pct) > 0 || k === "reps" && (s.max_reps || esRango(s)) || k === "tiempo" && s.max_tiempo));
 }
 function ebTextoValor(s, k, id) {
@@ -5538,7 +5540,7 @@ function pintarEditorBloque() {
     li.appendChild(t);
     if (!fuera) {
       const d = e.edicion[id]; ebCamposDibujo(t, id, d, false);
-      t.appendChild(el("span", "eb-ej-d", d.filas.length ? "Solo las " + d.filas.length + " series pendientes; las hechas no cambian. Vacío: sin cambios; 0: quitar ese valor." : "Sin series pendientes. Las hechas no se modifican."));
+      t.appendChild(el("span", "eb-ej-d", d.filas.length ? "Cambia las " + d.filas.length + (d.filas.length === 1 ? " serie pendiente" : " series pendientes") + " (las hechas no). Vacío = no cambiar · 0 = quitar el valor." : "Sin series pendientes. Las hechas no se modifican."));
     }
     const b = fuera ? boton("Mantener", "nav-btn eb-bt", () => { e.quitar.delete(id); e.conf = false; pintarEditorBloque(); }) : boton("Quitar de la superserie", "nav-btn eb-bt", () => { e.quitar.add(id); e.conf = false; pintarEditorBloque(); }, "Quitar " + nombreEj(id) + " de la superserie (queda suelto)");
     if (!fuera && quedan <= 1) { b.disabled = true; b.title = "Una superserie necesita al menos un ejercicio: usa «Desagrupar» en el menú de la superserie"; }
@@ -5585,10 +5587,10 @@ function pintarEditorBloque() {
     inp.addEventListener("input", () => { e.desc[k] = inp.value; ebValidar(); });
     lab.append(rotulo, inp); sd.appendChild(lab);
   };
-  campo("ej", "Entre ejercicios (dentro de cada ronda)", quedan > 1);
-  campo("ron", "Entre rondas", e.n > 1);
-  campo("fin", "Al terminar la superserie", true);
-  sd.appendChild(el("p", "eb-nota", "Tiempo («1,30» o «90»), metros trotando («300 m») o ambos («300 m · 1:30»). Vacío o «0» lo quita. Sin tocar, no cambia."));
+  campo("ej", "Descanso entre ejercicios (dentro de cada ronda)", quedan > 1);
+  campo("ron", "Descanso entre rondas", e.n > 1);
+  campo("fin", "Descanso al terminar la superserie", true);
+  sd.appendChild(el("p", "eb-nota", "Formato: «1,30» = 1 min 30 s, «90» = 90 s, «300 m» = metros trotando, o ambos («300 m · 1:30»). Vacío o «0» lo quita; sin tocar, no cambia."));
   cuerpo.appendChild(sd);
   cuerpo.appendChild(el("p", "aviso eb-err", ""));
   const bt = el("div", "d-botones");
@@ -5727,8 +5729,10 @@ function tarjetaBloque(dia, bloqueId, series) {
       '<label class="br-todas" hidden><input type="checkbox"> <span></span></label>' +
       '<button type="button" class="enlace desmarcar" hidden>↺ Marcar como pendiente</button></form>';
   // El título solo dice «Bloque ×N»; los ejercicios salen en cada ronda (los de nombre con distancia, como «Series 1000 m», van en el título)
-  const enTitulo = [...new Set(primera.map(s => nombreEj(s.ejercicio_id)).filter(n => distDeNombre(n)))];
-  c.querySelector(".br-tit").textContent = "×" + rondas.length + " rondas" + (enTitulo.length ? " · " + enTitulo.join(" + ") : "");
+  // v373 (MEJ-UI-020 L9): los nombres de los ejercicios van en el propio encabezado (se acortan con «…» si no caben; nombre completo en title y aria-label)
+  const nombresSS = [...new Set(primera.map(s => nombreEj(s.ejercicio_id)))];
+  c.querySelector(".br-tit").textContent = "×" + rondas.length + " rondas";
+  { const ej = document.createElement("span"); ej.className = "br-ej"; ej.textContent = nombresSS.join(" + "); ej.title = nombresSS.join(" + ") + " · ×" + rondas.length + " rondas"; ej.setAttribute("aria-label", ej.title); c.querySelector(".br-tit").after(ej); }
   c.querySelector(".g-prog").textContent = series.filter(hecha).length + "/" + series.length;
   // Descripción: si todos los ejercicios tienen la misma, bajo el título; si no, cada una junto a su ejercicio en la R1
   const notasT = primera.map(s0 => notaDe(series.filter(x => x.ejercicio_id === s0.ejercicio_id)));
@@ -5871,7 +5875,7 @@ function tarjetaBloque(dia, bloqueId, series) {
       } else li.querySelector(".n").replaceWith(botonHecha(s, "✓", "ronda " + r + ", " + nombreEj(s.ejercicio_id)));
       // El nombre del tramo solo si aporta algo: «Series 1000 m · 1000 m» se queda en «1000 m»
       const nomTramo = !distDeNombre(nombreEj(s.ejercicio_id)) ? nombreEj(s.ejercicio_id) + " · " : "";
-      li.querySelector(".sv-p").textContent = nomTramo + serieTexto(s);
+      li.querySelector(".sv-p").textContent = (nomTramo + serieTexto(s)).replace(/(\d) (reps?|kg|s|min|m|km)\b/g, "$1\u00a0$2").replace(/ \(/g, "\u00a0(");   // v373: sin saltos de línea entre cifra y unidad («10 reps (50 kg)»); solo cambia el espacio, no el valor
       if (descTexto(s)) { const d = document.createElement("span"); d.className = "desc"; d.textContent = descTexto(s); li.querySelector(".sv").appendChild(d); }
       if (!hecha(s) && tipoDe(s.ejercicio_id) === "carrera") { const o = objetivoSerie(s); if (o) { const ob = document.createElement("span"); ob.className = "objetivo"; ob.textContent = textoObjetivo(o); li.querySelector(".sv").appendChild(ob); } }
       if (esDistancia(tipoDe(s.ejercicio_id)) && li.querySelector(".sv").children.length > 1) li.classList.add("fila-dist-bloque");
@@ -5889,7 +5893,7 @@ function tarjetaBloque(dia, bloqueId, series) {
         li.appendChild(v);
       }
       // ⋯ de cada ejercicio del bloque (en la primera ronda): su ficha, su descripción o quitarlo del bloque
-      if (r === rondas[0] && ejV) {
+      if (ejV) {   // v373: en todas las rondas (antes solo en R1); mismo menú y misma acción sobre todo el ejercicio
         const mb = document.createElement("button");
         mb.type = "button"; mb.className = "menu-btn br-menu"; mb.textContent = "⋯";
         mb.setAttribute("aria-label", "Opciones de " + (ejV.nombre || "este ejercicio"));
@@ -5994,12 +5998,18 @@ function menuMedida(ejId, alElegir, conReps = false) {
 let diaBloque = null, tramos = [];
 let grupoBloque = "";
 let parteBloque = "";
+// v373: rondas del creador con el mismo control −/+ del editor (1 a 50); el valor sigue en #blqRondas
+function pintarRondasCrea() {
+  const n = Math.max(1, Math.min(50, parseInt($("blqRondas").value, 10) || 1));
+  $("blqRondas").value = String(n); $("blqRondasN").textContent = "×" + n;
+  $("blqMenos").disabled = n <= 1; $("blqMas").disabled = n >= 50;
+}
 function abrirBloque(dia, grupoDestino, parteDestino) {
   diaBloque = dia;
   grupoBloque = grupoDestino || "";
   parteBloque = parteDestino || "";
   tramos = [];
-  $("blqRondas").value = "4";
+  $("blqRondas").value = "4"; pintarRondasCrea();
   $("blqAviso").textContent = "";
   pintarTramos();
   $("dlgBloque").showModal();
@@ -6007,7 +6017,7 @@ function abrirBloque(dia, grupoDestino, parteDestino) {
 function pintarTramos() {
   const cont = $("blqTramos");
   cont.textContent = "";
-  if (!tramos.length) { const p = document.createElement("p"); p.className = "vacio-lista"; p.textContent = "Añade el primer tramo: por ejemplo «Series 1000 m», o «Press banca» y luego «Remo» para una superserie."; cont.appendChild(p); }
+  if (!tramos.length) { const p = document.createElement("p"); p.className = "vacio-lista"; p.textContent = "Añade el primer ejercicio: por ejemplo «Series 1000 m», o «Press banca» y luego «Remo» para una superserie."; cont.appendChild(p); }
   tramos.forEach((t, k) => {
     const dist = esDistancia(tipoDe(t.ejercicio_id));
     const fila = document.createElement("div");
@@ -6015,7 +6025,8 @@ function pintarTramos() {
     fila.innerHTML = '<div class="tr-cab"><span class="tr-n"></span><button type="button" class="quitar">✕</button></div>' +
       '<div class="ns-fila"><input class="in-a" autocomplete="off"><span class="por"></span><input class="in-b" autocomplete="off"><button type="button" class="medida-btn tr-medida" hidden>Reps ▾</button><button type="button" class="modo tr-modo" hidden aria-label="Cambiar entre kg y % del 1RM">kg</button></div>' +
       '<p class="calc tr-calc" hidden></p>' +
-      '<input class="in-c" inputmode="decimal" autocomplete="off" placeholder="⏱ descanso después: 1,30 o 300 m" aria-label="Descanso después de este tramo (tiempo o metros); en el último, es el descanso entre rondas">';
+      '<label class="tr-desc"><span class="tr-desc-t">Descanso después</span><input class="in-c" inputmode="decimal" autocomplete="off" placeholder="⏱ descanso después: 1,30 o 300 m" aria-label="Descanso después de este ejercicio (tiempo o metros); en el último, es el descanso entre rondas"></label>';
+    fila.querySelector(".tr-desc-t").textContent = k === tramos.length - 1 ? "Descanso entre rondas" : "Descanso después";   // v373: etiqueta visible (antes solo el marcador, que desaparecía al escribir)
     // v341 (INC-BLQ): el nombre del tramo abre la ficha del ejercicio (sobre el creador; al cerrarla se vuelve aquí con los valores intactos)
     const nEl = fila.querySelector(".tr-n"), nBtn = document.createElement("button");
     nEl.append((k + 1) + ". ");
@@ -6075,7 +6086,7 @@ function pintarTramos() {
     b.addEventListener("input", () => { t.b = b.value; t.bTocado = true; });
     cc.addEventListener("input", () => { t.c = cc.value; });
     const q = fila.querySelector(".quitar");
-    q.setAttribute("aria-label", "Quitar el tramo " + (k + 1));
+    q.setAttribute("aria-label", "Quitar el ejercicio " + (k + 1));
     q.addEventListener("click", () => { tramos.splice(k, 1); pintarTramos(); });
     cont.appendChild(fila);
   });
@@ -6118,6 +6129,8 @@ $("blqAnadir").addEventListener("click", () => abrirSelector(diaBloque, id => {
     c: "" });   // la recuperación no se arrastra de otros días
   pintarTramos();
 }));
+$("blqMenos").addEventListener("click", () => { $("blqRondas").value = String(parseInt($("blqRondas").value, 10) - 1); pintarRondasCrea(); });
+$("blqMas").addEventListener("click", () => { $("blqRondas").value = String(parseInt($("blqRondas").value, 10) + 1); pintarRondasCrea(); });
 $("blqVacio").addEventListener("click", () => {
   const rondas = parseInt($("blqRondas").value, 10);
   if (!(rondas >= 1 && rondas <= 50)) { $("blqAviso").textContent = "Las rondas deben estar entre 1 y 50."; return; }
@@ -6130,41 +6143,41 @@ $("blqVacio").addEventListener("click", () => {
 $("blqCrear").addEventListener("click", () => {
   let sugCreador = 0;
   const rondas = parseInt($("blqRondas").value, 10), aviso = $("blqAviso");
-  if (!tramos.length) { aviso.textContent = "Añade al menos un tramo."; return; }
+  if (!tramos.length) { aviso.textContent = "Añade al menos un ejercicio."; return; }
   if (!(rondas >= 1 && rondas <= 50)) { aviso.textContent = "Las rondas deben estar entre 1 y 50."; return; }
   const lista = [];
   for (const [k, t] of tramos.entries()) {
     const rec = leerRecuperacion(t.c);
-    if (!rec) { aviso.textContent = "Revisa la recuperación del tramo " + (k + 1) + " (por ejemplo 2,00 o 300 m)."; return; }
+    if (!rec) { aviso.textContent = "Revisa la recuperación del ejercicio " + (k + 1) + " (por ejemplo 2,00 o 300 m)."; return; }
     const v = { peso: 0, reps: 0, distancia: 0, tiempo: 0, descanso: rec.descanso, rec_dist: rec.rec_dist };
     if (esDistancia(tipoDe(t.ejercicio_id))) {
       v.distancia = leerDist(t.a);
       v.tiempo = leerTiempo(t.b);
-      if (isNaN(v.tiempo)) { aviso.textContent = "Revisa el tiempo del tramo " + (k + 1) + " (por ejemplo 3,40)."; return; }
-      if (!(v.distancia > 0) && !(v.tiempo > 0)) { aviso.textContent = "Pon los metros o el tiempo del tramo " + (k + 1) + "."; return; }
+      if (isNaN(v.tiempo)) { aviso.textContent = "Revisa el tiempo del ejercicio " + (k + 1) + " (por ejemplo 3,40)."; return; }
+      if (!(v.distancia > 0) && !(v.tiempo > 0)) { aviso.textContent = "Pon los metros o el tiempo del ejercicio " + (k + 1) + "."; return; }
     } else if (tipoDe(t.ejercicio_id) === "movilidad") {
       v.reps = parseInt(t.a, 10) || 0;
       v.tiempo = leerSegs(t.b);
       v.por_lado = ladoDe(t.ejercicio_id);   // v342
-      if (isNaN(v.tiempo) || (!(v.reps > 0) && !(v.tiempo > 0))) { aviso.textContent = "Pon las repeticiones o el tiempo del tramo " + (k + 1) + "."; return; }
+      if (isNaN(v.tiempo) || (!(v.reps > 0) && !(v.tiempo > 0))) { aviso.textContent = "Pon las repeticiones o el tiempo del ejercicio " + (k + 1) + "."; return; }
     } else {
       const conPct = t.p || /%\s*$/.test(String(t.a));
       v.peso = parseFloat((String(t.a).trim().replace(/\s*%\s*$/, "") || "0").replace(",", "."));
       if (conPct && v.peso > 0 && t.p === "reps") { v.pct = v.peso; v.pct_ref = "reps"; v.peso = 0; }   // v345: % del máximo de repeticiones: nunca kg
       else if (conPct && v.peso > 0) { v.pct = v.peso; v.peso = kgDePct(t.ejercicio_id, v.pct); }   // v251: sin 1RM en la ficha se guarda el % (sin kg)
       v.por_lado = ladoDe(t.ejercicio_id);   // v342: lo manda solo la ficha (valor actual al crear)
-      if (!(v.peso >= 0)) { aviso.textContent = "Revisa el peso del tramo " + (k + 1) + "."; return; }
+      if (!(v.peso >= 0)) { aviso.textContent = "Revisa el peso del ejercicio " + (k + 1) + "."; return; }
       const esMx = t.m === "maxr" || t.m === "maxt" || /^\s*(m[aá]x|amrap|fallo)/i.test(t.b);
       if (t.m === "t" || t.m === "maxt" || !t.m && medidaDe(t.ejercicio_id) === "tiempo") {
         if (esMx) v.max_tiempo = true;
-        else { v.tiempo = leerSegs(t.b); if (!(v.tiempo > 0)) { aviso.textContent = "Pon los segundos del tramo " + (k + 1) + " (o «máx»)."; return; } }
+        else { v.tiempo = leerSegs(t.b); if (!(v.tiempo > 0)) { aviso.textContent = "Pon los segundos del ejercicio " + (k + 1) + " (o «máx»)."; return; } }
       } else {
         const g = esMx ? null : leerRango(t.b);
         v.reps = esMx ? 0 : g ? g.min : parseInt(t.b, 10);
         if (g) { v.rango_min = g.min; v.rango_max = g.max; }
         if (esMx) v.max_reps = true;
         if (!(v.reps > 0) && !esMx && v.pct_ref === "reps") { v.reps = !g && !String(t.b).trim() ? (textoPctReps(t.ejercicio_id, v.pct).reps || 0) : 0; if (v.reps > 0) sugCreador = v.reps; }   // v345: % de repeticiones: las reps se apuntan al hacerla · v352: con máximo de repeticiones y el campo vacío se guardan las sugeridas (foto del momento)
-        else if (!(v.reps > 0) && !esMx) { aviso.textContent = "Pon las repeticiones del tramo " + (k + 1) + " (o «máx»)."; return; }
+        else if (!(v.reps > 0) && !esMx) { aviso.textContent = "Pon las repeticiones del ejercicio " + (k + 1) + " (o «máx»)."; return; }
       }
     }
     lista.push({ ejercicio_id: t.ejercicio_id, series: Array.from({ length: rondas }, () => ({ ...v })) });
@@ -12256,7 +12269,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v372" + (BETA ? " beta" : "");
+const VERSION_APP = "v373" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

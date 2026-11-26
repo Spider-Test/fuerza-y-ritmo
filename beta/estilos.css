@@ -3182,3 +3182,10 @@ html.ampliado #vistaSemana.solo-dia #semana, html.ampliado #vistaSemana.solo-dia
   html.ampliado .ayuda-flota, html:has(input:focus, textarea:focus, select:focus) .ayuda-flota, html:has(dialog[open]) .ayuda-flota { display: none; }
 }
 .cabecera .ayuda-global { border-color: #fff; }   /* sobre la cabecera azul de PC, el borde claro mantiene el contraste (≥3:1) */
+
+/* v373 (MEJ-UI-020 L9): superseries más claras. Encabezado con los nombres de los ejercicios (con «…»), ⋯ en cada ronda, sin saltos raros y etiqueta de descanso */
+.bloque-rep > .bloque-cab .br-ej { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 15px; color: var(--fg); }
+.bloque-rep > .bloque-cab .br-tit { flex: 0 0 auto; }
+.bloque-rep .series li .sv-p, .bloque-rep .rondas li .sv-p { overflow-wrap: break-word; }
+.tr-desc { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; color: var(--muted-txt); }
+.tr-desc .tr-desc-t { line-height: 1.2; }

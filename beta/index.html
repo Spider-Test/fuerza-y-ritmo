@@ -27,7 +27,7 @@
   window.addEventListener("pageshow", actualizar);
 })();
 </script>
-<link rel="stylesheet" href="estilos.css?v=v372">
+<link rel="stylesheet" href="estilos.css?v=v373">
 </head>
 <body>
 <div id="barraReloj" aria-hidden="true"></div>
@@ -472,10 +472,12 @@
     <button class="cerrar" aria-label="Cerrar">✕</button>
   </form>
   <div class="d-cuerpo">
-    <p class="menu-det" style="padding:0">Uno o varios tramos seguidos que se repiten. Ej.: 1000 m + rec. 300 m ×4, o Press banca + Remo ×4.</p>
+    <p class="menu-det" style="padding:0">Uno o varios ejercicios seguidos que se repiten. Ej.: 1000 m + rec. 300 m ×4, o Press banca + Remo ×4.</p>
     <div id="blqTramos"></div>
-    <button type="button" class="add-ej" id="blqAnadir">+ Añadir tramo</button>
-    <label class="campo">Rondas (veces que se repite) <input id="blqRondas" type="number" min="1" max="50" inputmode="numeric"></label>
+    <button type="button" class="add-ej" id="blqAnadir">+ Añadir ejercicio</button>
+    <div class="campo"><span>Rondas (veces que se repite)</span>
+      <div class="eb-rondas"><button type="button" class="nav-btn eb-paso" id="blqMenos" aria-label="Quitar una ronda">−</button><output class="eb-n" id="blqRondasN">×4</output><button type="button" class="nav-btn eb-paso" id="blqMas" aria-label="Añadir una ronda">+</button></div>
+      <input id="blqRondas" type="hidden" value="4"></div>
     <p id="blqAviso" class="aviso" role="status"></p>
     <div class="d-botones">
       <button type="button" class="nav-btn" id="blqVacio" title="Una superserie sin ejercicios: luego arrastras ejercicios del entreno dentro con ≡">Crear vacío</button>
@@ -1103,6 +1105,6 @@
 <div class="toast" id="toast" role="status" hidden><span id="toastTxt"></span><button type="button" id="toastBtn">Deshacer</button></div>
 <div class="fiesta" id="fiesta" aria-hidden="true"></div>
 
-<script src="app.js?v=v372"></script>
+<script src="app.js?v=v373"></script>
 </body>
 </html>

@@ -12256,7 +12256,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v371" + (BETA ? " beta" : "");
+const VERSION_APP = "v372" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";
@@ -13392,6 +13392,8 @@ function abrirAyuda() {
 }
 pintarAvisoNovedades();
 $("ayudaBtn").addEventListener("click", abrirAyuda);
+// v372 (MEJ-UI-020 L7): acceso «?» a la misma Ayuda desde cualquier pestaña (en PC, en la cabecera; en móvil, flotando sobre la barra inferior).
+["ayudaCab", "ayudaFlota"].forEach(id => $(id).addEventListener("click", abrirAyuda));
 $("dlgAyuda").querySelectorAll("details").forEach(d => d.addEventListener("toggle", () => { if (d.open) verAlAbrir(d); }));
 
 

@@ -3170,3 +3170,15 @@ html.ampliado #vistaSemana.solo-dia #semana, html.ampliado #vistaSemana.solo-dia
 .det-catalogo.solo-lectura .tabs { background: transparent; padding: 0; gap: 6px; flex-wrap: wrap; }
 .det-catalogo.solo-lectura .tabs button, .det-catalogo.solo-lectura .chip { cursor: default; background: transparent; border: 1px dashed var(--line); box-shadow: none; color: var(--muted-txt); opacity: 1; border-radius: 999px; padding: 4px 10px; font-size: 13px; font-weight: 600; flex: 0 0 auto; }
 .det-catalogo.solo-lectura .tabs button[aria-pressed="true"], .det-catalogo.solo-lectura .chip[aria-pressed="true"] { background: var(--accent-soft); border: 1px solid var(--accent); color: var(--accent-txt); }
+
+/* v372 (MEJ-UI-020 L7): botón «?» de Ayuda en cualquier pestaña. PC: en la cabecera. Móvil: botón flotante de 44 px sobre la barra inferior, a la derecha
+   (no toca la barra, ni la tira de días, ni la fila fija, ni la barra del reloj; se oculta con zoom de pellizco, al escribir y con cualquier diálogo abierto). */
+.ayuda-global { width: 44px; height: 44px; min-width: 44px; padding: 0; border-radius: 50%; border: 2px solid var(--accent-txt); background: var(--card); color: var(--accent-txt); font-family: var(--display); font-size: 24px; font-weight: 800; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.ayuda-global:focus-visible { outline: 3px solid var(--verde); outline-offset: 2px; }
+.ayuda-flota { display: none; }
+@media (max-width: 760px) {
+  .ayuda-cab { display: none; }
+  .ayuda-flota { display: inline-flex; position: fixed; z-index: 60; right: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 82px); box-shadow: 0 2px 10px rgba(15, 28, 38, 0.25); }
+  html.ampliado .ayuda-flota, html:has(input:focus, textarea:focus, select:focus) .ayuda-flota, html:has(dialog[open]) .ayuda-flota { display: none; }
+}
+.cabecera .ayuda-global { border-color: #fff; }   /* sobre la cabecera azul de PC, el borde claro mantiene el contraste (≥3:1) */

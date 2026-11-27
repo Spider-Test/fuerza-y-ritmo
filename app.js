@@ -8705,6 +8705,22 @@ function pintarPlan() {
 }
 // Los selectores generales parten del calendario real; no mutan la semana navegada ni dias[].id.
 const fechasGenerales = () => Array.from({ length: 7 }, (_, i) => ({ i, id: iso(sumarDias(lunesDe(new Date()), i)) }));
+// v379: dónde se usa una plantilla. Mientras las listas y los mesociclos apunten a plantillas (MEJ-LISTAS-002 pendiente), eliminarla quita sus entradas
+// de las listas y la deja como «?» en los mesociclos; los entrenos ya puestos en días NO cambian (son copias). Se avisa antes y se puede deshacer.
+function usosPlantillas(ids) {
+  const set = new Set(ids), listas = [], mesos = [];
+  vivos("listas").forEach(l => { const n = (l.items || []).filter(x => typeof x === "string" && set.has(x)).length; if (n) listas.push("«" + l.nombre + "»" + (n > 1 ? " (" + n + " veces)" : "")); });   // v380/v330: «(n veces)» fuera de las comillas
+  const pids = v => typeof v === "string" ? [v] : Array.isArray(v) ? v.flatMap(pids) : v && typeof v === "object" ? Object.values(v).flatMap(pids) : [];
+  vivos("mesociclos").forEach(m => { if (pids(m.dias).some(x => set.has(x))) mesos.push(m.nombre); });
+  return { listas, mesos };
+}
+function textoUsosPlantillas(ids) {
+  const u = usosPlantillas(ids), partes = [];
+  if (u.listas.length) partes.push("Desaparecerá de " + (u.listas.length === 1 ? "la lista " + u.listas[0] : "las listas: " + u.listas.join(", ")) + ".");
+  if (u.mesos.length) partes.push("Saldrá como «?» en " + (u.mesos.length === 1 ? "el mesociclo «" + u.mesos[0] + "»" : "los mesociclos: " + u.mesos.map(x => "«" + x + "»").join(", ")) + ".");
+  partes.push("Los entrenos que ya pusiste en días no cambian.");
+  return partes.join(" ");
+}
 function menuPlantilla(p) {
   abrirMenu(p.nombre, (esPlantillaCalentamiento(p) ? "Calentamiento · " : "") + resumenItems(p.items || []) + ": " + nombresItems(p.items || []), [
     { texto: "Añadir a un día de esta semana…", accion: () => {
@@ -8718,7 +8734,12 @@ function menuPlantilla(p) {
       const final = nombreLibreEn(n, usados);
       cambiar("plantillas", { ...p, nombre: final }); pintarPlan();
       if (final !== n) avisoDeshacer("«" + n + "» ya existe en una lista de esta plantilla: se ha guardado como «" + final + "»", null); } },
-    { texto: "Eliminar plantilla", peligro: true, accion: () => { cambiar("plantillas", { ...p, borrado: true }); pintarPlan(); } }
+    // v379: la confirmación (la de siempre de las opciones de peligro) dice ahora dónde se usa, y se puede deshacer (antes: «No se puede deshacer.», sin decir dónde)
+    { texto: "Eliminar plantilla", peligro: true, confirmar: "Pulsa otra vez: " + textoUsosPlantillas([p.id]).replace(/\.$/, ""), accion: () => {
+      const antes = db.plantillas[p.id]; if (!antes || antes.borrado) return;
+      cambiar("plantillas", { ...antes, borrado: true }); persistir(); pintarPlan(); pintarListas();
+      avisoDeshacer("Plantilla «" + p.nombre + "» eliminada", [["plantillas", { ...antes }]]);
+    } }
   ]);
 }
 async function cambiarPerfil(uid, cambios, aviso) {
@@ -12458,7 +12479,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v329" + (BETA ? " beta" : "");
+const VERSION_APP = "v330" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";
@@ -13258,7 +13279,7 @@ $("selPlantCompartir").addEventListener("click", () => {
 // Eliminar: confirmación (es un borrado grande) y Deshacer
 $("selPlantBorrar").addEventListener("click", () => {
   const ps = plantillasSel();
-  abrirMenu("Eliminar " + ps.length + (ps.length === 1 ? " plantilla" : " plantillas"), ps.map(p => p.nombre).join(", "), [{ texto: "Eliminar", peligro: true, confirmar: "Pulsa otra vez: se eliminan " + ps.length + (ps.length === 1 ? " plantilla" : " plantillas"), accion: () => {
+  abrirMenu("Eliminar " + ps.length + (ps.length === 1 ? " plantilla" : " plantillas"), ps.map(p => p.nombre).join(", ") + " · " + textoUsosPlantillas(ps.map(p => p.id)) /* v379: + dónde se usan */, [{ texto: "Eliminar", peligro: true, confirmar: "Pulsa otra vez: se eliminan " + ps.length + (ps.length === 1 ? " plantilla" : " plantillas"), accion: () => {
     ps.forEach(p => cambiar("plantillas", { ...p, borrado: true }, true));
     persistir();
     salirSeleccion();

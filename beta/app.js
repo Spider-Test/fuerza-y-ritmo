@@ -2524,15 +2524,15 @@ function abrirCalentamiento(id) {
 // se mueven o quitan, pero sus valores no se editan aquí. GUARDAR crea SIEMPRE una copia propia de la plantilla (la original está también en Plantillas y puede estar en otras
 // entradas o listas) y solo re-enlaza ESTA posición (como «Cambiar nombre»): otras listas, entradas y plantillas quedan intactas; ubicación, orden y «siguiente» se conservan.
 // Cancelar no cambia nada; Deshacer restaura la entrada y retira la copia. Si la estructura de la lista cambia con el editor abierto, se rechaza el guardado.
-function abrirEditarEntradaLista(listaId, i, plantillaId) {
-  const l = db.listas[listaId], p = db.plantillas[plantillaId];
-  if (!l || l.borrado || (l.items || [])[i] !== plantillaId || !p || p.borrado) return;
-  ce = { id: plantillaId, items: copiaJson(p.items || []), entrada: { listaId, i, estructura: JSON.stringify(l.items || []) } };
+function abrirEditarEntradaLista(listaId, i) {   // v381: enlazada o propia; se edita la copia de ESTA entrada (nunca la plantilla)
+  const l = db.listas[listaId], x = l && !l.borrado ? (l.items || [])[i] : undefined, p = entradaDe(x);
+  if (!p) return;
+  ce = { id: p.id, nombre: p.nombre, items: copiaJson(p.items || []), entrada: { listaId, i, estructura: JSON.stringify(l.items || []), original: JSON.stringify(x) } };
   pintarCalentamientoDlg();
   $("dlgCalent").showModal();
 }
 function pintarCalentamientoDlg() {
-  const p = db.plantillas[ce.id], cuerpo = $("calCuerpo");
+  const p = ce.entrada ? { id: ce.id, nombre: ce.nombre } : db.plantillas[ce.id], cuerpo = $("calCuerpo");   // v381: en una entrada el nombre va en ce (puede ser propia)
   const modoE = !!ce.entrada;   // v377 (MEJ-LISTAS-007)
   $("calTit").textContent = modoE ? "Editar entreno: " + p.nombre : p.nombre;
   cuerpo.textContent = "";
@@ -2553,7 +2553,7 @@ function pintarCalentamientoDlg() {
     avisoDeshacer("Calentamiento «" + p.nombre + "» eliminado (las copias en tus entrenos siguen)", [["plantillas", antes]]);
   }));
   if (!modoE) cuerpo.appendChild(fila0);
-  cuerpo.appendChild(el("p", "eb-nota", modoE ? "Edita partes, ejercicios y valores y pulsa «Guardar cambios». Se guarda como una copia propia de esta entrada: la plantilla original, las demás entradas y las demás listas no cambian. Las superseries se pueden subir, bajar o quitar, pero sus valores no se editan aquí."
+  cuerpo.appendChild(el("p", "eb-nota", modoE ? "Edita partes, ejercicios y valores y pulsa «Guardar cambios». Se guarda solo en esta entrada de la lista (no crea ninguna plantilla): tus plantillas, las demás entradas y las demás listas no cambian. Las superseries se pueden subir, bajar o quitar, pero sus valores no se editan aquí."
     : "Edita ejercicios y valores y pulsa «Guardar cambios». Las copias ya añadidas a tus entrenos no cambian. Todas las series se guardan como calentamiento (fuera de récords y estadísticas)."));
   const campoParte = (it, i, nom) => {   // v377: nombre de la parte de este ejercicio/superserie (vacío = sin parte)
     const lab = el("label", "cal-campo cal-ancho cal-parte"), inp = document.createElement("input");
@@ -2632,24 +2632,22 @@ function leerCalentamientoCampos() {
   });
   return err;
 }
-function guardarEntradaEditada() {   // v377 (MEJ-LISTAS-007)
+function guardarEntradaEditada() {   // v377 (MEJ-LISTAS-007); v381: escribe una entrada PROPIA en su sitio (sin crear plantilla; la original no cambia)
   const err = leerCalentamientoCampos(), msg = document.querySelector("#calCuerpo .eb-err"), e = ce.entrada;
-  const fresca = db.listas[e.listaId], actual = db.plantillas[ce.id];
-  if (!fresca || fresca.borrado || JSON.stringify(fresca.items || []) !== e.estructura || (fresca.items || [])[e.i] !== ce.id || !actual || actual.borrado) {
+  const fresca = db.listas[e.listaId], x = fresca && !fresca.borrado ? (fresca.items || [])[e.i] : undefined;
+  if (!fresca || fresca.borrado || JSON.stringify(fresca.items || []) !== e.estructura || JSON.stringify(x) !== e.original || !entradaDe(x)) {
     msg.textContent = "La lista o la entrada ha cambiado mientras editabas. No se ha guardado nada; ciérralo y vuelve a abrir «Editar entreno…»."; return;
   }
   let falta = "";
   ce.items.filter(it => !it.bloque).forEach(it => it.series.forEach((v, j) => { if (!falta && !(n0(v.reps) > 0 || v.max_reps || n0(v.tiempo) > 0 || n0(v.distancia) > 0)) falta = nombreEj(it.ejercicio_id) + " serie " + (j + 1) + ": pon repeticiones, tiempo o distancia"; }));
   if (!ce.items.length) falta = "El entreno no puede quedar vacío";
   if (err || falta) { msg.textContent = err || falta; return; }
-  const antes = [["listas", { ...fresca, items: copiaJson(fresca.items || []) }]], id = nuevoId();
-  cambiar("plantillas", { ...actual, id, items: copiaJson(ce.items), borrado: false });
-  antes.push(["plantillas", { ...db.plantillas[id], borrado: true }]);
-  const its = (fresca.items || []).slice(); its[e.i] = id;
+  const antes = [["listas", { ...fresca, items: copiaJson(fresca.items || []) }]];
+  const its = (fresca.items || []).slice(), nombre = ce.nombre;
+  its[e.i] = esEntradaPropia(x) ? { ...x, items: copiaJson(ce.items) } : nuevaEntradaPropia(nombre, ce.items);
   guardarLista(fresca, { items: its });
-  const nombre = actual.nombre;
   $("dlgCalent").close();
-  avisoDeshacer("«" + nombre + "» editado en la lista «" + fresca.nombre + "» como copia propia (la original y las demás listas no cambian)", antes);
+  avisoDeshacer("«" + nombre + "» editado en la lista «" + fresca.nombre + "»" + (esEntradaPropia(x) ? "" : " (tu plantilla no cambia)"), antes);
 }
 function guardarCalentamientoEditado() {
   if (ce && ce.entrada) { guardarEntradaEditada(); return; }
@@ -6670,15 +6668,27 @@ let listasAbiertas = {}; // listas, semanas y bloques empiezan plegados en cada 
 const esSep = x => !!(x && typeof x === "object" && x.sep);
 // Mesociclo (o fase) de una lista: agrupa todo lo que va debajo (semanas o bloques y entrenamientos) hasta el siguiente
 const esGrupoL = x => !!(x && typeof x === "object" && x.grupo);
-const entrenosDeLista = l => (l.items || []).filter(x => typeof x === "string").map(id => db.plantillas[id]).filter(p => p && !p.borrado);
+// MEJ-LISTAS-002, fase 1 (v380): una entrada de lista puede ser (a) ENLAZADA: el id (texto) de una plantilla, como siempre, o (b) PROPIA: un objeto
+// { e: id, nombre, items } con su contenido dentro de listas.items (jsonb, sin cambios de Supabase). Esta versión LEE las dos y no escribe todavía la (b).
+// entradaDe devuelve un objeto con la forma de una plantilla ({ id, nombre, items }); el id de una propia lleva el prefijo «e:» (nunca choca con un uuid de plantilla).
+const esEntradaPropia = x => !!(x && typeof x === "object" && !x.sep && !x.grupo && typeof x.e === "string" && x.e && Array.isArray(x.items));
+function entradaDe(x) {
+  if (typeof x === "string") { const p = db.plantillas[x]; return p && !p.borrado ? p : null; }
+  return esEntradaPropia(x) ? { id: "e:" + x.e, nombre: String(x.nombre || "Entreno"), items: x.items, propia: true } : null;
+}
+const entrenosDeLista = l => (l.items || []).map(entradaDe).filter(Boolean);
+// v381 (MEJ-LISTAS-002, fase 2): todo lo que la app AÑADE o CAMBIA en una lista se escribe como entrada PROPIA (copia del contenido, sin crear plantilla
+// ni enlace nuevo). Las enlazadas existentes siguen igual hasta que el usuario las edite, las renombre o las haga independientes. «Plantillas» no cambia.
+const nuevaEntradaPropia = (nombre, items) => ({ e: nuevoId(), nombre: String(nombre || "Entreno"), items: copiaJson(items || []) });
+const itemsParaEntrada = series => itemsDe(series).map(it => it.bloque ? { bloque: true, seccion: it.seccion || "", tramos: it.tramos } : { ejercicio_id: it.ejercicio_id, seccion: it.seccion || "", series: it.series });
 // Entrenamientos con su posición (k) y la semana/bloque a la que pertenecen
 function recorrerLista(l) {
   const out = []; let sep = null, k = 0;
   (l.items || []).forEach((x, i) => {
     if (esGrupoL(x)) { sep = null; return; }
     if (esSep(x)) { sep = x; return; }
-    const p = db.plantillas[x];
-    if (p && !p.borrado) out.push({ p, k: k++, i, sep });
+    const p = entradaDe(x);   // v380: enlazada o propia
+    if (p) out.push({ p, k: k++, i, sep });
   });
   return out;
 }
@@ -6731,16 +6741,13 @@ function elegirDeLista(l, alElegir) {
     texto: (x.k === sig ? "▶ " : "") + (x.sep ? x.sep.titulo + " · " : "") + x.p.nombre + " · " + resumenItems(x.p.items || []), accion: () => alElegir(x.p, x.k) })));
 }
 // Inserta en la lista (al final o detrás de una posición de items)
-// MEJ-LISTAS-004: los homónimos conservan el nombre; una plantilla distinta se añade como copia independiente.
-// Repetir la misma referencia mantiene el flujo existente; Cambiar nombre aísla únicamente la entrada elegida.
-function anadirPlantillaALista(l, p, tras) {
-  const rec = recorrerLista(db.listas[l.id]);
-  if (rec.some(x => x.p.id === p.id) || !rec.some(x => norm(x.p.nombre) === norm(p.nombre))) { insertarEnLista(l, p.id, tras); return; }
-  const nombre = p.nombre;
-  const id = nuevoId();
-  cambiar("plantillas", { ...p, id, nombre, items: copiaJson(p.items || []), borrado: false });
-  insertarEnLista(l, id, tras);
-  avisoDeshacer("«" + nombre + "» añadido a «" + l.nombre + "» como copia independiente", null);
+// MEJ-LISTAS-004: los homónimos conservan el nombre. v381 (MEJ-LISTAS-002): lo que se añade es una entrada propia (copia), nunca un enlace nuevo.
+function anadirPlantillaALista(l, p, tras) {   // v381: siempre como entrada PROPIA (copia del contenido): no enlaza ni crea plantilla; conserva el nombre (MEJ-LISTAS-004)
+  const fresca = db.listas[l.id];
+  if (!fresca || fresca.borrado || !p) return;
+  const antes = [["listas", { ...fresca, items: copiaJson(fresca.items || []) }]];
+  insertarEnLista(fresca, nuevaEntradaPropia(p.nombre, p.items), tras);
+  avisoDeshacer("«" + p.nombre + "» añadido a «" + fresca.nombre + "» como copia (tu plantilla no cambia)", antes);
 }
 function insertarEnLista(l, valor, tras) {
   const fresca = db.listas[l.id], items = (fresca.items || []).slice();
@@ -6774,7 +6781,7 @@ function guardarEnLista(nombreSugerido, series) {
   });
 }
 // MEJ-SEM-007 (v377), Listas ↔ Semana. «Copiar entreno» en una entrada de lista deja en el portapapeles (formato de siempre, ámbito «entreno») sus ejercicios; en Semana se pega con el pegado normal
-// (entreno nuevo, con sufijo si el nombre ya existe). «Pegar» en el menú de una lista añade el entreno copiado desde Semana como entrada NUEVA e independiente (también copia en Plantillas), con
+// (entreno nuevo, con sufijo si el nombre ya existe). «Pegar» en el menú de una lista añade el entreno copiado desde Semana como entrada NUEVA e independiente (v381: entrada propia, ya no copia en Plantillas), con
 // la regla de ubicación de MEJ-LISTAS-003 y sin renombrar (MEJ-LISTAS-004). Partes, superseries y ejercicios sueltos no se pegan como entrada de lista.
 const ambitoEntrenoCopiado = () => !!(porta && porta.ambito === "entreno" && (porta.items || []).length);
 function copiarEntradaLista(p) {
@@ -6792,47 +6799,41 @@ function pegarEnLista(l) {
 }
 async function pegarEnListaEn(l, ubi) {
   if (!ambitoEntrenoCopiado()) return;
-  const copiado = porta, nombre = await pedirNombre("Nombre del entreno", copiado.nombre, "Se añade como una entrada nueva e independiente, también en tus plantillas. Puede tener el mismo nombre que otras entradas.");
+  const copiado = porta, nombre = await pedirNombre("Nombre del entreno", copiado.nombre, "Se añade como una entrada nueva de esta lista (no se guarda en tus plantillas). Puede tener el mismo nombre que otras entradas.");
   if (!nombre) return;
   const fresca = db.listas[l.id];
   if (!fresca || fresca.borrado) { setEstado("La lista ya no está disponible. No se ha pegado el entreno."); return; }
   if (ubi && JSON.stringify(fresca.items || []) !== ubi.estructura) { setEstado("La lista ha cambiado mientras escribías. No se ha pegado el entreno; vuelve a intentarlo."); return; }
   const items = copiaJson(copiado.items).map(it => it.bloque ? { bloque: true, seccion: it.seccion || "", tramos: it.tramos } : { ejercicio_id: it.ejercicio_id, seccion: it.seccion || "", series: it.series });
-  const antes = [["listas", { ...fresca, items: copiaJson(fresca.items || []) }]], id = nuevoId();
-  cambiar("plantillas", { id, nombre, items, borrado: false });
-  antes.push(["plantillas", { ...db.plantillas[id], borrado: true }]);
-  insertarEnLista(fresca, id, ubi ? ubi.tras : undefined);
-  avisoDeshacer("«" + nombre + "» pegado en la lista «" + fresca.nombre + "» como entrada nueva e independiente", antes);
+  const antes = [["listas", { ...fresca, items: copiaJson(fresca.items || []) }]];
+  insertarEnLista(fresca, nuevaEntradaPropia(nombre, items), ubi ? ubi.tras : undefined);   // v381: entrada propia, sin plantilla
+  avisoDeshacer("«" + nombre + "» pegado en la lista «" + fresca.nombre + "» como entrada nueva", antes);
 }
 async function guardarEnListaEn(l, ubi, nombreSugerido, series) {
-  const nombre = await pedirNombre("Nombre del entreno", nombreSugerido, "Se guarda como una copia nueva e independiente, también en tus plantillas. Puede tener el mismo nombre que otras entradas; no se reemplaza nada.");
+  const nombre = await pedirNombre("Nombre del entreno", nombreSugerido, "Se guarda como una entrada nueva de esta lista (no se guarda en tus plantillas). Puede tener el mismo nombre que otras entradas; no se reemplaza nada.");
   if (!nombre) return;
   const fresca = db.listas[l.id];
   if (!fresca || fresca.borrado) { setEstado("La lista ya no está disponible. No se ha guardado el entreno."); return; }
   if (ubi && JSON.stringify(fresca.items || []) !== ubi.estructura) { setEstado("La lista ha cambiado mientras escribías. No se ha guardado el entreno; vuelve a intentarlo."); return; }
-  const items = itemsDe(series).map(it => it.bloque ? { bloque: true, seccion: it.seccion || "", tramos: it.tramos } : { ejercicio_id: it.ejercicio_id, seccion: it.seccion || "", series: it.series });
-  const antes = [["listas", { ...fresca, items: copiaJson(fresca.items || []) }]], id = nuevoId();
-  cambiar("plantillas", { id, nombre, items, borrado: false });
-  antes.push(["plantillas", { ...db.plantillas[id], borrado: true }]);
-  insertarEnLista(fresca, id, ubi ? ubi.tras : undefined);
-  avisoDeshacer("«" + nombre + "» guardado en la lista «" + fresca.nombre + "» como copia independiente", antes);
+  const antes = [["listas", { ...fresca, items: copiaJson(fresca.items || []) }]];
+  insertarEnLista(fresca, nuevaEntradaPropia(nombre, itemsParaEntrada(series)), ubi ? ubi.tras : undefined);   // v381: entrada propia, sin plantilla
+  avisoDeshacer("«" + nombre + "» guardado en la lista «" + fresca.nombre + "»", antes);
 }
 // Renombrar una posición no modifica la plantilla original ni las demás referencias a su ID.
-async function renombrarEntradaLista(listaId, i, plantillaId) {
-  const inicial = db.listas[listaId], p = db.plantillas[plantillaId];
-  if (!inicial || inicial.borrado || (inicial.items || [])[i] !== plantillaId || !p || p.borrado) return;
+// v381: solo cambia ESTA entrada: una propia cambia de nombre en su sitio; una enlazada pasa a propia con el nombre nuevo (sin crear plantilla).
+async function renombrarEntradaLista(listaId, i) {
+  const inicial = db.listas[listaId], x0 = inicial && !inicial.borrado ? (inicial.items || [])[i] : undefined, p = entradaDe(x0);
+  if (!p) return;
   const estructura = JSON.stringify(inicial.items || []);
-  const nombre = await pedirNombre("Nombre del entreno en esta lista", p.nombre, "Se crea una copia independiente solo para esta entrada. La plantilla original y las demás entradas y listas conservan su nombre y contenido.");
+  const nombre = await pedirNombre("Nombre del entreno en esta lista", p.nombre, "Solo cambia esta entrada de esta lista. Tus plantillas y las demás entradas y listas conservan su nombre y contenido.");
   if (!nombre) return;
-  const fresca = db.listas[listaId], actual = db.plantillas[plantillaId];
-  if (!fresca || fresca.borrado || JSON.stringify(fresca.items || []) !== estructura || !actual || actual.borrado) {
+  const fresca = db.listas[listaId], x = fresca && !fresca.borrado ? (fresca.items || [])[i] : undefined, actual = entradaDe(x);
+  if (!fresca || fresca.borrado || JSON.stringify(fresca.items || []) !== estructura || !actual) {
     setEstado("La entrada ha cambiado mientras escribías. Abre de nuevo su menú; no se ha renombrado nada."); return;
   }
   if (nombre === actual.nombre) return;
-  const antes = [["listas", { ...fresca, items: copiaJson(fresca.items || []) }]], id = nuevoId();
-  cambiar("plantillas", { ...actual, id, nombre, items: copiaJson(actual.items || []), borrado: false });
-  antes.push(["plantillas", { ...db.plantillas[id], borrado: true }]);
-  const items = (fresca.items || []).slice(); items[i] = id;
+  const antes = [["listas", { ...fresca, items: copiaJson(fresca.items || []) }]];
+  const items = (fresca.items || []).slice(); items[i] = esEntradaPropia(x) ? { ...x, nombre } : nuevaEntradaPropia(nombre, actual.items);
   guardarLista(fresca, { items });
   avisoDeshacer("Entrada renombrada como «" + nombre + "»", antes);
 }
@@ -6940,7 +6941,7 @@ function pintarListas() {
       const todo = nuevo.concat(items.filter((x, i) => !usados.has(i)));
       // El «siguiente» sigue siendo el mismo entrenamiento tras moverlo
       const pos = actual ? n.findIndex(y => +y.dataset.i === actual.i) : -1;
-      const nuevoSig = pos < 0 ? 0 : nuevo.slice(0, pos).filter(y => typeof y === "string" && db.plantillas[y] && !db.plantillas[y].borrado).length;
+      const nuevoSig = pos < 0 ? 0 : nuevo.slice(0, pos).filter(y => !!entradaDe(y)).length;   // v380
       guardarLista(fresca, { items: todo, siguiente: Math.max(0, nuevoSig) });
     };
     const finSeccion = i => { const its = l.items || []; let j = i; while (j + 1 < its.length && !esSep(its[j + 1]) && !esGrupoL(its[j + 1])) j++; return j; };
@@ -6970,7 +6971,7 @@ function pintarListas() {
         const claveG = "g|" + x.grupo, plegado = listasAbiertas[claveG] !== true;
         g.classList.toggle("lg-plegado", plegado);
         const its = l.items || [], fin = finGrupo(i);
-        const nB = its.slice(i + 1, fin + 1).filter(esSep).length, nE = its.slice(i + 1, fin + 1).filter(y => typeof y === "string" && db.plantillas[y] && !db.plantillas[y].borrado).length;
+        const nB = its.slice(i + 1, fin + 1).filter(esSep).length, nE = its.slice(i + 1, fin + 1).filter(y => !!entradaDe(y)).length;   // v380
         const cab = document.createElement("div");
         cab.className = "lista-gcab";
         cab.dataset.i = i;
@@ -7021,7 +7022,7 @@ function pintarListas() {
         fs.dataset.i = i;
         fs.innerHTML = '<span class="ls-tit"></span><span class="ls-n"></span><button type="button" class="menu-btn">⋯</button>';
         fs.querySelector(".ls-tit").textContent = x.titulo;
-        const ents = (() => { let c = 0, j = i + 1; const its = l.items || []; while (j < its.length && !esSep(its[j])) { if (db.plantillas[its[j]] && !db.plantillas[its[j]].borrado) c++; j++; } return c; })();
+        const ents = (() => { let c = 0, j = i + 1; const its = l.items || []; while (j < its.length && !esSep(its[j])) { if (entradaDe(its[j])) c++; j++;   /* v380 */ } return c; })();
         fs.querySelector(".ls-n").textContent = ents + (ents === 1 ? " entreno" : " entrenos");
         fs.querySelector(".menu-btn").addEventListener("click", () => abrirMenu(x.titulo, "", [
           { texto: "+ Añadir entreno aquí…", accion: () => anadir(finSeccion(i)) },
@@ -7074,8 +7075,8 @@ function pintarListas() {
         destino = cuerpoB;
         return;
       }
-      const p = db.plantillas[x];
-      if (!p || p.borrado) return;
+      const p = entradaDe(x);   // v380: enlazada o propia
+      if (!p) return;
       const kk = k++;
       const fila = document.createElement("div");
       fila.className = "lista-ent" + (kk === sig ? " es-siguiente" : "");
@@ -7097,27 +7098,27 @@ function pintarListas() {
       m.addEventListener("click", () => abrirMenu(p.nombre, resumenItems(p.items || []), [
         { texto: "Poner en un día…", accion: () => ponerEntrenoDeLista(l, p, kk) },
         kk !== sig && { texto: "Marcar como el siguiente", accion: () => guardarLista(db.listas[l.id], { siguiente: kk }) },
-        { texto: "Editar entreno…", accion: () => abrirEditarEntradaLista(l.id, i, p.id) },   // v377 (MEJ-LISTAS-007)
+        // v380/v381 (MEJ-LISTAS-002): una entrada PROPIA (contenido dentro de la lista) ofrece lo mismo que una enlazada salvo «Hacer independiente» (ya lo es);
+        // editar, renombrar, repetir y añadir a otra lista escriben siempre entradas propias, sin crear plantillas.
+        { texto: "Editar entreno…", accion: () => abrirEditarEntradaLista(l.id, i) },   // v377 (MEJ-LISTAS-007); v381: también propias (se edita en la lista)
         { texto: "Copiar entreno", accion: () => copiarEntradaLista(p) },   // v377 (MEJ-SEM-007): se pega en Semana con el pegado normal
-        { texto: "Cambiar nombre…", accion: () => renombrarEntradaLista(l.id, i, p.id) },
-        { texto: "Repetir debajo", accion: () => insertarEnLista(l, p.id, i) },
-        // Corrección explícita de referencias repetidas antiguas: copia independiente que conserva el nombre.
-        rec.filter(x => x.p.id === p.id).length > 1 && { texto: "Hacer esta entrada independiente", accion: () => {
-          const fresca = db.listas[l.id], antes = [["listas", { ...fresca }]];
-          const nombre = p.nombre;
-          const id = nuevoId();
-          cambiar("plantillas", { ...p, id, nombre, items: copiaJson(p.items || []), borrado: false });
-          antes.push(["plantillas", { ...db.plantillas[id], borrado: true }]);
-          const its = (fresca.items || []).slice(); its[i] = id;
+        { texto: "Cambiar nombre…", accion: () => renombrarEntradaLista(l.id, i) },   // v381: también propias
+        { texto: "Repetir debajo", accion: () => { const fresca = db.listas[l.id], antes = [["listas", { ...fresca, items: copiaJson(fresca.items || []) }]]; insertarEnLista(fresca, nuevaEntradaPropia(p.nombre, p.items), i); avisoDeshacer("«" + p.nombre + "» repetido debajo como copia", antes); } },   // v381: copia propia (antes repetía el enlace)
+        // v381: una entrada ENLAZADA se puede hacer independiente: pasa a ser propia (copia del contenido dentro de la lista, mismo nombre) sin crear plantilla
+        !p.propia && { texto: "Hacer esta entrada independiente", accion: () => {
+          const fresca = db.listas[l.id];
+          if (!fresca || fresca.borrado || (fresca.items || [])[i] !== x || !entradaDe(x)) { setEstado("La entrada ha cambiado. Abre de nuevo su menú; no se ha cambiado nada."); return; }
+          const antes = [["listas", { ...fresca, items: copiaJson(fresca.items || []) }]];
+          const its = (fresca.items || []).slice(); its[i] = nuevaEntradaPropia(p.nombre, p.items);
           guardarLista(fresca, { items: its });
-          avisoDeshacer("Entrada independiente: «" + nombre + "»", antes);
+          avisoDeshacer("Entrada independiente: «" + p.nombre + "» (tu plantilla no cambia)", antes);
         } },
-        { texto: "Añadir también a otra lista…", accion: () => elegirLista("¿A qué lista?", l2 => anadirPlantillaALista(l2, p)) },
+        { texto: "Añadir también a otra lista…", accion: () => elegirLista("¿A qué lista?", l2 => anadirPlantillaALista(l2, p)) },   // v381: copia propia, también de propias
         { texto: "Quitar de la lista", accion: () => {
           const fresca = db.listas[l.id], antes = [["listas", { ...fresca }]];
           const its = (fresca.items || []).slice(); its.splice(i, 1);
           guardarLista(fresca, { items: its, siguiente: kk < sig ? Math.max(0, sig - 1) : sig });
-          avisoDeshacer("«" + p.nombre + "» quitado de la lista (sigue en tus plantillas)", antes);
+          avisoDeshacer("«" + p.nombre + "» quitado de la lista" + (p.propia ? "" : " (sigue en tus plantillas)"), antes);
         } }
       ]));
       if ((l.items || []).length > 1) fila.querySelector(".le-cab").appendChild(asaArrastre(fila, hermanos, soltar, p.nombre));
@@ -8753,6 +8754,22 @@ function pintarPlan() {
 }
 // Los selectores generales parten del calendario real; no mutan la semana navegada ni dias[].id.
 const fechasGenerales = () => Array.from({ length: 7 }, (_, i) => ({ i, id: iso(sumarDias(lunesDe(new Date()), i)) }));
+// v379: dónde se usa una plantilla. Mientras las listas y los mesociclos apunten a plantillas (MEJ-LISTAS-002 pendiente), eliminarla quita sus entradas
+// de las listas y la deja como «?» en los mesociclos; los entrenos ya puestos en días NO cambian (son copias). Se avisa antes y se puede deshacer.
+function usosPlantillas(ids) {
+  const set = new Set(ids), listas = [], mesos = [];
+  vivos("listas").forEach(l => { const n = (l.items || []).filter(x => typeof x === "string" && set.has(x)).length; if (n) listas.push("«" + l.nombre + "»" + (n > 1 ? " (" + n + " veces)" : "")); });   // v380/v330: «(n veces)» fuera de las comillas
+  const pids = v => typeof v === "string" ? [v] : Array.isArray(v) ? v.flatMap(pids) : v && typeof v === "object" ? Object.values(v).flatMap(pids) : [];
+  vivos("mesociclos").forEach(m => { if (pids(m.dias).some(x => set.has(x))) mesos.push(m.nombre); });
+  return { listas, mesos };
+}
+function textoUsosPlantillas(ids) {
+  const u = usosPlantillas(ids), partes = [];
+  if (u.listas.length) partes.push("Desaparecerá de " + (u.listas.length === 1 ? "la lista " + u.listas[0] : "las listas: " + u.listas.join(", ")) + ".");
+  if (u.mesos.length) partes.push("Saldrá como «?» en " + (u.mesos.length === 1 ? "el mesociclo «" + u.mesos[0] + "»" : "los mesociclos: " + u.mesos.map(x => "«" + x + "»").join(", ")) + ".");
+  partes.push("Los entrenos que ya pusiste en días no cambian.");
+  return partes.join(" ");
+}
 function menuPlantilla(p) {
   abrirMenu(p.nombre, (esPlantillaCalentamiento(p) ? "Calentamiento · " : "") + resumenItems(p.items || []) + ": " + nombresItems(p.items || []), [
     { texto: "Añadir a un día de esta semana…", accion: () => {
@@ -8768,7 +8785,12 @@ function menuPlantilla(p) {
       const final = nombreLibreEn(n, usados);
       cambiar("plantillas", { ...p, nombre: final }); pintarPlan();
       if (final !== n) avisoDeshacer("«" + n + "» ya existe en una lista de esta plantilla: se ha guardado como «" + final + "»", null); } },
-    { texto: "Eliminar plantilla", peligro: true, accion: () => { cambiar("plantillas", { ...p, borrado: true }); pintarPlan(); } }
+    // v379: la confirmación (la de siempre de las opciones de peligro) dice ahora dónde se usa, y se puede deshacer (antes: «No se puede deshacer.», sin decir dónde)
+    { texto: "Eliminar plantilla", peligro: true, confirmar: "Pulsa otra vez: " + textoUsosPlantillas([p.id]).replace(/\.$/, ""), accion: () => {
+      const antes = db.plantillas[p.id]; if (!antes || antes.borrado) return;
+      cambiar("plantillas", { ...antes, borrado: true }); persistir(); pintarPlan(); pintarListas();
+      avisoDeshacer("Plantilla «" + p.nombre + "» eliminada", [["plantillas", { ...antes }]]);
+    } }
   ]);
 }
 async function cambiarPerfil(uid, cambios, aviso) {
@@ -9000,15 +9022,16 @@ function anadirMesoALista(m, l) {
   const porSemana = Object.keys(m.dias || {}).some(k => /^s\d+$/.test(k));
   const semana = w => { const ds = porSemana ? (m.dias["s" + (w + 1)] || {}) : (m.dias || {}); const out = []; for (let d = 0; d < 7; d++) (ds[d] || []).forEach(pid => { if (db.plantillas[pid] && !db.plantillas[pid].borrado) out.push(pid); }); return out; };
   const nuevos = [];
-  if (porSemana) for (let w = 0; w < n0(m.semanas); w++) { const ps = semana(w); if (!ps.length) continue; nuevos.push({ sep: nuevoId(), titulo: "Semana " + (w + 1) + (esDescarga(m, w) ? " (descarga)" : "") }, ...ps); }
-  else { const ps = semana(0); if (ps.length) nuevos.push(...ps); }
+  const copia = pid => nuevaEntradaPropia(db.plantillas[pid].nombre, db.plantillas[pid].items);   // v381: cada entreno como entrada propia (copia), no enlace
+  if (porSemana) for (let w = 0; w < n0(m.semanas); w++) { const ps = semana(w); if (!ps.length) continue; nuevos.push({ sep: nuevoId(), titulo: "Semana " + (w + 1) + (esDescarga(m, w) ? " (descarga)" : "") }, ...ps.map(copia)); }
+  else { const ps = semana(0); if (ps.length) nuevos.push(...ps.map(copia)); }
   if (nuevos.length) nuevos.unshift({ grupo: nuevoId(), titulo: m.nombre + " · " + n0(m.semanas) + " semanas" });
   if (!nuevos.length) { avisoDeshacer("Este mesociclo no tiene entrenos en sus días: añádelos primero", null); return; }
   const meter = () => {
     const fresca = db.listas[l.id], antes = { ...fresca };
     cambiar("listas", { ...fresca, items: (fresca.items || []).concat(nuevos) });
     pintarListas();
-    avisoDeshacer(pref + " añadido a la lista «" + l.nombre + "» (" + nuevos.filter(x => typeof x === "string").length + " entrenamientos)", [["listas", antes]]);
+    avisoDeshacer(pref + " añadido a la lista «" + l.nombre + "» (" + nuevos.filter(x => !!entradaDe(x)).length + " entrenamientos)", [["listas", antes]]);
   };
   const ya = (db.listas[l.id].items || []).some(x => (esSep(x) && (x.titulo || "").startsWith(pref)) || (esGrupoL(x) && (x.titulo || "").startsWith(m.nombre + " · ")));
   if (ya) abrirMenu("Ya está en esta lista", pref + " ya está en «" + l.nombre + "». ¿Lo añado otra vez?", [{ texto: "Añadir otra vez", accion: meter }, { texto: "Cancelar", accion: () => {} }]);
@@ -9907,6 +9930,7 @@ function guardarRutina(r, comoMeso, inicio, semanas, enLista) {
     const destino = r.multi ? (dias["s" + (w + 1)] = {}) : dias;
     porSemana.push([]);
     b.sesiones.forEach(s => {
+      if (enLista) { porSemana[w].push(nuevaEntradaPropia(r.multi ? prefijo + " · S" + (w + 1) + " · " + s.nombre : s.nombre, itemsDesdeImportacion(s.items))); n++; return; }   // v381: en una lista, entradas propias (sin plantillas)
       const id = nuevoId();
       porSemana[w].push(id);
       cambiar("plantillas", { id, nombre: libre(r.multi ? prefijo + " · S" + (w + 1) + " · " + s.nombre : s.nombre), items: itemsDesdeImportacion(s.items), borrado: false }, true);
@@ -9916,13 +9940,13 @@ function guardarRutina(r, comoMeso, inicio, semanas, enLista) {
   });
   // En una lista de entrenamientos: si el plan cambia cada semana, cada semana va en su bloque
   if (enLista) {
-    const fresca = db.listas[enLista.id], items = (fresca.items || []).slice();
+    const fresca = db.listas[enLista.id], items = (fresca.items || []).slice(), antes = [["listas", { ...fresca, items: copiaJson(fresca.items || []) }]];
     if (r.multi) items.push({ grupo: nuevoId(), titulo: r.nombre });
     porSemana.forEach((ids, w) => { if (r.multi) items.push({ sep: nuevoId(), titulo: "Semana " + (w + 1) }); items.push(...ids); });
     cambiar("listas", { ...fresca, items }, true);
     listasAbiertas[fresca.id] = true; escribir("listas-abiertas-v1", listasAbiertas);
     persistir(); pintarPlan();
-    avisoDeshacer(n + (n === 1 ? " entreno guardado" : " entrenos guardados") + " en la lista «" + fresca.nombre + "»", null);
+    avisoDeshacer(n + (n === 1 ? " entreno guardado" : " entrenos guardados") + " en la lista «" + fresca.nombre + "»", antes);   // v381: con Deshacer
     verPestana("listas");
     return;
   }
@@ -12511,7 +12535,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v378" + (BETA ? " beta" : "");
+const VERSION_APP = "v381" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";
@@ -13311,7 +13335,7 @@ $("selPlantCompartir").addEventListener("click", () => {
 // Eliminar: confirmación (es un borrado grande) y Deshacer
 $("selPlantBorrar").addEventListener("click", () => {
   const ps = plantillasSel();
-  abrirMenu("Eliminar " + ps.length + (ps.length === 1 ? " plantilla" : " plantillas"), ps.map(p => p.nombre).join(", "), [{ texto: "Eliminar", peligro: true, confirmar: "Pulsa otra vez: se eliminan " + ps.length + (ps.length === 1 ? " plantilla" : " plantillas"), accion: () => {
+  abrirMenu("Eliminar " + ps.length + (ps.length === 1 ? " plantilla" : " plantillas"), ps.map(p => p.nombre).join(", ") + " · " + textoUsosPlantillas(ps.map(p => p.id)) /* v379: + dónde se usan */, [{ texto: "Eliminar", peligro: true, confirmar: "Pulsa otra vez: se eliminan " + ps.length + (ps.length === 1 ? " plantilla" : " plantillas"), accion: () => {
     ps.forEach(p => cambiar("plantillas", { ...p, borrado: true }, true));
     persistir();
     salirSeleccion();

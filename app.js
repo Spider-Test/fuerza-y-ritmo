@@ -2344,7 +2344,7 @@ function copiar(nombre, html, series, ambito) {
   porta = { nombre, html: html || "", items: itemsDe(series), ambito: ambito || "dia" };
   escribir("portapapeles-v1", porta);
   const n = contarSeries(porta.items);
-  avisoDeshacer("📋 Copiado: " + nombre + (n ? " (" + n + (n === 1 ? " serie" : " series") + ")" : "") + ". Pégalo en el día que quieras: ⋯ del día → «📋 Pegar»", null);
+  avisoDeshacer("📋 Copiado: " + nombre + (n ? " (" + n + (n === 1 ? " serie" : " series") + ")" : "") + ". " + (["ejercicio", "bloque", "parte"].includes(porta.ambito) ? "Pégalo con «+ Añadir» → «📋 Pegar»" : "Pégalo en el día que quieras: ⋯ del día → «📋 Pegar»"), null);   // v377: el aviso dice dónde pegar según lo copiado
 }
 const hayItemsCopiados = () => !!(porta && ((porta.items || []).length || porta.html));
 // v369 (MEJ-SEM-006): «Quitar lo copiado» vacía solo el portapapeles de la app (porta + su clave); no toca series ni otros datos. Deshacer restaura exactamente lo anterior (memoria y almacenamiento).
@@ -2371,6 +2371,32 @@ function pegarConDeshacer(dia, hacer) {
 function pegar(dia) {
   if (!hayItemsCopiados()) return;
   pegarConDeshacer(dia, () => pegarDiaEntero(dia));
+}
+// MEJ-SEM-007 (v377): copiar una parte, una superserie o un ejercicio (con todas sus series) y pegarlos desde «+ Añadir ▾». La copia es independiente (IDs nuevos, fecha del destino,
+// todo pendiente: nada se pega como hecho). Reutiliza el pegado de siempre (pegarItems/pegarConDeshacer: Deshacer quita lo pegado). Nombres: una parte con nombre ya usado en ese
+// entreno se pega con el siguiente «Nombre (n)» libre (mismo criterio que las listas); ejercicios y superseries no necesitan nombre. El portapapeles conserva su formato.
+const ambitoElemento = () => hayItemsCopiados() && ["ejercicio", "bloque", "parte"].includes(porta.ambito) ? porta.ambito : "";
+function pegarElemento(dia, grupo, parte) {
+  const amb = ambitoElemento();
+  if (!amb || (amb === "parte" && !grupo)) return;   // una parte solo se pega dentro de un entreno
+  let nombrePegada = "";
+  pegarConDeshacer(dia, () => {
+    let items = porta.items;
+    if (amb === "parte") {
+      nombrePegada = nombreLibreEn(porta.nombre, nombresPartes(dia.id, grupo));
+      items = items.map(it => ({ ...it, seccion: nombrePegada }));
+    } else items = items.map(it => ({ ...it, seccion: parte || "" }));
+    pegarItems(dia.id, items, grupo || "");
+  });
+  if (amb === "parte" && nombrePegada && nombrePegada !== porta.nombre) avisoDeshacer("Parte pegada como «" + nombrePegada + "» (ya había una parte «" + porta.nombre + "» en este entreno)", null);
+}
+// Opciones de pegado para los menús «+ Añadir»: solo las que valen para ese nivel
+function opcionesPegar(dia, grupo, parte) {
+  if (!hayItemsCopiados()) return [];
+  const amb = ambitoElemento(), t = "📋 Pegar «" + porta.nombre + "»";
+  if (!amb) return parte !== undefined || grupo ? [] : [{ texto: t + " en este día", accion: () => pegar(dia) }];   // día/entreno copiados: al día (como en ⋯ del día)
+  if (amb === "parte") return grupo && parte === undefined ? [{ texto: t + " en este entreno", accion: () => pegarElemento(dia, grupo, "") }] : [];
+  return [{ texto: t + (parte ? " en esta parte" : grupo ? " en este entreno" : " (suelto en el día)"), accion: () => pegarElemento(dia, grupo || "", parte || "") }];
 }
 function pegarDiaEntero(dia) {
   if (["ejercicio", "bloque", "parte"].includes(porta.ambito)) {
@@ -2483,9 +2509,22 @@ function abrirCalentamiento(id) {
   pintarCalentamientoDlg();
   $("dlgCalent").showModal();
 }
+// MEJ-LISTAS-007 (v377): «Editar entreno…» desde el menú de una entrada de lista. Reutiliza este mismo editor (dlgCalent) en modo «entrada»: conserva las partes de cada
+// ejercicio (campo «Parte»), no fuerza la marca de calentamiento, permite subir/bajar/quitar ejercicios y superseries y editar los valores de las series. Las superseries se ven y
+// se mueven o quitan, pero sus valores no se editan aquí. GUARDAR crea SIEMPRE una copia propia de la plantilla (la original está también en Plantillas y puede estar en otras
+// entradas o listas) y solo re-enlaza ESTA posición (como «Cambiar nombre»): otras listas, entradas y plantillas quedan intactas; ubicación, orden y «siguiente» se conservan.
+// Cancelar no cambia nada; Deshacer restaura la entrada y retira la copia. Si la estructura de la lista cambia con el editor abierto, se rechaza el guardado.
+function abrirEditarEntradaLista(listaId, i, plantillaId) {
+  const l = db.listas[listaId], p = db.plantillas[plantillaId];
+  if (!l || l.borrado || (l.items || [])[i] !== plantillaId || !p || p.borrado) return;
+  ce = { id: plantillaId, items: copiaJson(p.items || []), entrada: { listaId, i, estructura: JSON.stringify(l.items || []) } };
+  pintarCalentamientoDlg();
+  $("dlgCalent").showModal();
+}
 function pintarCalentamientoDlg() {
   const p = db.plantillas[ce.id], cuerpo = $("calCuerpo");
-  $("calTit").textContent = p.nombre;
+  const modoE = !!ce.entrada;   // v377 (MEJ-LISTAS-007)
+  $("calTit").textContent = modoE ? "Editar entreno: " + p.nombre : p.nombre;
   cuerpo.textContent = "";
   const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt !== undefined) x.textContent = txt; return x; };
   const boton = (txt, cls, fn, aria) => { const b = el("button", cls, txt); b.type = "button"; if (aria) b.setAttribute("aria-label", aria); b.addEventListener("click", fn); return b; };
@@ -2503,8 +2542,14 @@ function pintarCalentamientoDlg() {
     cambiar("plantillas", { ...antes, borrado: true }); $("dlgCalent").close(); pintarCalentamientos(); pintarPlan();
     avisoDeshacer("Calentamiento «" + p.nombre + "» eliminado (las copias en tus entrenos siguen)", [["plantillas", antes]]);
   }));
-  cuerpo.appendChild(fila0);
-  cuerpo.appendChild(el("p", "eb-nota", "Edita ejercicios y valores y pulsa «Guardar cambios». Las copias ya añadidas a tus entrenos no cambian. Todas las series se guardan como calentamiento (fuera de récords y estadísticas)."));
+  if (!modoE) cuerpo.appendChild(fila0);
+  cuerpo.appendChild(el("p", "eb-nota", modoE ? "Edita partes, ejercicios y valores y pulsa «Guardar cambios». Se guarda como una copia propia de esta entrada: la plantilla original, las demás entradas y las demás listas no cambian. Las superseries se pueden subir, bajar o quitar, pero sus valores no se editan aquí."
+    : "Edita ejercicios y valores y pulsa «Guardar cambios». Las copias ya añadidas a tus entrenos no cambian. Todas las series se guardan como calentamiento (fuera de récords y estadísticas)."));
+  const campoParte = (it, i, nom) => {   // v377: nombre de la parte de este ejercicio/superserie (vacío = sin parte)
+    const lab = el("label", "cal-campo cal-ancho cal-parte"), inp = document.createElement("input");
+    inp.className = "c-parte"; inp.value = it.seccion || ""; inp.placeholder = "sin parte"; inp.autocomplete = "off"; inp.maxLength = 40; inp.dataset.i = i; inp.dataset.c = "c-parte"; inp.setAttribute("aria-label", "Parte de " + nom);
+    lab.append(el("span", "cal-et", "Parte"), inp); return lab;
+  };
   const lista = el("div", "cal-items");
   ce.items.forEach((it, i) => {
     if (it.bloque) {   // v333: las superseries se ven (solo lectura): se editan en la copia del día o volviendo a guardar el calentamiento
@@ -2513,9 +2558,12 @@ function pintarCalentamientoDlg() {
       const bsB = el("span", "cal-item-bs");
       const subirB = boton("↑", "nav-btn eb-paso", () => { leerCalentamientoCampos(); [ce.items[i - 1], ce.items[i]] = [ce.items[i], ce.items[i - 1]]; pintarCalentamientoDlg(); }, "Subir la superserie"); subirB.disabled = i === 0;
       const bajarB = boton("↓", "nav-btn eb-paso", () => { leerCalentamientoCampos(); [ce.items[i + 1], ce.items[i]] = [ce.items[i], ce.items[i + 1]]; pintarCalentamientoDlg(); }, "Bajar la superserie"); bajarB.disabled = i === ce.items.length - 1;
-      bsB.append(subirB, bajarB); cabB.appendChild(bsB); cajaB.appendChild(cabB);
+      bsB.append(subirB, bajarB);
+      if (modoE) { const quitarB = boton("Quitar", "nav-btn", () => { leerCalentamientoCampos(); ce.items.splice(i, 1); pintarCalentamientoDlg(); }, "Quitar la superserie"); quitarB.disabled = ce.items.length <= 1; bsB.appendChild(quitarB); }
+      cabB.appendChild(bsB); cajaB.appendChild(cabB);
+      if (modoE) cajaB.appendChild(campoParte(it, i, "la superserie"));
       (it.tramos || []).forEach(t => cajaB.appendChild(el("p", "eb-nota", nombreEj(t.ejercicio_id) + ": " + t.series.map(v => (n0(v.reps) > 0 ? n0(v.reps) + " reps" : v.max_reps ? "máx" : "") + (n0(v.peso) > 0 ? " · " + num(v.peso) + " kg" : "") + (n0(v.tiempo) > 0 ? " · " + fmtTiempo(v.tiempo) : "") + (n0(v.distancia) > 0 ? " · " + fmtDist(v.distancia) : "")).join(" | "))));
-      cajaB.appendChild(el("p", "eb-nota", "Las superseries no se editan aquí: edítalas en la copia del día o vuelve a guardar el calentamiento. Aquí puedes subirla o bajarla, renombrar, eliminar y aplicar el calentamiento."));
+      cajaB.appendChild(el("p", "eb-nota", modoE ? "Los valores de la superserie no se editan aquí. Puedes cambiar su parte, subirla, bajarla o quitarla." : "Las superseries no se editan aquí: edítalas en la copia del día o vuelve a guardar el calentamiento. Aquí puedes subirla o bajarla, renombrar, eliminar y aplicar el calentamiento."));
       lista.appendChild(cajaB); return;
     }
     const tipo = tipoDe(it.ejercicio_id), campos = CAL_CAMPOS[tipo] || ["reps", "tiempo"];
@@ -2527,6 +2575,7 @@ function pintarCalentamientoDlg() {
     const bajar = boton("↓", "nav-btn eb-paso", () => { leerCalentamientoCampos(); [ce.items[i + 1], ce.items[i]] = [ce.items[i], ce.items[i + 1]]; pintarCalentamientoDlg(); }, "Bajar " + nombreEj(it.ejercicio_id)); bajar.disabled = i === ce.items.length - 1;
     const quitar = boton("Quitar", "nav-btn", () => { leerCalentamientoCampos(); ce.items.splice(i, 1); pintarCalentamientoDlg(); }, "Quitar " + nombreEj(it.ejercicio_id) + " del calentamiento"); quitar.disabled = ce.items.length <= 1;
     bs.append(subir, bajar, quitar); cab.appendChild(bs); caja.appendChild(cab);
+    if (modoE) caja.appendChild(campoParte(it, i, nombreEj(it.ejercicio_id)));
     it.series.forEach((v, j) => {
       // v275: cada valor lleva su etiqueta visible (no solo un placeholder) y los campos van en una cuadrícula adaptable dentro de la tarjeta
       const fila = el("div", "cal-fila"), cabF = el("div", "cal-fila-cab"), grid = el("div", "cal-campos");
@@ -2551,7 +2600,7 @@ function pintarCalentamientoDlg() {
     lista.appendChild(caja);
   });
   cuerpo.appendChild(lista);
-  cuerpo.appendChild(boton("+ Añadir ejercicio", "add-ej", () => { leerCalentamientoCampos(); abrirSelector(null, id => { if (!ce) return; const t = tipoDe(id); ce.items.push({ ejercicio_id: id, seccion: "Calentamiento", series: [t === "carrera" || t === "natacion" ? { tiempo: 300, calentamiento: true } : { reps: 10, calentamiento: true }] }); pintarCalentamientoDlg(); }, "", ""); }));
+  cuerpo.appendChild(boton("+ Añadir ejercicio", "add-ej", () => { leerCalentamientoCampos(); abrirSelector(null, id => { if (!ce) return; const t = tipoDe(id), cal = !ce.entrada; ce.items.push({ ejercicio_id: id, seccion: cal ? "Calentamiento" : "", series: [t === "carrera" || t === "natacion" ? { tiempo: 300, ...(cal ? { calentamiento: true } : {}) } : { reps: 10, ...(cal ? { calentamiento: true } : {}) }] }); pintarCalentamientoDlg(); }, "", ""); }));
   cuerpo.appendChild(el("p", "aviso eb-err", ""));
   const bt = el("div", "d-botones");
   bt.append(boton("Cancelar", "nav-btn", () => $("dlgCalent").close()), boton("Guardar cambios", "anadir", () => guardarCalentamientoEditado()));
@@ -2561,6 +2610,7 @@ function pintarCalentamientoDlg() {
 function leerCalentamientoCampos() {
   let err = "";
   $("calCuerpo").querySelectorAll("input[data-c]").forEach(inp => {
+    if (inp.dataset.c === "c-parte") { const ip = ce.items[+inp.dataset.i]; if (ip) ip.seccion = inp.value.trim().slice(0, 40); return; }   // v377 (MEJ-LISTAS-007)
     const it = ce.items[+inp.dataset.i], v = it && it.series[+inp.dataset.j]; if (!v) return;
     const c = inp.dataset.c, t = inp.value.trim(), tipo = tipoDe(it.ejercicio_id), nom = nombreEj(it.ejercicio_id) + " serie " + (+inp.dataset.j + 1);
     if (c === "c-reps") { if (/^\s*(m[aá]x|amrap|fallo)/i.test(t)) { v.reps = 0; v.max_reps = true; } else if (!t) { v.reps = 0; } else if (/^\d+$/.test(t) && +t > 0 && +t <= 999) { v.reps = +t; v.max_reps = false; } else if (!err) err = nom + ": repeticiones no válidas"; }
@@ -2572,7 +2622,27 @@ function leerCalentamientoCampos() {
   });
   return err;
 }
+function guardarEntradaEditada() {   // v377 (MEJ-LISTAS-007)
+  const err = leerCalentamientoCampos(), msg = document.querySelector("#calCuerpo .eb-err"), e = ce.entrada;
+  const fresca = db.listas[e.listaId], actual = db.plantillas[ce.id];
+  if (!fresca || fresca.borrado || JSON.stringify(fresca.items || []) !== e.estructura || (fresca.items || [])[e.i] !== ce.id || !actual || actual.borrado) {
+    msg.textContent = "La lista o la entrada ha cambiado mientras editabas. No se ha guardado nada; ciérralo y vuelve a abrir «Editar entreno…»."; return;
+  }
+  let falta = "";
+  ce.items.filter(it => !it.bloque).forEach(it => it.series.forEach((v, j) => { if (!falta && !(n0(v.reps) > 0 || v.max_reps || n0(v.tiempo) > 0 || n0(v.distancia) > 0)) falta = nombreEj(it.ejercicio_id) + " serie " + (j + 1) + ": pon repeticiones, tiempo o distancia"; }));
+  if (!ce.items.length) falta = "El entreno no puede quedar vacío";
+  if (err || falta) { msg.textContent = err || falta; return; }
+  const antes = [["listas", { ...fresca, items: copiaJson(fresca.items || []) }]], id = nuevoId();
+  cambiar("plantillas", { ...actual, id, items: copiaJson(ce.items), borrado: false });
+  antes.push(["plantillas", { ...db.plantillas[id], borrado: true }]);
+  const its = (fresca.items || []).slice(); its[e.i] = id;
+  guardarLista(fresca, { items: its });
+  const nombre = actual.nombre;
+  $("dlgCalent").close();
+  avisoDeshacer("«" + nombre + "» editado en la lista «" + fresca.nombre + "» como copia propia (la original y las demás listas no cambian)", antes);
+}
 function guardarCalentamientoEditado() {
+  if (ce && ce.entrada) { guardarEntradaEditada(); return; }
   const err = leerCalentamientoCampos(), msg = document.querySelector("#calCuerpo .eb-err");
   const p = db.plantillas[ce.id];
   if (!p || p.borrado) { $("dlgCalent").close(); setEstado("Este calentamiento ya no existe", true); return; }
@@ -2689,6 +2759,7 @@ function cabeceraParte(dia, grupo, p, color, nNombradas, partes, seriesItem) {
       // v262: sin «+ Ejercicio en esta parte» en este menú; se añade con los botones visibles de la propia parte
       // v284: sin «Mover la parte a otro entreno…»; la parte se reordena y se traslada a otro entreno con el asa ≡ (un solo arrastre)
       plegada && { texto: "+ Superserie en esta parte", accion: () => abrirBloque(dia, grupo, p.nombre) },
+      ss.length > 0 && { texto: "Copiar parte", accion: () => copiar(p.nombre, "", ss, "parte") },   // v377 (MEJ-SEM-007)
       { texto: "Quitar la parte (sus ejercicios quedan sin parte)", accion: () => {
         registrarAntes("@orden", "p|" + dia.id + "|" + grupo, estadoOrden("p|" + dia.id + "|" + grupo));
         ss.forEach(x => cambiar("series", { ...x, seccion: "" }, true));
@@ -3797,6 +3868,20 @@ function plegarAdd(fila, abierta) {
   fila.dataset.fija = abierta ? "1" : "";
   ponerAdd(fila, !!abierta);
 }
+// v375 (MEJ-UI-020 L6): botón único «+ Añadir ▾» (día, parte; el del entreno ya era así) con un menú con las opciones válidas de ese nivel. Pulsa los botones de siempre
+// (ocultos por CSS), así cada acción conserva exactamente su destino. Idempotente (el de día no se recrea al repintar).
+function unificarAdd(fila, titulo, extra) {
+  if (!fila || fila.querySelector(":scope > .add-unico")) return;
+  fila.classList.add("add-u");
+  const u = document.createElement("button");
+  u.type = "button"; u.className = "add-unico"; u.textContent = "+ Añadir";
+  u.setAttribute("aria-haspopup", "dialog"); u.setAttribute("aria-label", titulo + ": elegir qué añadir");
+  u.addEventListener("click", e => {
+    e.stopPropagation();
+    abrirMenu(titulo, "", [...fila.querySelectorAll(":scope > .add-ej")].filter(x => !x.hidden).map(x => ({ texto: x.textContent.trim(), accion: () => x.click() })).concat(extra ? extra() : []));   // v377: + «Pegar…» según lo copiado
+  });
+  fila.prepend(u);
+}
 function ponerAdd(fila, abierta) {
   fila.classList.toggle("plegada", !abierta);
   const t = fila.querySelector(":scope > .add-toggle");
@@ -3888,6 +3973,7 @@ function pintarDiaSinAncla(dia) {
       fila.querySelectorAll(":scope > .add-bloque, :scope > .add-parte-btn").forEach(x => { x.hidden = hayNombrados; });
       fila.classList.toggle("add-dia-general", hayNombrados);
       plegarAdd(fila, hayNombrados || diaVacio);
+      unificarAdd(fila, "Añadir al día", () => opcionesPegar(dia));   // v375; v377: + Pegar
     } }
   grupos.forEach(g => {
     const caja = document.createElement("div");
@@ -4142,6 +4228,7 @@ function pintarDiaSinAncla(dia) {
         add.children[0].addEventListener("click", () => abrirSelector(dia, null, g.nombre, p.nombre));
         add.children[1].addEventListener("click", () => abrirBloque(dia, g.nombre, p.nombre));
         plegarAdd(add, !p.ids.length);   // parte vacía: las opciones ya a la vista
+        unificarAdd(add, "Añadir a «" + p.nombre + "»", () => opcionesPegar(dia, g.nombre, p.nombre));   // v375; v377: + Pegar
         dest.appendChild(add);
       }
     });
@@ -4318,6 +4405,7 @@ function pintarDiaSinAncla(dia) {
         !espera && otrasSesiones.length && { texto: "Mover a otro entreno del día…", accion: () => abrirMenu("¿A qué entreno?", "", otrasSesiones.map(x => ({
           texto: x || "Sin sesión", accion: () => moverASesion(seriesDeItem(dia.id, g.nombre, clave), x) }))) },
         { texto: "Ver ficha del ejercicio", accion: () => abrirDetalle(ej, contextoCarga(dia.id, g.nombre, espera ? [] : seriesDeItem(dia.id, g.nombre, clave))) },
+        !espera && seriesDeItem(dia.id, g.nombre, clave).length > 0 && { texto: "Copiar ejercicio", accion: () => copiar(nombre, "", seriesDeItem(dia.id, g.nombre, clave), "ejercicio") },   // v377 (MEJ-SEM-007)
         sinCarga(ej) && pendientesCarga(ej, contextoCarga(dia.id, g.nombre, espera ? [] : seriesDeItem(dia.id, g.nombre, clave))).length && { texto: "Quitar peso previsto en este entreno y día…", accion: () => ofrecerRetiradaCarga(ej, contextoCarga(dia.id, g.nombre, seriesDeItem(dia.id, g.nombre, clave))) },
         !espera && tipoDe(ej) === "carrera" && { texto: "Marcar como carrera (competición)…", accion: () => marcarComoCarrera(dia, seriesDeItem(dia.id, g.nombre, clave), g.nombre || nombre) },
         { texto: "Eliminar ejercicio" + (espera ? "" : " y sus series"), peligro: true, confirmar: espera ? "Pulsa otra vez para quitarlo" : "Pulsa otra vez: se borran " + plural(seriesDeItem(dia.id, g.nombre, clave).length, "serie", "series"), accion: () => {
@@ -4348,7 +4436,8 @@ function pintarDiaSinAncla(dia) {
         { texto: "+ Ejercicio", accion: () => abrirSelector(dia, null, g.nombre) },
         { texto: "+ Superserie", accion: () => abrirBloque(dia, g.nombre) },
         { texto: "+ Parte", accion: () => nuevaParte(dia, g.nombre) },
-        { texto: "+ Calentamiento guardado", accion: () => elegirCalentamientoGuardado(dia, g.nombre) }
+        { texto: "+ Calentamiento guardado", accion: () => elegirCalentamientoGuardado(dia, g.nombre) },
+        ...opcionesPegar(dia, g.nombre)   // v377 (MEJ-SEM-007)
       ]));
       caja.appendChild(add);
     }
@@ -4605,6 +4694,15 @@ function bloque(dia, id, series, grupo, parte, copia) {
   if (chkMax) chkMax.addEventListener("change", () => ponerMax(chkMax.checked));
   // Selector «Reps · Tiempo · Máx. reps · Máx. tiempo»: una sola elección en vez de dos casillas
   const segM = b.querySelector(".seg-medida");
+  // v375 (MEJ-UI-020 L4): etiqueta visible sobre cada campo (data-et en su .paso; el texto lo pone el CSS). No cambia qué se guarda ni el foco
+  let rotListo = false;
+  function rotular() {
+    if (!rotListo) return;
+    const et = (el, t) => { const p = el && el.closest(".paso"); if (p) p.dataset.et = t; };
+    if (dist) { et(fa, porTiempo ? "Tiempo" : "Distancia"); et(fb, porTiempo ? "Distancia (opc.)" : "Tiempo"); }
+    else if (mov) { et(fa, "Reps"); et(fb, "Tiempo"); }
+    else { et(fb, enMax() ? "Máx." : enTiempo() ? "Tiempo" : "Reps"); et(fa, modoPct === "reps" ? "% reps" : modoPct === "1rm" ? (medidaDe(id) === "reps" ? "% lastre" : "% 1RM") : "Kg"); et(fdEl(), "Distancia"); }
+  }
   function marcarMedida() {   // declarada (no const) para poder llamarla desde ponerPorT antes de llegar aquí
     const seg = b.querySelector(".seg-medida"), cm = b.querySelector(".es-max"), ct = b.querySelector(".por-t");
     if (!seg) return;
@@ -4613,6 +4711,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
     seg.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.m === m)));
     const mb = b.querySelector(".medida-btn");
     if (mb) mb.textContent = { reps: "Reps", t: "⏱ Tiempo", maxr: "Máx. reps", maxt: "Máx. tiempo" }[m] + " ▾";
+    rotular();
   }
   // «Reps ▾»: elegir cómo se mide en un menú (más limpio que cuatro botones)
   const medidaBtn = b.querySelector(".medida-btn");
@@ -4667,8 +4766,9 @@ function bloque(dia, id, series, grupo, parte, copia) {
   if (opsF && filaDesc) {
     filaDesc.classList.add("desc-en-ops"); opsF.appendChild(filaDesc);
     // Descanso con su icono delante y un ejemplo corto que se lee entero
-    const ic = document.createElement("span"); ic.className = "desc-ic"; ic.textContent = "⏱"; ic.setAttribute("aria-hidden", "true");
-    fc.before(ic); fc.placeholder = "desc.";
+    const ic = document.createElement("span"); ic.className = "desc-ic"; ic.textContent = "Descanso"; ic.setAttribute("aria-hidden", "true");   // v375: etiqueta clara (antes «⏱» y «desc.»)
+    { const w = document.createElement("label"); w.className = "desc-c"; fc.before(w); w.append(ic, fc); }   // la etiqueta va ENCIMA del campo (no en línea: empujaba «Guardar» a otra fila)
+    fc.placeholder = "1:30";
   }
   if (medidaBtn) medidaBtn.addEventListener("click", () => menuMedida(id, m => b.querySelector('.seg-medida [data-m="' + m + '"]').click(), series.some(x => n0(x.reps) > 0)));
   marcarMedida();
@@ -4686,6 +4786,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
   // Carrera y natación: por metros (con tiempo opcional) o por tiempo (con metros opcionales)
   const modoDist = b.querySelector(".modo-dist");
   let porTiempo = false;
+  rotListo = true; rotular();   // v375: ya existen modoPct y porTiempo (antes daba «Cannot access porTiempo before initialization» en carrera)
   const ponerPorTiempo = t => {
     porTiempo = t;
     if (!modoDist) return;
@@ -4695,6 +4796,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
     fa.inputMode = "decimal";
     fa.removeAttribute("pattern");
     fa.setAttribute("aria-label", t ? "Tiempo (minutos y segundos)" : "Distancia en " + UD());
+    rotular();
     fb.placeholder = t ? UD() + " (opcional)" : "tiempo 3,40";
     fb.inputMode = "decimal";
     fb.setAttribute("aria-label", t ? "Distancia en " + UD() + " (opcional)" : "Tiempo (minutos y segundos)");
@@ -4811,6 +4913,7 @@ function bloque(dia, id, series, grupo, parte, copia) {
     modo.setAttribute("aria-label", reps ? "Unidad: kg, % del máximo de repeticiones o % del 1RM de lastre" : "Cambiar entre kg y % del 1RM");
     fa.placeholder = enPct ? marcadorModoPct(id, modoPct) : "peso";
     fa.setAttribute("aria-label", modoPct === "reps" ? "Porcentaje del máximo de repeticiones" : modoPct === "1rm" ? (reps ? "Porcentaje del 1RM de lastre" : "Porcentaje del 1RM") : "Peso en kg");
+    rotular();
     pintarCalc();
   };
   // La recuperación solo se copia de una serie de este mismo día: cada entrenamiento la ajusta
@@ -4845,14 +4948,15 @@ function bloque(dia, id, series, grupo, parte, copia) {
     pintarCalc();
   };
   if (modo) {
-    modo.addEventListener("click", () => {
+    const aplicarModo = sig => {   // v375: la elección del menú (antes, la siguiente del ciclo)
+      if (sig === modoPct) return;
       const v = parseFloat((fa.value || "").replace(",", ".")), ref = rmPersonal(id);
-      const ops = modosPct(id), sig = ops[(ops.indexOf(modoPct) + 1) % ops.length];   // v345: siguiente opción; sin equivalencia entre % de repeticiones y kg
       if (sig === "1rm" && modoPct === "") { ponerModo("1rm"); fa.value = v > 0 && ref ? num(Math.round(v / ref * 100)) : ""; }
       else if (sig === "" && modoPct === "1rm") { const kg = v > 0 ? kgDePct(id, v) : 0; ponerModo(""); fa.value = kg ? num(kg) : ""; }
       else { ponerModo(sig); fa.value = ""; if (sig === "reps" && !fbTocado && !enTiempo() && !enMax() && !(modoForm === "editar" && editando && hecha(editando))) fb.value = ""; }   // v351: «% reps» no vuelca las reps de la última serie
       pintarCalc();
-    });
+    };
+    modo.addEventListener("click", () => menuUnidad(id, modoPct, b.classList.contains("sin-peso"), aplicarModo));
     fa.addEventListener("input", pintarCalc);
     ponerModo(modoPct);   // v345: etiqueta inicial según el ejercicio (en los medidos por repeticiones sin carga: «reps») y botón visible
   }
@@ -5674,6 +5778,7 @@ function tarjetaBloque(dia, bloqueId, series) {
       (variosTramos || !notaDe(series)) && { texto: variosTramos ? "Descripción (de la superserie o de un ejercicio)…" : "+ Descripción (tempo, banda, EEP…)", accion: () => !variosTramos ? editarNota(dia, series, "Descripción de la superserie")
         : abrirMenu("¿Descripción de qué?", "", [{ texto: "De toda la superserie", accion: () => editarNota(dia, series, "Descripción de la superserie") }]
           .concat(primera.map(s0 => ({ texto: nombreEj(s0.ejercicio_id), accion: () => editarNota(dia, series.filter(x => x.ejercicio_id === s0.ejercicio_id), "Descripción de " + nombreEj(s0.ejercicio_id)) })))) },
+      { texto: "Copiar superserie", accion: () => copiar("Superserie ×" + rondas.length, "", series, "bloque") },   // v377 (MEJ-SEM-007)
       { texto: "Desagrupar (series sueltas)", accion: () => desagruparBloque(dia, series) },
       { texto: "Compartir con un amigo…", accion: () => compartir("Superserie ×" + rondas.length + " · " + primera.map(s => nombreEj(s.ejercicio_id)).join(" + "), itemsDe(series, true)) },
       { texto: "Quitar superserie", peligro: true, confirmar: "Pulsa otra vez: se borran " + plural(series.length, "serie", "series"), accion: () => {
@@ -5744,14 +5849,16 @@ function tarjetaBloque(dia, bloqueId, series) {
     fa.setAttribute("aria-label", m === "reps" ? "Porcentaje del máximo de repeticiones" : brPct ? (reps ? "Porcentaje del 1RM de lastre" : "Porcentaje del 1RM") : "Peso en kg");
     pintarBrCalc();
   };
-  brModo.addEventListener("click", () => {
+  const aplicarBrModo = sig => {   // v375
     const id = editando.ejercicio_id, v = parseFloat((fa.value || "").replace(",", ".")), ref = rmPersonal(id);
-    const actual = !brPct ? "" : brRef === "reps" ? "reps" : "1rm", ops = modosPct(id), sig = ops[(ops.indexOf(actual) + 1) % ops.length];
+    const actual = !brPct ? "" : brRef === "reps" ? "reps" : "1rm";
+    if (sig === actual) return;
     if (sig === "1rm" && actual === "") { ponerBrModo("1rm"); fa.value = v > 0 && ref ? num(Math.round(v / ref * 100)) : ""; }
     else if (sig === "" && actual === "1rm") { const kg = v > 0 ? kgDePct(id, v) : 0; ponerBrModo(""); fa.value = kg ? num(kg) : ""; }
     else { ponerBrModo(sig); fa.value = ""; if (sig === "reps" && !fbTocadoR && form.dataset.isoT !== "1" && !hecha(editando)) fb.value = ""; }   // v351: «% reps» no vuelca las reps de la ronda
     fa.focus();
-  });
+  };
+  brModo.addEventListener("click", () => { const id = editando.ejercicio_id; menuUnidad(id, !brPct ? "" : brRef === "reps" ? "reps" : "1rm", false, aplicarBrModo); });
   fa.addEventListener("input", () => { if (/%\s*$/.test(fa.value) && !brPct && !brModo.hidden) { fa.value = fa.value.replace(/\s*%\s*$/, ""); ponerBrModo("1rm"); } pintarBrCalc(); });
   const prs = {};
   primera.forEach(s => { if (!prs[s.ejercicio_id]) prs[s.ejercicio_id] = prsEj(s.ejercicio_id); });
@@ -5937,10 +6044,16 @@ function tarjetaBloque(dia, bloqueId, series) {
 }
 
 // «Reps ▾» de los bloques: cómo se mide la serie (en los isométricos, según su ficha, solo por tiempo)
+// v375 (MEJ-UI-020 L4): el botón de unidad abre un menú con nombre (en vez de ciclar). Solo ofrece los modos válidos de modosPct (sin «% lastre» en ejercicios sin carga)
+function menuUnidad(id, actual, sinKg, alElegir) {
+  const lastre = medidaDe(id) === "reps";
+  const nombre = m => m === "reps" ? "% de las repeticiones máximas (% reps)" : m === "1rm" ? (lastre ? "% del 1RM de lastre (% lastre)" : "% del 1RM") : sinKg ? "Sin peso: solo repeticiones" : "Kilos (kg)";
+  abrirMenu("¿En qué unidad va el valor?", "", modosPct(id).map(m => ({ texto: (m === actual ? "✓ " : "") + nombre(m), accion: () => alElegir(m) })));
+}
 const NOMBRE_MEDIDA = { reps: "Reps", t: "⏱ Tiempo", maxr: "Máx. reps", maxt: "Máx. tiempo" };
 function menuMedida(ejId, alElegir, conReps = false) {
   const solo = soloTiempo(ejId) && !conReps;   // v371: la ficha no admite repeticiones; si la serie ya las tiene guardadas (conReps) se ofrece todo como antes
-  const iso = medidaDe(ejId) === "tiempo" || solo;
+  const iso = (medidaDe(ejId) === "tiempo" && !medidasPropias(ejId).includes("reps")) || solo;   // v375: si la FICHA admite repeticiones (medidas propias), manda la ficha aunque el modo de progreso sea «Isométrico»
   abrirMenu("¿Cómo se mide la serie?", solo ? "Su ficha solo admite tiempo" : iso ? "Es isométrico (en su ficha): va por tiempo" : "", (iso ? [["t", "⏱ Tiempo"], ["maxt", "Máx. tiempo (aguantar)"]]
     : [["reps", "Repeticiones"], ["t", "⏱ Tiempo (isométrico)"], ["maxr", "Máx. repeticiones"], ["maxt", "Máx. tiempo (aguantar)"]]).map(([m, t]) => ({ texto: t, accion: () => alElegir(m) })));
 }
@@ -6023,13 +6136,15 @@ function pintarTramos() {
     };
     tm.hidden = !fza || !["peso", "reps"].includes(med);
     tm.setAttribute("aria-label", med === "reps" ? "Unidad: kg, % del máximo de repeticiones o % del 1RM de lastre" : "Cambiar entre kg y % del 1RM");
-    tm.addEventListener("click", () => {
-      const v = parseFloat(String(a.value).replace(",", ".")), ref = rmPersonal(t.ejercicio_id), ops = modosPct(t.ejercicio_id), sig = ops[(ops.indexOf(modoT()) + 1) % ops.length];
+    const aplicarTm = sig => {   // v375
+      if (sig === modoT()) return;
+      const v = parseFloat(String(a.value).replace(",", ".")), ref = rmPersonal(t.ejercicio_id);
       if (sig === "1rm" && !t.p) { t.p = true; a.value = v > 0 && ref ? num(Math.round(v / ref * 100)) : ""; }
       else if (sig === "" && t.p === true) { const kg = v > 0 ? kgDePct(t.ejercicio_id, v) : 0; t.p = false; a.value = kg ? num(kg) : ""; }
       else { t.p = sig === "reps" ? "reps" : sig === "1rm"; a.value = ""; if (sig === "reps" && !t.bTocado && !b.disabled && t.m !== "t" && t.m !== "maxt") { t.b = ""; b.value = ""; } }   // v351: «% reps» no vuelca las reps de la última serie
       t.a = a.value; pintarTc();
-    });
+    };
+    tm.addEventListener("click", () => menuUnidad(t.ejercicio_id, modoT(), false, aplicarTm));
     a.value = t.a; b.value = t.b; cc.value = t.c;
     if (fza) { pintarTc(); pintarM(); t.b = b.value; }
     a.addEventListener("input", () => { if (fza && /%\s*$/.test(a.value) && !tm.hidden) { a.value = a.value.replace(/\s*%\s*$/, ""); t.p = true; } t.a = a.value; if (fza) pintarTc(); });
@@ -6610,6 +6725,37 @@ function guardarEnLista(nombreSugerido, series) {
       .concat([{ texto: "Al final de la lista", accion: () => guardarEnListaEn(l, { tras: undefined, estructura }, nombreSugerido, series) }]));
   });
 }
+// MEJ-SEM-007 (v377), Listas ↔ Semana. «Copiar entreno» en una entrada de lista deja en el portapapeles (formato de siempre, ámbito «entreno») sus ejercicios; en Semana se pega con el pegado normal
+// (entreno nuevo, con sufijo si el nombre ya existe). «Pegar» en el menú de una lista añade el entreno copiado desde Semana como entrada NUEVA e independiente (también copia en Plantillas), con
+// la regla de ubicación de MEJ-LISTAS-003 y sin renombrar (MEJ-LISTAS-004). Partes, superseries y ejercicios sueltos no se pegan como entrada de lista.
+const ambitoEntrenoCopiado = () => !!(porta && porta.ambito === "entreno" && (porta.items || []).length);
+function copiarEntradaLista(p) {
+  porta = { nombre: p.nombre, html: "", items: copiaJson(p.items || []).map(it => ({ ...it, grupo: p.nombre })), ambito: "entreno" };
+  escribir("portapapeles-v1", porta);
+  avisoDeshacer("📋 Copiado: " + p.nombre + " (" + plural(contarSeries(porta.items), "serie", "series") + "). Pégalo en un día: ⋯ del día → «📋 Pegar»", null);
+}
+function pegarEnLista(l) {
+  if (!ambitoEntrenoCopiado()) return;
+  const fresca = db.listas[l.id] || l, sitios = ubicacionesLista(fresca);
+  if (sitios.length < 2) { pegarEnListaEn(l, null); return; }
+  const estructura = JSON.stringify(fresca.items || []);
+  abrirMenu("¿Dónde pego «" + porta.nombre + "» en «" + fresca.nombre + "»?", "Se añade al final del sitio que elijas", sitios.map(s => ({ texto: s.texto, accion: () => pegarEnListaEn(l, { tras: s.tras, estructura }) }))
+    .concat([{ texto: "Al final de la lista", accion: () => pegarEnListaEn(l, { tras: undefined, estructura }) }]));
+}
+async function pegarEnListaEn(l, ubi) {
+  if (!ambitoEntrenoCopiado()) return;
+  const copiado = porta, nombre = await pedirNombre("Nombre del entreno", copiado.nombre, "Se añade como una entrada nueva e independiente, también en tus plantillas. Puede tener el mismo nombre que otras entradas.");
+  if (!nombre) return;
+  const fresca = db.listas[l.id];
+  if (!fresca || fresca.borrado) { setEstado("La lista ya no está disponible. No se ha pegado el entreno."); return; }
+  if (ubi && JSON.stringify(fresca.items || []) !== ubi.estructura) { setEstado("La lista ha cambiado mientras escribías. No se ha pegado el entreno; vuelve a intentarlo."); return; }
+  const items = copiaJson(copiado.items).map(it => it.bloque ? { bloque: true, seccion: it.seccion || "", tramos: it.tramos } : { ejercicio_id: it.ejercicio_id, seccion: it.seccion || "", series: it.series });
+  const antes = [["listas", { ...fresca, items: copiaJson(fresca.items || []) }]], id = nuevoId();
+  cambiar("plantillas", { id, nombre, items, borrado: false });
+  antes.push(["plantillas", { ...db.plantillas[id], borrado: true }]);
+  insertarEnLista(fresca, id, ubi ? ubi.tras : undefined);
+  avisoDeshacer("«" + nombre + "» pegado en la lista «" + fresca.nombre + "» como entrada nueva e independiente", antes);
+}
 async function guardarEnListaEn(l, ubi, nombreSugerido, series) {
   const nombre = await pedirNombre("Nombre del entreno", nombreSugerido, "Se guarda como una copia nueva e independiente, también en tus plantillas. Puede tener el mismo nombre que otras entradas; no se reemplaza nada.");
   if (!nombre) return;
@@ -6716,6 +6862,7 @@ function pintarListas() {
     menu.setAttribute("aria-label", "Opciones de la lista " + l.nombre);
     menu.addEventListener("click", () => abrirMenu(l.nombre, rec.length + (rec.length === 1 ? " entreno" : " entrenos"), [
       { texto: "+ Añadir entreno…", accion: () => anadir() },
+      ambitoEntrenoCopiado() && { texto: "📋 Pegar «" + porta.nombre + "» en esta lista", accion: () => pegarEnLista(l) },   // v377 (MEJ-SEM-007)
       { texto: "+ Añadir bloque (semana, fase…)…", accion: () => nuevaSemana() },
       { texto: (l.items || []).some(esGrupoL) ? "+ Añadir mesociclo…" : "Agrupar en un mesociclo…", accion: () => nuevoGrupo() },
       rec.length && { texto: "Poner el siguiente («" + rec[sig].p.nombre + "») en un día…", accion: () => ponerEntrenoDeLista(l, rec[sig].p, rec[sig].k) },
@@ -6902,6 +7049,8 @@ function pintarListas() {
       m.addEventListener("click", () => abrirMenu(p.nombre, resumenItems(p.items || []), [
         { texto: "Poner en un día…", accion: () => ponerEntrenoDeLista(l, p, kk) },
         kk !== sig && { texto: "Marcar como el siguiente", accion: () => guardarLista(db.listas[l.id], { siguiente: kk }) },
+        { texto: "Editar entreno…", accion: () => abrirEditarEntradaLista(l.id, i, p.id) },   // v377 (MEJ-LISTAS-007)
+        { texto: "Copiar entreno", accion: () => copiarEntradaLista(p) },   // v377 (MEJ-SEM-007): se pega en Semana con el pegado normal
         { texto: "Cambiar nombre…", accion: () => renombrarEntradaLista(l.id, i, p.id) },
         { texto: "Repetir debajo", accion: () => insertarEnLista(l, p.id, i) },
         // Corrección explícita de referencias repetidas antiguas: copia independiente que conserva el nombre.
@@ -7617,6 +7766,7 @@ $("detalle").addEventListener("close", () => {
         nombreConEtiqueta($("enEj"), s, nombreEj(e.id)); $("enEj").appendChild(etiquetaTipo(tipoDe(e.id)));
         $("enVideo").hidden = !idYoutube(e.video_url);
         $("enVideo").setAttribute("aria-label", "Ver el vídeo de " + nombreEj(e.id));
+        pintarDescEntreno();   // v377 (MEJ-ENT-016): refleja la descripción editada en la ficha
         if (anterior.medidas !== JSON.stringify([e.tipo, e.medidas, ladoDe(e.id)])) $("enAviso").textContent = "Se conservan tus valores en curso y sus medidas. La nueva configuración se aplicará al cambiar de serie.";
       }
     }
@@ -11724,6 +11874,21 @@ function ocurrenciaNotaEntreno(s) {
   const lista = seriesDeItem(s.fecha, s.grupo || "", claveSerie(s));
   return s.bloque_id ? lista.filter(x => x.ejercicio_id === s.ejercicio_id) : lista;
 }
+// MEJ-ENT-016 (v377): la descripción de la FICHA del ejercicio (solo lectura) bajo su nombre, aparte de las instrucciones del día (recuadro amarillo, MEJ-ENT-014).
+// Larga: recortada a unas líneas; tocarla la muestra entera y volver a tocar la pliega. Sin descripción: no aparece nada. No toca borradores, serie, progreso ni descanso.
+let enDescAbierta = "";
+function pintarDescEntreno() {
+  const s = serieEnt(), e = s && ejercicioVivo(s.ejercicio_id), txt = String(e?.notas || "").trim(), b = $("enDesc");
+  b.hidden = !txt;
+  if (!txt) { b.textContent = ""; return; }
+  b.textContent = "";
+  const t = document.createElement("span"); t.className = "en-desc-t"; t.textContent = txt; b.appendChild(t);   // v378: el recorte (line-clamp) va en un <span> interior: WebKit no lo aplica al contenido directo de un <button>
+  const abierta = enDescAbierta === s.ejercicio_id;
+  b.classList.toggle("abierta", abierta); b.setAttribute("aria-expanded", String(abierta));
+  b.setAttribute("aria-label", "Descripción de la ficha de " + nombreEj(s.ejercicio_id) + (abierta ? ": tocar para recortar" : ": tocar para verla entera"));
+  b.title = "Descripción de la ficha (solo lectura)";
+}
+$("enDesc").addEventListener("click", () => { const s = serieEnt(); if (!s) return; enDescAbierta = enDescAbierta === s.ejercicio_id ? "" : s.ejercicio_id; pintarDescEntreno(); });
 function pintarNotaEntreno() {
   const s = serieEnt();
   $("enNota").textContent = s?.nota || "+ Añadir instrucciones";
@@ -11794,6 +11959,7 @@ function pintarEntreno() {
   $("enVideo").hidden = !idYoutube(videoEj?.video_url);
   $("enVideo").setAttribute("aria-label", "Ver el vídeo de " + nombreEj(s.ejercicio_id));
   pintarNotaEntreno();
+  pintarDescEntreno();   // v377 (MEJ-ENT-016)
   if (s.bloque_id) {
     const rondas = Math.max.apply(null, lista.filter(x => x.bloque_id === s.bloque_id).map(x => n0(x.ronda)));
     $("enSerie").textContent = "Superserie · ronda " + n0(s.ronda) + " de " + rondas;
@@ -12292,7 +12458,7 @@ $("enRpe").addEventListener("click", () => { const d = ent.dia; salirEntreno(); 
 
 // ---------- Sugerencias: se guardan en el dispositivo y se envían en cuanto hay conexión ----------
 // VERSION_APP es interna (sube en cada publicación para que los móviles se actualicen); la que se ve es siempre la 26
-const VERSION_APP = "v327" + (BETA ? " beta" : "");
+const VERSION_APP = "v329" + (BETA ? " beta" : "");
 let sugPend = leer("sugerencias-pend-v1") || [], sugTipo = "idea", sugerencias = [];
 function abrirSug() {
   sugTipo = "idea";

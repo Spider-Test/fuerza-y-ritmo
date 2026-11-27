@@ -1341,7 +1341,7 @@ h1 { color: var(--titulo); }
 .le-nombre { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; border: 0; background: none; padding: 4px 0; text-align: left; cursor: pointer; font: inherit; color: var(--fg); }
 .le-tit { font-weight: 700; overflow-wrap: anywhere; }
 .le-res { font-size: 12px; color: var(--muted-txt); }
-.le-sig { margin-left: 8px; padding: 1px 6px; border-radius: 6px; background: var(--accent-soft); color: var(--accent-txt); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; vertical-align: 1px; }
+.le-sig { display: block; width: fit-content; margin: 3px 0 1px; padding: 1px 6px; border-radius: 6px; background: var(--accent-soft); color: var(--accent-txt); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }   /* v382/v331: en su propia línea bajo el nombre (antes en línea: se metía bajo «+ Día» y partía el nombre) */
 .le-dia { flex: none; padding: 6px 10px; font-size: 13px; }
 .le-prev { padding: 4px 0 4px 2em; }
 .lista-bloque { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; padding: 0 6px 6px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line)); background: color-mix(in srgb, var(--accent) 6%, var(--card)); }
@@ -1360,6 +1360,8 @@ h1 { color: var(--titulo); }
 @media (max-width: 760px) { .ls-toggle { min-height: 40px; } }
 .lista-sec .menu-btn, .lista-sec .asa { opacity: 1 !important; }
 @media (max-width: 760px) { .le-dia { min-height: 40px; } .le-nombre { min-height: 40px; } }
+/* v382/v331: en pantallas muy estrechas (320 px) el nombre ocupa su propia línea y «+ Día», ⋯ y el asa bajan a la derecha (mismos botones y mismo orden) */
+@media (max-width: 359px) { .le-cab { flex-wrap: wrap; row-gap: 2px; } .le-nombre { flex: 1 1 calc(100% - 1.6em - 8px); } .le-dia { margin-left: auto; } }
 
 /* Código para compartir, grande y fácil de copiar */
 .codigo-comp { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); }

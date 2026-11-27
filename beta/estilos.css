@@ -3219,3 +3219,38 @@ html.ampliado #vistaSemana.solo-dia #semana, html.ampliado #vistaSemana.solo-dia
 .en-l-act .en-l-nom { color: var(--accent-txt); }
 .en-l-mas { text-align: center; }
 .en-l-mas .nav-btn { min-height: 44px; }
+
+/* v375 (MEJ-UI-020 L6, F-06): un solo botón «+ Añadir ▾» en todos los niveles de Semana (día, entreno y parte). Los botones de siempre (+ Ejercicio, + Superserie,
+   + Entreno, + Parte) siguen en el DOM, ocultos: el menú los pulsa y conserva sus destinos exactos */
+.add-fila.add-u > .add-ej, .add-fila.add-u > .add-toggle { display: none !important; }
+#vistaSemana .add-fila.add-u { display: flex; flex-direction: row; justify-content: flex-start; grid-template-columns: none; }
+#vistaSemana .add-unico, #vistaSemana .grupo > .add-grupo > .add-en-grupo {
+  flex: none; width: auto; min-height: 40px; margin: 0; padding: 6px 16px; font: inherit; font-size: 14px; font-weight: 650; cursor: pointer;
+  color: var(--entreno); border: 1px solid color-mix(in srgb, var(--entreno) 30%, var(--line)); border-radius: 18px;
+  background: color-mix(in srgb, var(--entreno) 4%, var(--card));
+}
+#vistaSemana .add-unico::after, #vistaSemana .grupo > .add-grupo > .add-en-grupo::after { content: " ▾"; }
+#vistaSemana .add-parte .add-unico { color: var(--pc); border-color: color-mix(in srgb, var(--pc) 40%, var(--line)); background: color-mix(in srgb, var(--pc) 5%, var(--card)); }
+@media (max-width: 760px) { #vistaSemana .add-unico, #vistaSemana .grupo > .add-grupo > .add-en-grupo { min-height: 44px; font-size: 15px; } }
+
+/* v375 (MEJ-UI-020 L4, F-07): etiquetas visibles sobre los campos del formulario de serie, el botón de unidad con ▾ y la etiqueta «Descanso» */
+.nueva-serie .paso[data-et] { position: relative; margin-top: 15px; }
+.nueva-serie .paso[data-et]::before { content: attr(data-et); position: absolute; left: 2px; top: -15px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--accent-txt); line-height: 12px; white-space: nowrap; pointer-events: none; }
+.nueva-serie .modo::after { content: " ▾"; }
+.ns-desc.desc-en-ops .desc-c { display: flex; flex-direction: column; align-items: center; gap: 1px; flex: none; }
+.ns-desc.desc-en-ops .desc-c .desc-ic { font-size: 10px; line-height: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--accent-txt); }
+.ns-desc.desc-en-ops:has(.desc-c) { align-items: flex-end; }
+
+/* v376 (INC-LISTAS-ASAS): en Listas las asas de un bloque/semana/entreno estaban dentro de DOS zonas anidadas: «listas» (sin Reordenar) y «lista:ID» (con Reordenar). La regla de arriba (zona sin Reordenar → .asa sin pointer-events)
+   se aplicaba por la zona exterior y el dedo/ratón atravesaba el asa (el pointerdown caía en la fila). Desde v314 (MEJ-LISTAS-005). Si la zona más cercana de la lista está en Reordenar, sus asas reciben el puntero. */
+[data-zona-orden^="lista:"].reordenando .asa:not(.asa-listas) { pointer-events: auto; }
+
+/* v377 (MEJ-ENT-016): descripción de la ficha en Empezar entrenamiento (solo lectura; recortada, se despliega al tocar) */
+button.en-desc { box-sizing: border-box; width: 100%; max-width: 100%; min-width: 0; margin: 0 0 6px; padding: 6px 10px; border: 0; border-left: 3px solid var(--line); border-radius: 6px; background: var(--card); color: var(--muted-txt); font: inherit; font-size: 14px; line-height: 1.35; text-align: left; white-space: pre-line; overflow-wrap: anywhere; word-break: break-word; cursor: pointer; flex-shrink: 0; overflow: hidden; display: block; }
+button.en-desc .en-desc-t { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
+button.en-desc.abierta .en-desc-t { display: block; -webkit-line-clamp: unset; line-clamp: unset; overflow: visible; }
+button.en-desc[hidden] { display: none; }
+@media (max-width: 760px) { button.en-desc { min-height: 44px; } }
+
+/* v378: mientras hay un aviso visible («Copiado…», «Pegado… Deshacer»…), el «?» flotante se oculta para no tapar el final del texto ni «Deshacer» */
+html:has(#toast:not([hidden])) .ayuda-flota { display: none !important; }
